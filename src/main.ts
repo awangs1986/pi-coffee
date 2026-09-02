@@ -22,10 +22,10 @@ async function run(selectedRole: "host" | "web" | "all"): Promise<void> {
     eventBufferSize: envNumber("PI_COFFEE_EVENT_BUFFER", 256),
     factory: new RpcPiSessionFactory({
       cwd: process.env.PI_COFFEE_WORKDIR ?? process.cwd(),
+      agentDir: process.env.PI_COFFEE_AGENT_DIR,
       sessionDir: process.env.PI_COFFEE_SESSION_DIR,
       provider: process.env.PI_COFFEE_PROVIDER,
       model: process.env.PI_COFFEE_MODEL,
-      env: process.env.PI_COFFEE_PI_ENV === undefined ? undefined : { PI_COFFEE_PI_ENV: process.env.PI_COFFEE_PI_ENV },
     }),
   });
 

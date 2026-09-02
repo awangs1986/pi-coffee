@@ -21,6 +21,7 @@ export interface PiSessionFactory {
 
 export interface RpcPiSessionFactoryOptions {
   cwd?: string;
+  agentDir?: string;
   sessionDir?: string;
   cliPath?: string;
   provider?: string;
@@ -47,7 +48,10 @@ export class RpcPiSessionFactory implements PiSessionFactory {
       cwd: this.options.cwd,
       provider: this.options.provider,
       model: this.options.model,
-      env: this.options.env,
+      env: {
+        ...(this.options.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: this.options.agentDir }),
+        ...this.options.env,
+      },
       args,
     });
     const session = new RpcPiSession(client);

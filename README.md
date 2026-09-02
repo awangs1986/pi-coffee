@@ -47,6 +47,7 @@ Useful settings:
 | `PI_COFFEE_HOST_URL` | local Host URL | Web→Host WebSocket URL |
 | `PI_COFFEE_HOST_TOKEN` | unset | Optional shared Host bearer token |
 | `PI_COFFEE_WORKDIR` | current directory | Pi working directory |
+| `PI_COFFEE_AGENT_DIR` | Pi default | Pi config directory (`models.json`, `auth.json`) |
 | `PI_COFFEE_SESSION_DIR` | Pi default | Native Pi session directory |
 | `PI_COFFEE_PROVIDER` | Pi default | Optional Pi provider |
 | `PI_COFFEE_MODEL` | Pi default | Optional Pi model |
