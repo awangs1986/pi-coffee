@@ -24,7 +24,7 @@ The MVP is a transport and ownership proof, not a feature port from V5.
 
 ## Not included
 
-Gitea OAuth, central LLM Relay, multi-user routing, Deployment Skill, VM lifecycle management, V5 Guard/Worktree code, task orchestration, durable Control Plane context, file uploads, and image UI.
+Gitea OAuth, central LLM Relay, multi-user routing, Deployment Skill, VM lifecycle management, V5 Guard/permission/snapshot enforcement, task orchestration, durable Control Plane context, file uploads, and image UI. The bundled PI Coffee Harness extension is an add-on to the Host; its native Git/verify behavior is documented separately and does not revive those V5 controls.
 
 ## Evidence in this checkout
 

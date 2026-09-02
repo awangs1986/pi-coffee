@@ -111,8 +111,13 @@ PI_COFFEE_HOST_TOKEN=<transport-token-from-secret-store>
 PI_COFFEE_WORKDIR=<user-workspace>
 PI_COFFEE_AGENT_DIR=<user-pi-config>
 PI_COFFEE_SESSION_DIR=<user-pi-sessions>
+PI_COFFEE_EXTENSIONS=<optional-colon-separated-extension-paths>
 npm run start:host
 ```
+
+When `PI_COFFEE_EXTENSIONS` is unset, the Host automatically loads the bundled
+V5 Harness adapter. Set it to `off` only for a transport-only diagnostic run;
+set it to a colon-separated list when deploying an explicit extension bundle.
 
 `PI_COFFEE_HOST_TOKEN` is mandatory whenever the Host binds to anything other
 than loopback: the Host refuses to start otherwise (fail closed), because that

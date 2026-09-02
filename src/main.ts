@@ -1,3 +1,5 @@
+import { delimiter, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
 import { WebServer } from "./web/server.js";
@@ -26,6 +28,7 @@ async function run(selectedRole: "host" | "web" | "all"): Promise<void> {
       sessionDir: process.env.PI_COFFEE_SESSION_DIR,
       provider: process.env.PI_COFFEE_PROVIDER,
       model: process.env.PI_COFFEE_MODEL,
+      extensions: resolvePiExtensions(),
     }),
   });
 
@@ -51,6 +54,18 @@ async function run(selectedRole: "host" | "web" | "all"): Promise<void> {
     web ? `Web http://${web.address().host}:${web.address().port}/` : undefined,
   ].filter((address): address is string => address !== undefined);
   for (const address of addresses) console.log(address);
+}
+
+function resolvePiExtensions(): string[] {
+  const configured = process.env.PI_COFFEE_EXTENSIONS?.trim();
+  if (configured === "off") return [];
+  if (configured !== undefined && configured.length > 0) {
+    return configured.split(delimiter).map((value) => value.trim()).filter((value) => value.length > 0);
+  }
+  // `main.ts` is emitted to dist/src, so this resolves to the packaged native
+  // extension after `npm run build`. The explicit env override above keeps
+  // deployments free to add or replace extensions without changing code.
+  return [join(dirname(fileURLToPath(import.meta.url)), "harness", "extension.js")];
 }
 
 function envString(name: string, fallback: string): string {

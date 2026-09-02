@@ -27,6 +27,8 @@ export interface RpcPiSessionFactoryOptions {
   provider?: string;
   model?: string;
   args?: string[];
+  /** Additional native Pi extensions loaded for every Host session. */
+  extensions?: string[];
   env?: Record<string, string>;
 }
 
@@ -39,7 +41,7 @@ export class RpcPiSessionFactory implements PiSessionFactory {
   }
 
   async create(options: { sessionId: string }): Promise<PiSession> {
-    const args = [...(this.options.args ?? [])];
+    const args = appendExtensionArgs([...(this.options.args ?? [])], this.options.extensions ?? []);
     if (!args.includes("--session-id")) args.push("--session-id", options.sessionId);
     if (this.options.sessionDir !== undefined) {
       args.push("--session-dir", this.options.sessionDir);
@@ -59,6 +61,19 @@ export class RpcPiSessionFactory implements PiSessionFactory {
     await session.start();
     return session;
   }
+}
+
+/** Add `--extension path` pairs without duplicating explicitly supplied paths. */
+export function appendExtensionArgs(args: string[], extensions: readonly string[]): string[] {
+  for (const extension of extensions) {
+    const trimmed = extension.trim();
+    if (trimmed.length === 0) continue;
+    const alreadyPresent = args.some((arg, index) =>
+      (arg === "--extension" || arg === "-e") && args[index + 1] === trimmed,
+    ) || args.includes(`--extension=${trimmed}`);
+    if (!alreadyPresent) args.push("--extension", trimmed);
+  }
+  return args;
 }
 
 class RpcPiSession implements PiSession {

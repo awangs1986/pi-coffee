@@ -16,7 +16,7 @@ Browser  ── WebSocket ──>  Web Server  ── WebSocket ──>  Host  �
 - Closing or refreshing the browser detaches the connection; it does not stop the Session.
 - Reconnecting with the Session ID and Cursor replays buffered Events.
 - The Web Server has no Pi implementation knowledge; the Pi-specific code is one adapter.
-- The MVP intentionally does not include V5 Guard, Worktree, Gitea integration, task orchestration, uploads, or image handling.
+- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension now exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. Gitea integration, task orchestration, uploads, and image handling remain separate tickets.
 
 The Pi adapter uses the upstream package's documented RPC client and is pinned to `@earendil-works/pi-coding-agent@0.84.4` for this first slice. See the upstream [RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) for the underlying command/event semantics.
 
@@ -51,6 +51,7 @@ Useful settings:
 | `PI_COFFEE_SESSION_DIR` | Pi default | Native Pi session directory |
 | `PI_COFFEE_PROVIDER` | Pi default | Optional Pi provider |
 | `PI_COFFEE_MODEL` | Pi default | Optional Pi model |
+| `PI_COFFEE_EXTENSIONS` | bundled Harness extension | Colon-separated Pi extension paths; set to `off` to disable automatic Harness loading |
 
 The first MVP uses Pi's normal credential resolution on the Host VM so the conversation path can be tested without putting a credential in this repository. Moving the upstream credential behind the central Relay is a subsequent PI Coffee ticket, not part of this first vertical slice.
 
@@ -70,4 +71,5 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [End-to-end verification and runbook](http://testpc:3000/awangs/pi-coffee/issues/5)
 - [MVP → 0.1 handoff](http://testpc:3000/awangs/pi-coffee/issues/6)
 - [Harness Lean/Full prompt（V3-derived, Pi-native）](http://testpc:3000/awangs/pi-coffee/issues/14)
+- [Harness Pi plugin：V5 Simple/Full tools + prompt](http://testpc:3000/awangs/pi-coffee/issues/15)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)

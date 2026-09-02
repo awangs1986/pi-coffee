@@ -73,6 +73,13 @@ V5 中的 `verificationProfile` 可以先作为未来兼容字段或不暴露给
 
 建议第一张工单先交付 `simple/full`，并测试 `standard` 别名；`tdd` 是否在同一工单暴露是一个需要产品确认的范围选择。
 
+**后续决议（D-043 / HARNESS-002）：** 该范围已经确认并实现。PI Coffee 将
+`simple → lean`、`full → full`，保留 `standard → full + quick` 与
+`tdd → full + advisory tdd` 兼容别名；基础工具表严格采用 V5 的 8/10
+计数。这里的最终映射取代上表中“simple 保持原生 prompt、full 使用 lean”的
+早期建议。V5 的执行性 Guard、权限、managed snapshot 和 Devloop 仍不进入
+PI Coffee。
+
 ### 注入与持久化
 
 - 状态写入 Pi native session custom entry，归属于 User VM；不写入 Web Server/Control Plane。

@@ -114,8 +114,9 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-038` | `DISCOVERY` | 可参考/folk `pi-web`，但不承诺直接套用。 | 先评估许可证、协议、维护成本和可删减部分；必要时大量改造或重写，不能牺牲 PI Coffee 窄 seam。见 `ARCH-001`。 |
 | `D-039` | `DECIDED` | 尽量复用 Gitea 上已有代码，但只复用兼容且可验证的模块。 | 不为“复用”把 V5 的 Guard、Worktree 或领域对象偷偷带入 MVP/0.1。 |
 | `D-040` | `DECIDED` | Rust 只在测出实际性能瓶颈后引入。 | 第一实现使用 Node/TypeScript；Rust 模块必须有基准、边界和回滚方案。 |
-| `D-041` | `LATER` | V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 0.1 通过前不创建 V5 迁移 ticket；后续迁移必须单独评审、单独验收。 |
+| `D-041` | `LATER` | 除已明确登记的 Harness 基础表外，V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 每个后续迁移必须单独评审、单独验收；不得借 Harness ticket 偷渡其他模块。 |
 | `D-042` | `DECIDED` | 当前 V3 提示词（含三次演化后的结果）是 PI Coffee Harness 的内容基线；PI Coffee 只做面向原版 Pi 的语义修补，交付 `lean` 与 `full` 两个 profile。 | Prompt 必须保持语义准确、只描述实际可用能力，不产生不存在的执行副作用。以 V3-derived、Pi-native 的 fixture 为唯一正文来源；CCB 只作为行为参考。见 `HARNESS-001`。 |
+| `D-043` | `DECIDED` | 第一项 V5 Harness 迁移以 Gitea `awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f` 为冻结基线；Simple 固定 8 个工具，Full 固定 10 个工具，并通过原版 Pi extension seam 接入。 | 只移植工具表/接口和可在 User VM 诚实执行的行为；不恢复 V5 Guard、权限、managed snapshot、Devloop 或 Completion Label。见 `HARNESS-002`。 |
 
 ### 1.1 被替换的早期方案
 
@@ -155,6 +156,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
 | `HARNESS-001` | `DONE` | P0 | 交付原版 Pi 可用的 V3-derived Lean/Full prompt fixture、确定性渲染器和无虚假能力声明的测试。运行时 `/harness` 扩展接线另行 ticket。 | `MVP-005` | [#14](http://testpc:3000/awangs/pi-coffee/issues/14) |
+| `HARNESS-002` | `DONE` | P0 | 以冻结 V5 工具表实现原版 Pi Harness extension：Simple 8 / Full 10、V3 aliases、会话恢复、prompt 注入，以及 User VM-native `git`/`verify` 适配。 | `HARNESS-001`, `MVP-003` | [#15](http://testpc:3000/awangs/pi-coffee/issues/15) |
 | `CP-001` | `READY` | P0 | Debian Control Plane 的透明 LLM Relay，唯一 key、双 API、JSON/SSE、models/compact、限量 metadata。 | `MVP-005` | [#7](http://testpc:3000/awangs/pi-coffee/issues/7) |
 | `ID-001` | `READY` | P0 | 内部 Gitea OAuth、logout/cookie 生命周期、固定 User VM/Host 路由、身份撤销和 fail-closed。 | `MVP-005` | [#8](http://testpc:3000/awangs/pi-coffee/issues/8) |
 | `DEP-001` | `READY` | P0 | Linux Mint Xfce User VM 的 Deployment Skill、固定 Pi 版本、systemd、一次性 enrollment、report/health/stop。 | `MVP-003`, `MVP-005` | [#9](http://testpc:3000/awangs/pi-coffee/issues/9) |
@@ -264,8 +266,8 @@ MVP-001..005 (已完成)
 | 文件上传、图片消息、原图和引用 | ADR-0007 | `D-030..D-035`, `FILE-001`, `MODEL-001` |
 | 自动化 Deployment Skill、Pi 原生插件、模块化、Rust | [`docs/development/workflow.md`](./docs/development/workflow.md) | `D-036..D-040`, `DEP-001`, `ARCH-002`, `PERF-001/002` |
 | pi-web fork/改造/重写 | README、架构 seam 约束 | `D-038`, `ARCH-001`, `OPEN-009` |
-| V5 worktree/插件/能力后续合并 | ADR-0002、0.1 non-goals | `D-041`, `V5-001`, `WORK-001`, `PLUGIN-001` |
-| V3 提示词修补为 Pi Lean/Full | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042`, `HARNESS-001` |
+| V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001` |
+| V3 提示词修补为 Pi Lean/Full，并接入 V5 Harness 工具表 | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042..D-043`, `HARNESS-001..002` |
 
 ## 8. 维护记录
 
@@ -274,3 +276,4 @@ MVP-001..005 (已完成)
 | 2026-09-02 | 根据今天的多轮讨论建立本 Backlog；MVP 标记为当前 main 已实现，0.1 六个切片映射到 Gitea Issues #7–#12。 |
 | 2026-09-02 | 在项目 1 建立 `Backlog` 列并加入 Issue #13，作为后续功能 ticket 的默认入口。 |
 | 2026-09-02 | 根据 V3 三次提示词演化的维护者确认，完成 PI Coffee Lean/Full prompt fixture 与 `HARNESS-001`（Issue #14）。 |
+| 2026-09-03 | 复核 Gitea V5 基线 `778a3d5`，完成 PI-native Harness extension、8/10 工具表和 VM-native git/verify 适配，登记 `HARNESS-002`（Issue #15）。 |

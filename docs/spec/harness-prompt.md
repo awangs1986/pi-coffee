@@ -1,6 +1,6 @@
 # PI Coffee Harness Prompt Contract
 
-状态：prompt fixture 已实现；`/harness` 运行时接线另由独立工单完成。
+状态：prompt fixture 与 `/harness` Pi 运行时接线均已实现；工具/扩展边界见 [`harness-plugin.md`](./harness-plugin.md)。
 
 ## 目标
 
@@ -20,6 +20,10 @@ PI Coffee 使用原版 Pi Agent，通过一个小而稳定的 prompt module 提�
 本版本的命名是 **V3-derived, Pi-native**。提示词正文不得写成 Claude Code 身份，也不得复制另一个产品的未授权完整 system prompt。
 
 ## 两个 profile
+
+运行时 `/harness simple` 选择 `lean`，`/harness full` 选择 `full`；V3
+兼容别名 `standard` 与 `tdd` 都选择 Full 工具表，其中 `tdd` 只增加
+指导性 profile，不增加第三套工具或自动 Gate。
 
 ### Lean
 
@@ -64,4 +68,3 @@ npm run check
 ```
 
 测试覆盖：profile 渲染、Pi 工具词汇、V3 核心语义、无未解析标记、去除作者注释，以及无不存在执行能力的声明。
-

@@ -76,3 +76,14 @@ The prompt is appended to Pi's native Base Prompt and is guidance only. It must 
 ## Explicit deferrals
 
 V5 feature migration is a later, separately ticketed phase. No current 0.1 ticket is permission to copy V5 implementation or revive its sandbox/worktree design. The first priority is a reliable web conversation seam.
+
+## Harness plugin baseline
+
+The first V5 migration slice is the native Pi Harness extension. It pins the
+Gitea V5 reference at `awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f`
+and preserves the two base tables exactly: Simple has 8 tools and Full has 10.
+The extension combines those tables with the V3-derived Lean/Full prompt
+fixtures. Because the agreed execution boundary is the owner-managed User VM,
+the adapter does not revive V5 Guard, permission tiers, managed snapshots,
+Devloop gates, or completion labels. Unsupported V5 operations report their
+status explicitly and are handled in later, separately ticketed slices.

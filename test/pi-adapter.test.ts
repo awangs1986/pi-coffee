@@ -1,8 +1,17 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { RpcPiSessionFactory } from "../src/host/pi-adapter.js";
+import { appendExtensionArgs, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
 
 describe("original Pi RPC adapter", () => {
+  it("adds configured Pi extensions once while preserving explicit CLI args", () => {
+    expect(appendExtensionArgs(["--extension", "./existing.js"], ["./existing.js", "./harness.js", ""])).toEqual([
+      "--extension",
+      "./existing.js",
+      "--extension",
+      "./harness.js",
+    ]);
+  });
+
   it("maps the documented RPC client to the PI Coffee PiSession seam", async () => {
     const factory = new RpcPiSessionFactory({
       cliPath: resolve("test/fixtures/fake-pi-rpc.mjs"),
