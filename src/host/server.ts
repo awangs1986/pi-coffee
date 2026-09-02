@@ -65,6 +65,14 @@ export class HostServer {
 
   async start(): Promise<void> {
     if (this.started) return;
+    // Fail closed: the Host transport carries prompts and Pi events. Without a
+    // bearer token, anything that can reach the port owns the User VM's Pi.
+    // Loopback-only binds are the documented local smoke exception.
+    if (!isLoopback(this.host) && (this.token === undefined || this.token.length === 0)) {
+      throw new Error(
+        `Refusing to bind the Host to ${this.host} without PI_COFFEE_HOST_TOKEN; set a transport token or bind to 127.0.0.1`,
+      );
+    }
     await new Promise<void>((resolve, reject) => {
       const onError = (error: Error) => {
         this.http.off("listening", onListening);
@@ -281,6 +289,11 @@ class NotOpenError extends Error {
     super("Connection must be opened first");
     this.name = "NotOpenError";
   }
+}
+
+function isLoopback(host: string): boolean {
+  const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || h === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
 }
 
 function isAuthorized(request: IncomingMessage, token?: string): boolean {

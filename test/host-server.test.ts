@@ -138,6 +138,26 @@ describe("Host WebSocket seam", () => {
     second.close();
   });
 
+  it("refuses to listen on a non-loopback address without a transport token", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "0.0.0.0", factory });
+    await expect(server.start()).rejects.toThrow(/PI_COFFEE_HOST_TOKEN/);
+    // Nothing was bound: start() must fail before listen, not after.
+    expect(() => server?.address()).toThrow(/not listening/);
+    server = undefined;
+  });
+
+  it("rejects a Host connection whose bearer token does not match", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory, token: "secret-transport-token" });
+    await server.start();
+    const socket = new WebSocket(`ws://127.0.0.1:${server.address().port}/host`, {
+      headers: { authorization: "Bearer wrong" },
+    });
+    const [error] = (await once(socket, "error")) as [Error];
+    expect(error.message).toMatch(/401/);
+  });
+
   it("requires the open frame before accepting commands", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "127.0.0.1", factory });

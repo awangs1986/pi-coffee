@@ -20,6 +20,11 @@
       .message.user { margin-left: auto; background: #2563eb; color: white; }
       .message.assistant { margin-right: auto; background: #1f2937; border: 1px solid #334155; }
       .message.system { max-width: 100%; color: #9ca3af; font-size: 13px; padding: 6px 0; }
+      .message.tool { max-width: 100%; color: #a5b4fc; font-size: 12.5px; padding: 4px 10px; border-left: 2px solid #4f46e5; font-family: ui-monospace, Menlo, Consolas, monospace; }
+      .message.tool.error { color: #fca5a5; border-left-color: #ef4444; }
+      .message.failure { max-width: 100%; color: #fecaca; background: #3f1d1d; border: 1px solid #7f1d1d; font-size: 13px; }
+      .dot.busy { background: #60a5fa; animation: pulse 1s infinite alternate; }
+      @keyframes pulse { from { opacity: .35; } to { opacity: 1; } }
       form { position: fixed; bottom: 0; left: 0; right: 0; padding: 14px max(18px, calc((100vw - 900px) / 2 + 18px)); background: linear-gradient(transparent, #111827 18%); }
       .composer { display: flex; gap: 10px; padding: 10px; border: 1px solid #334155; border-radius: 14px; background: #182235; box-shadow: 0 12px 32px #0006; }
       textarea { flex: 1; min-height: 44px; max-height: 160px; resize: vertical; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; line-height: 1.45; }
@@ -62,11 +67,31 @@
         let assistant;
         let requestNumber = 0;
         let reconnectTimer;
+        let streaming = false;
 
         function setStatus(text, kind) {
           status.textContent = text;
           dot.className = 'dot' + (kind ? ' ' + kind : '');
-          send.disabled = !socket || socket.readyState !== WebSocket.OPEN;
+          send.disabled = !socket || socket.readyState !== WebSocket.OPEN || streaming;
+        }
+
+        function setStreaming(active) {
+          streaming = active;
+          if (!socket || socket.readyState !== WebSocket.OPEN) return;
+          setStatus(active ? 'Pi 正在工作…' : '已连接', active ? 'busy' : 'ready');
+        }
+
+        function summarizeArgs(args) {
+          if (!args || typeof args !== 'object') return '';
+          const text = args.command || args.path || args.file_path || args.pattern || JSON.stringify(args);
+          return String(text).slice(0, 160);
+        }
+
+        function summarizeResult(result) {
+          const block = result && Array.isArray(result.content) ? result.content.find((c) => c.type === 'text') : undefined;
+          const text = block && block.text ? block.text : '';
+          const firstLines = text.split('\n').slice(0, 3).join('\n');
+          return firstLines.length < text.length ? firstLines + '\n…' : firstLines;
         }
 
         function addMessage(kind, text) {
@@ -99,29 +124,54 @@
               localStorage.setItem(sessionKey, sessionId);
               localStorage.setItem(cursorKey, String(cursor));
               sessionLabel.textContent = sessionId;
+              // The Host is the owner: if it is still streaming after a reload,
+              // the shell must show that instead of pretending to be idle.
+              setStreaming(Boolean(frame.state && frame.state.isStreaming));
+              return;
+            }
+            if (frame.type === 'resync_required') {
+              addMessage('system', '本地游标已过期（Host 保留 ' + frame.oldestCursor + '…' + frame.newestCursor + '）；此前的输出不再补放，新消息将继续显示。');
+              cursor = frame.newestCursor;
+              localStorage.setItem(cursorKey, String(cursor));
               return;
             }
             if (frame.type === 'event') {
               cursor = Math.max(cursor, frame.cursor || 0);
               localStorage.setItem(cursorKey, String(cursor));
               const event = frame.event || {};
-              if (event.type === 'agent_start') assistant = addMessage('assistant', '');
+              if (event.type === 'agent_start') { assistant = addMessage('assistant', ''); setStreaming(true); }
               const delta = event.assistantMessageEvent;
               if (delta && delta.type === 'text_delta') {
                 if (!assistant) assistant = addMessage('assistant', '');
                 assistant.textContent += delta.delta || '';
                 transcript.scrollTop = transcript.scrollHeight;
               }
-              if (event.type === 'agent_settled') assistant = undefined;
+              if (event.type === 'tool_execution_start') {
+                addMessage('tool', '▶ ' + event.toolName + ' ' + summarizeArgs(event.args));
+                assistant = undefined;
+              }
+              if (event.type === 'tool_execution_end') {
+                const node = addMessage('tool', (event.isError ? '✗ ' : '✓ ') + event.toolName + '\n' + summarizeResult(event.result));
+                if (event.isError) node.classList.add('error');
+              }
+              if (event.type === 'message_end' && event.message && event.message.stopReason === 'error') {
+                addMessage('failure', '模型调用失败：' + (event.message.errorMessage || '未知错误'));
+              }
+              if (event.type === 'auto_retry_start') {
+                addMessage('system', '上游暂时不可用，Pi 正在重试（' + event.attempt + '/' + event.maxAttempts + '）…');
+              }
+              if (event.type === 'agent_settled') { assistant = undefined; setStreaming(false); }
               return;
             }
             if (frame.type === 'error') {
-              addMessage('system', '错误（' + frame.code + '）：' + frame.message);
+              addMessage('failure', '错误（' + frame.code + '）：' + frame.message);
+              // A rejected prompt must not leave the composer locked forever.
+              setStreaming(frame.code === 'busy');
               if (frame.fatal) socket.close();
             }
           });
           socket.addEventListener('close', () => {
-            setStatus('等待 Host…', 'error');
+            setStatus('连接断开，重连中…（Host 上的任务不会被打断）', 'error');
             send.disabled = true;
             reconnectTimer = setTimeout(connect, 1200);
           });
@@ -131,9 +181,10 @@
         document.querySelector('#composer').addEventListener('submit', (event) => {
           event.preventDefault();
           const text = prompt.value.trim();
-          if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
-          const requestId = 'web-' + (++requestNumber);
+          if (!text || !socket || socket.readyState !== WebSocket.OPEN || streaming) return;
+          const requestId = 'web-' + Date.now() + '-' + (++requestNumber);
           addMessage('user', text);
+          setStreaming(true);
           socket.send(JSON.stringify({ v: 1, type: 'prompt', requestId, text }));
           prompt.value = '';
           prompt.focus();

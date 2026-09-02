@@ -5,10 +5,9 @@ This runbook describes the current local smoke deployment and the target interna
 ## Local smoke
 
 ```bash
-cd PI-Coffee
-npm install
+cd pi-coffee
+npm ci
 npm run check
-npm run build
 npm start
 ```
 
@@ -20,6 +19,66 @@ curl http://127.0.0.1:8788/healthz   # Host
 ```
 
 The local process uses Pi's normal credential resolution. Tests use a fake RPC process and do not require a key.
+
+## Real model through the CPA relay (MVP verification)
+
+The Host runs the original Pi, so model access is configured exactly as for a
+standalone Pi: a `models.json` in the Pi agent directory. Keep that directory
+OUTSIDE the repository and let the key come from the environment; the file
+itself then contains no secret.
+
+```bash
+mkdir -p ~/pi-coffee-local/agent ~/pi-coffee-local/sessions ~/pi-coffee-local/workdir
+cat > ~/pi-coffee-local/agent/models.json <<'EOF'
+{
+  "providers": {
+    "cpa": {
+      "baseUrl": "https://awangsawangs.xyz/v1",
+      "api": "openai-completions",
+      "apiKey": "$PI_COFFEE_CPA_KEY",
+      "models": [
+        { "id": "gpt-5.4-mini", "reasoning": true, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 16384 },
+        { "id": "gpt-5.5",      "reasoning": true, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 16384 },
+        { "id": "grok-4.6",     "reasoning": true, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 16384 }
+      ]
+    }
+  }
+}
+EOF
+```
+
+`"apiKey": "$PI_COFFEE_CPA_KEY"` is Pi's environment interpolation: the key is
+read from the Host process environment at request time and is never written to
+disk by PI Coffee. Provide it only in the shell that starts the Host (or in the
+systemd unit's `EnvironmentFile` with `0600` permissions in 0.1). Until the
+central Relay (`CP-001`) exists, this is the documented MVP exception to
+"the key stays on the Control Plane".
+
+```bash
+export PI_COFFEE_CPA_KEY=...            # never commit, never paste into an Issue
+export PI_COFFEE_AGENT_DIR=~/pi-coffee-local/agent
+export PI_COFFEE_SESSION_DIR=~/pi-coffee-local/sessions
+export PI_COFFEE_WORKDIR=~/pi-coffee-local/workdir
+export PI_COFFEE_PROVIDER=cpa
+export PI_COFFEE_MODEL=gpt-5.4-mini
+npm start
+```
+
+Then, from a second shell, run the reproducible end-to-end evidence script. It
+speaks the browser protocol (open → prompt → streamed `text_delta` →
+`agent_settled`), disconnects, reconnects with an older cursor and asserts the
+bounded replay, then runs a second turn on the same Session:
+
+```bash
+node scripts/smoke-real-model.mjs ws://127.0.0.1:3000/ws
+```
+
+It exits 0 and prints a JSON evidence block (no secrets) that can be pasted
+into the Gitea Issue. Exit 1 with a `FAIL` line means the path is broken; the
+first failing step names the seam.
+
+Both `https://awangsawangs.xyz/v1` and `https://b.awangsawangs.xyz/v1` serve the
+same model list; use the one your network resolves.
 
 ## Target VM shape
 
@@ -54,6 +113,11 @@ PI_COFFEE_AGENT_DIR=<user-pi-config>
 PI_COFFEE_SESSION_DIR=<user-pi-sessions>
 npm run start:host
 ```
+
+`PI_COFFEE_HOST_TOKEN` is mandatory whenever the Host binds to anything other
+than loopback: the Host refuses to start otherwise (fail closed), because that
+port carries prompts and Pi events for the whole User VM. Generate it with
+`openssl rand -hex 32` and give the same value to the Web VM.
 
 The exact systemd units and enrollment flow are a 0.1 ticket. Keep the Web VM's upstream LLM key in its secret store; do not put it in `PI_COFFEE_HOST_*`, Git, Wiki, or Issues.
 

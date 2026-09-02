@@ -48,6 +48,22 @@ The tests use a fake RPC process so no credential is needed. A real run addition
 
 From a fresh clone, the colleague can install dependencies, get a green `npm run check`, start `npm start`, open the served page, and reproduce a real or local-mock streamed reply without editing V5 or placing a secret in the repository.
 
+## Real-model evidence
+
+`scripts/smoke-real-model.mjs` drives the browser protocol against a running
+stack whose Host has a real provider (the CPA relay via Pi's `models.json`, see
+the runbook) and asserts: streamed `text_delta` through `agent_settled`,
+strictly increasing cursors, exact bounded replay after a browser disconnect,
+zero replay when caught up, and a second turn on the same Session. Its JSON
+output is the acceptance evidence for [#5](http://testpc:3000/awangs/pi-coffee/issues/5).
+
+The browser shell renders `text_delta`, tool execution start/end, model errors
+(`message_end` with `stopReason: "error"`), auto-retry notices,
+`resync_required`, and a busy state derived from the Host's `isStreaming`.
+
 ## Known gaps before calling it deployed
 
-The real CPA/central credential path has not been wired. Host-process restart recovery, authentication, VM systemd units, and upload/image handling belong to 0.1. The current remote `main` contains this MVP baseline; a fresh clone has passed `npm ci && npm run check`.
+The Host currently receives the CPA key through its own environment (the
+documented MVP exception); the central Relay that removes it from the User VM
+is `CP-001`. Host-process restart recovery, authentication, VM systemd units,
+and upload/image handling belong to 0.1.

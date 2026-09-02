@@ -30,4 +30,4 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 
 ## Current handoff state
 
-The remote `main` contains the MVP baseline and the discussion backlog at commit `eacb697`. A fresh clone has passed `npm ci && npm run check` (5 test files / 10 tests); see the handoff Issue for the recorded evidence.
+The remote `main` contains the MVP baseline, the discussion backlog, and a real-model evidence script (`scripts/smoke-real-model.mjs`; setup in the runbook). A fresh clone passes `npm ci && npm run check`; the real-model path has been reproduced against the CPA relay. Recorded evidence lives in the handoff Issue and [#5](http://testpc:3000/awangs/pi-coffee/issues/5).
