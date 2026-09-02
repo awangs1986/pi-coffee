@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PI Coffee</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: #111827; color: #e5e7eb; }
+      header { height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #273449; background: #151f31; }
+      .brand { font-weight: 700; letter-spacing: .04em; }
+      .status { display: flex; align-items: center; gap: 8px; color: #9ca3af; font-size: 13px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+      .dot.ready { background: #34d399; }
+      .dot.error { background: #f87171; }
+      main { width: min(900px, 100%); margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
+      #transcript { flex: 1; padding: 24px 18px 120px; overflow-y: auto; }
+      .message { max-width: 82%; padding: 12px 15px; margin: 0 0 14px; border-radius: 12px; white-space: pre-wrap; line-height: 1.55; overflow-wrap: anywhere; }
+      .message.user { margin-left: auto; background: #2563eb; color: white; }
+      .message.assistant { margin-right: auto; background: #1f2937; border: 1px solid #334155; }
+      .message.system { max-width: 100%; color: #9ca3af; font-size: 13px; padding: 6px 0; }
+      form { position: fixed; bottom: 0; left: 0; right: 0; padding: 14px max(18px, calc((100vw - 900px) / 2 + 18px)); background: linear-gradient(transparent, #111827 18%); }
+      .composer { display: flex; gap: 10px; padding: 10px; border: 1px solid #334155; border-radius: 14px; background: #182235; box-shadow: 0 12px 32px #0006; }
+      textarea { flex: 1; min-height: 44px; max-height: 160px; resize: vertical; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; line-height: 1.45; }
+      button { align-self: flex-end; border: 0; border-radius: 9px; padding: 10px 16px; background: #3b82f6; color: white; font-weight: 600; cursor: pointer; }
+      button:disabled { opacity: .45; cursor: not-allowed; }
+      .meta { padding: 0 18px 8px; color: #64748b; font-size: 11px; text-align: right; }
+      code { color: #93c5fd; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">PI Coffee</div>
+      <div class="status"><span id="dot" class="dot"></span><span id="status">连接中…</span></div>
+    </header>
+    <main>
+      <section id="transcript" aria-live="polite">
+        <div class="message system">这是 PI Coffee MVP。当前对话由 User VM 中的原版 Pi agent Host 处理。</div>
+      </section>
+      <div class="meta">session: <code id="session">new</code></div>
+    </main>
+    <form id="composer">
+      <div class="composer">
+        <textarea id="prompt" placeholder="和 Pi 说点什么…" aria-label="Prompt"></textarea>
+        <button id="send" type="submit" disabled>发送</button>
+      </div>
+    </form>
+    <script>
+      (() => {
+        const transcript = document.querySelector('#transcript');
+        const prompt = document.querySelector('#prompt');
+        const send = document.querySelector('#send');
+        const status = document.querySelector('#status');
+        const dot = document.querySelector('#dot');
+        const sessionLabel = document.querySelector('#session');
+        const sessionKey = 'pi-coffee.session-id';
+        const cursorKey = 'pi-coffee.cursor';
+        let socket;
+        let sessionId = localStorage.getItem(sessionKey) || undefined;
+        let cursor = Number(localStorage.getItem(cursorKey) || 0);
+        let assistant;
+        let requestNumber = 0;
+        let reconnectTimer;
+
+        function setStatus(text, kind) {
+          status.textContent = text;
+          dot.className = 'dot' + (kind ? ' ' + kind : '');
+          send.disabled = !socket || socket.readyState !== WebSocket.OPEN;
+        }
+
+        function addMessage(kind, text) {
+          const node = document.createElement('div');
+          node.className = 'message ' + kind;
+          node.textContent = text || '';
+          transcript.appendChild(node);
+          transcript.scrollTop = transcript.scrollHeight;
+          return node;
+        }
+
+        function connect() {
+          clearTimeout(reconnectTimer);
+          const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          socket = new WebSocket(scheme + '//' + location.host + '/ws');
+          setStatus('连接中…');
+          socket.addEventListener('open', () => {
+            setStatus('已连接', 'ready');
+            const frame = { v: 1, type: 'open' };
+            if (sessionId) frame.sessionId = sessionId;
+            if (cursor > 0) frame.after = cursor;
+            socket.send(JSON.stringify(frame));
+          });
+          socket.addEventListener('message', (event) => {
+            let frame;
+            try { frame = JSON.parse(event.data); } catch { return; }
+            if (frame.type === 'opened') {
+              sessionId = frame.sessionId;
+              cursor = Math.max(cursor, frame.cursor || 0);
+              localStorage.setItem(sessionKey, sessionId);
+              localStorage.setItem(cursorKey, String(cursor));
+              sessionLabel.textContent = sessionId;
+              return;
+            }
+            if (frame.type === 'event') {
+              cursor = Math.max(cursor, frame.cursor || 0);
+              localStorage.setItem(cursorKey, String(cursor));
+              const event = frame.event || {};
+              if (event.type === 'agent_start') assistant = addMessage('assistant', '');
+              const delta = event.assistantMessageEvent;
+              if (delta && delta.type === 'text_delta') {
+                if (!assistant) assistant = addMessage('assistant', '');
+                assistant.textContent += delta.delta || '';
+                transcript.scrollTop = transcript.scrollHeight;
+              }
+              if (event.type === 'agent_settled') assistant = undefined;
+              return;
+            }
+            if (frame.type === 'error') {
+              addMessage('system', '错误（' + frame.code + '）：' + frame.message);
+              if (frame.fatal) socket.close();
+            }
+          });
+          socket.addEventListener('close', () => {
+            setStatus('等待 Host…', 'error');
+            send.disabled = true;
+            reconnectTimer = setTimeout(connect, 1200);
+          });
+          socket.addEventListener('error', () => setStatus('连接错误', 'error'));
+        }
+
+        document.querySelector('#composer').addEventListener('submit', (event) => {
+          event.preventDefault();
+          const text = prompt.value.trim();
+          if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
+          const requestId = 'web-' + (++requestNumber);
+          addMessage('user', text);
+          socket.send(JSON.stringify({ v: 1, type: 'prompt', requestId, text }));
+          prompt.value = '';
+          prompt.focus();
+        });
+        prompt.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            document.querySelector('#composer').requestSubmit();
+          }
+        });
+        connect();
+      })();
+    </script>
+  </body>
+</html>
