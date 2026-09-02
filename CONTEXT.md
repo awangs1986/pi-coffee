@@ -20,6 +20,30 @@ _Avoid_: worker, sandbox, VM manager
 The browser-facing process that serves the PI Coffee page and relays conversation frames to a Host.
 _Avoid_: Pi UI process, Pi runtime
 
+**Control Plane**:
+The coordination role around the Web Server that authenticates users, selects a fixed User VM, relays model traffic, and records only bounded routing/usage metadata.
+_Avoid_: execution host, transcript server
+
+**User VM**:
+An owner-managed isolated virtual machine in which one internal user's Host, Pi sessions, context, and files live.
+_Avoid_: sandbox, VM worker
+
+**Browser Shell**:
+The single browser tab that presents one user's collection of Tasks and Sessions.
+_Avoid_: browser session, web worker
+
+**Task**:
+A user-level unit of work that may contain one or more Pi Sessions and a worktree/inbox in the User VM.
+_Avoid_: HTTP request, prompt
+
+**Native Transcript**:
+The session history written and read by the original Pi Agent in the User VM.
+_Avoid_: Control Plane log, browser cache
+
+**Model Context**:
+The messages and agent state that Pi uses to continue a Session.
+_Avoid_: Browser projection, usage record
+
 **Session**:
 One Pi conversation owned by a Host. A Session remains alive independently of any Browser User connection until it is explicitly stopped or the Host shuts down.
 _Avoid_: tab, request
@@ -46,6 +70,42 @@ _Avoid_: retry, duplicate delivery
 The Web Server module that validates browser Frames and forwards them to a Host connection without owning Pi state.
 _Avoid_: proxy (when discussing session ownership)
 
+**LLM Relay**:
+The transparent Control Plane route from a Host model request to the configured CPA endpoint, including JSON and SSE streams.
+_Avoid_: model server, second agent
+
+**CPA Endpoint**:
+The existing OpenAI-compatible upstream relay used for Chat Completions, Responses, model listing, and response compaction.
+_Avoid_: provider implementation
+
+**Routing Index**:
+The minimal Control Plane record that maps an authenticated user to a fixed User VM and opaque transport identifiers.
+_Avoid_: user database, transcript index
+
+**Usage Metadata**:
+Bounded accounting information such as token counts, timing, and status that does not contain prompt or tool-output正文.
+_Avoid_: conversation log
+
+**Task Inbox**:
+The User VM location where files uploaded for a Task are retained.
+_Avoid_: Control Plane upload store, temporary web directory
+
+**Image Message**:
+An original image retained in the User VM and presented to Pi either as model-supported image content or as a User VM reference.
+_Avoid_: thumbnail, screenshot cache
+
+**Deployment Skill**:
+The idempotent installation and enrollment procedure for the Agent Host on a User VM.
+_Avoid_: VM manager, installer daemon
+
+**Enrollment Token**:
+A one-time value used to register an Agent Host before it receives a revocable Host identity.
+_Avoid_: LLM key, user password
+
+**Host Identity**:
+The revocable transport identity by which the Control Plane addresses one Agent Host.
+_Avoid_: VM owner, API key
+
 ## Release vocabulary
 
 **MVP**:
@@ -55,3 +115,11 @@ _Avoid_: V5 slice, production release
 **Frozen V5 baseline**:
 The existing latest Gitea version of Picode, kept unchanged while PI Coffee proves its MVP.
 _Avoid_: legacy V5, source branch
+
+**Execution Seam**:
+The User VM isolation point at which Pi may use the owner's normal shell and file rights.
+_Avoid_: in-process sandbox, permission gate
+
+**Worktree**:
+A repository directory assigned to a Task for organizing changes; it is not a security control.
+_Avoid_: sandbox, permission scope
