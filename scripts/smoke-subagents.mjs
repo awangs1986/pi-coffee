@@ -12,7 +12,7 @@ const inspectionPath = join(smokeRoot, "tools.json");
 const inspectionExtension = join(smokeRoot, "inspect.mjs");
 await writeFile(
   inspectionExtension,
-  `import { writeFileSync } from "node:fs";\nexport default function (pi) {\n  pi.on("session_start", () => writeFileSync(process.env.PI_COFFEE_SUBAGENTS_INSPECT_PATH, JSON.stringify({ all: pi.getAllTools().map((tool) => tool.name), active: pi.getActiveTools() })));\n}\n`,
+  `import { writeFileSync } from "node:fs";\nexport default function (pi) {\n  pi.on("session_start", () => {\n    const all = pi.getAllTools();\n    writeFileSync(process.env.PI_COFFEE_SUBAGENTS_INSPECT_PATH, JSON.stringify({ all: all.map((tool) => tool.name), active: pi.getActiveTools() }));\n  });\n}\n`,
 );
 const extensions = resolvePiExtensions({ PI_COFFEE_EXTENSIONS: "", PI_COFFEE_SUBAGENTS: "" });
 const client = new RpcClient({
