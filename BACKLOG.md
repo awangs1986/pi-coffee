@@ -51,7 +51,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 |---|---|---|---|
 | `D-001` | `DECIDED` | 产品名称为 **PI Coffee**。 | 所有新代码、Issue、部署和交接使用 PI Coffee 名称。 |
 | `D-002` | `DECIDED` | `awangs/pi-coffee` 是主仓库，独立于 Picode。 | 同事从该仓库和 Gitea Issues 开始工作。 |
-| `D-003` | `DECIDED` | Picode 最新版本定义为 **V5**，保持不动。 | 禁止把 V5 拆分、重命名、回移植或作为当前实现的隐式依赖。见 [ADR-0002](./docs/adr/0002-v5-is-a-frozen-reference.md)。 |
+| `D-003` | `DECIDED` | Gitea 上现有的唯一最新 Picode 版本定义为 **V5**，保持不动；早期误称的 V4/其他历史版本不属于本计划依据。 | 禁止把 V5 拆分、重命名、回移植或作为当前实现的隐式依赖。见 [ADR-0002](./docs/adr/0002-v5-is-a-frozen-reference.md)。 |
 | `D-004` | `DECIDED` | 第一阶段以未修改的原版 Pi Agent 为最小 MVP。 | 先证明 Browser → Web Server → Host → Pi 的闭环，再逐步增加能力。 |
 | `D-005` | `DECIDED` | 目标使用者是内部用户，不做公共 SaaS。 | Gitea、Web、Host 和控制面按内网部署假设设计。 |
 | `D-006` | `DECIDED` | 交付单位是可执行 tickets；工作、状态和验收证据进入 Gitea Issues。 | 本文件是 backlog 索引，不能代替 Issue 的验收评论。 |
@@ -115,6 +115,21 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-039` | `DECIDED` | 尽量复用 Gitea 上已有代码，但只复用兼容且可验证的模块。 | 不为“复用”把 V5 的 Guard、Worktree 或领域对象偷偷带入 MVP/0.1。 |
 | `D-040` | `DECIDED` | Rust 只在测出实际性能瓶颈后引入。 | 第一实现使用 Node/TypeScript；Rust 模块必须有基准、边界和回滚方案。 |
 | `D-041` | `LATER` | V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 0.1 通过前不创建 V5 迁移 ticket；后续迁移必须单独评审、单独验收。 |
+
+### 1.1 被替换的早期方案
+
+讨论过程中有几次方向调整。下面记录它们是为了防止同事把已经被否决的中间方案重新实现；最终结论以 `D-*`、ADR 和 Gitea Issue 为准。
+
+| 早期想法 | 最终处理 | 原因/影响 |
+|---|---|---|
+| 直接在原 Picode/V5 目录拆分、增强 Worktree、移植插件，并让整套功能直接跑在服务器上。 | **替换为 PI Coffee 独立产品线**；V5 冻结，先做原版 Pi MVP。 | 先验证最小 Web 对话闭环，避免把未确认的 V5 设计带入新产品。 |
+| 把 tickets 只放在本地或 V5。 | **移动到 `awangs/pi-coffee` Git + Gitea Issues**。 | 同事必须只依赖主仓库和内部 Gitea；Issue 是状态/验收权威。 |
+| 在 User VM 内继续复制 V5 的 sandbox、Guard、权限审批。 | **不做**；VM 边界就是执行 seam。 | 用户明确接受 VM 内损坏并自行恢复快照；只有威胁模型改变才重新评估。 |
+| 让 Web 服务器保存完整上下文、Transcript 或上传正文。 | **不做**；持久内容留在 owning User VM。 | Control Plane 只做路由和有界 usage metadata，避免变成内容仓库。 |
+| 为了“worker”另造一个不清晰的执行层。 | **不引入 Worker 组件**；统一用 Agent Host / Pi Session / Task。 | 消除术语歧义，保持模块边界简单。 |
+| 直接照搬 `pi-web`。 | **只做 fork/删改/重写评估**，不改变当前 Host/Protocol seam。 | 需要先验证许可证、协议和维护成本；能复用就复用，不能复用就重写。 |
+| 立即用 Rust 重写性能路径。 | **暂缓**，先用 Node/TypeScript 测量。 | 没有可重复的性能瓶颈数据就不扩大技术栈。 |
+| 先做多标签页或浏览器内持久运行。 | **一个 Browser Shell/tab，多 Task/Session；执行寿命归 Host**。 | 关闭浏览器只断开 transport，不取消任务。 |
 
 ---
 
