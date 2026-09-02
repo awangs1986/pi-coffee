@@ -202,7 +202,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 方向 | 启动门槛 | 第一项工作 |
 |---|---|---|---|---|
-| `ARCH-001` | `DISCOVERY` | 评估 `pi-web` fork、大量删改或重写的边界。 | MVP/0.1 seam 稳定；确认许可证、协议、维护成本。 | 做一个不改变 Host/Protocol 接口的 UI 对比 spike。 |
+| `ARCH-001` | `DISCOVERY` | 评估 `pi-web` fork、大量删改或重写的边界。**评估已完成**（[`docs/research/pi-web-evaluation-20260903.md`](./docs/research/pi-web-evaluation-20260903.md)）：pi-web 依赖同机进程内 SDK，与 MVP 形态和 ADR-0001 冲突，不可直接采用；建议路线 B——保持 seam，借其 Extension UI、原生会话历史、重连对齐规则与输入控件设计。待 owner 拍板。 | MVP/0.1 seam 稳定；确认许可证、协议、维护成本。 | 若采纳路线 B：拆 `SHELL-001a`（Extension UI 帧 + 对话框）与 `SHELL-001b`（Host 侧会话列表 + `get_session_entries` 持久游标，与 `REC-001` 共享）。 |
 | `ARCH-002` | `LATER` | Pi 原生插件/Skill 的扩展目录、版本锁定、安装和回滚。 | `DEP-001` 完成。 | 列出现有 Pi 原生扩展点，标出可复用模块。 |
 | `V5-001` | `LATER` | 从冻结 V5 参考中逐项提取有价值的领域能力。 | 0.1 release gate 通过；每个能力单独 ADR。 | 只做只读差异/依赖审计，不修改 V5。 |
 | `WORK-001` | `LATER` | Worktree 增强、Task 与仓库分支/补丁的生命周期。 | `TASK-001` 的 0.1 语义稳定。 | 定义组织模型和迁移策略；不得声称它提供安全隔离。 |
@@ -241,7 +241,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `OPEN-006` | Host 重启时 native transcript、cursor 和未完成事件如何恢复？ | 以 Pi 原生 session/transcript 为源；用 `REC-001` 故障演练定稿。 | `REC-001` |
 | `OPEN-007` | 图片模型 capability 如何发现，路径引用如何安全地展示/下载？ | `MODEL-001` 用两个 stub 模型覆盖。 | `FILE-001` |
 | `OPEN-008` | Deployment Skill 的具体 Skill 包格式、执行用户、systemd 单元和升级回滚策略是什么？ | 先写 idempotent dry-run/report，再做真实 VM 演练。 | `DEP-001` |
-| `OPEN-009` | `pi-web` fork 与自研 UI 的取舍是否改变？ | `ARCH-001` 只做评估，不改变当前 MVP 代码 seam。 | `ARCH-001` |
+| `OPEN-009` | `pi-web` fork 与自研 UI 的取舍是否改变？ | 评估结论见 `docs/research/pi-web-evaluation-20260903.md`：不 fork、不整机采用；保持 seam，借设计与协议用法，按需移植组件。等待 owner 确认后关闭。 | `ARCH-001` |
 | `OPEN-010` | Wiki 由谁发布、多久同步一次、是否自动化？ | Git 保持唯一版本源；`DOC-001` 记录发布流程。 | `DOC-001` |
 | `OPEN-011` | 是否需要把更多 Pi 原生插件装进 User VM？ | 先完成 `ARCH-002` 清单；没有具体收益不扩 scope。 | `PLUGIN-001` |
 
@@ -296,3 +296,4 @@ MVP-001..005 (已完成)
 | 2026-09-02 | owner 补充 MVP 范围：包含 Codex 式白色主题 Web 界面（`MVP-006`）；MVP 部署形态为 User VM 内 Pi agent + 服务器端 Web/Relay（`MVP-007`），`CP-001` 由此提前进入 MVP。 |
 | 2026-09-03 | 建立 `HARNESS-003`（Issue #16）：先验证 10 个基础工具可靠性，再逐个接入扩展工具。 |
 | 2026-09-03 | 接入锁定的 `pi-subagents@0.63.0`（Issue #17）：保留 Harness 8/10 基础表，增加可选 `subagent`/`bg_wait` 和资源 Adapter；真实 User VM 验收拆为 `SUBAGENT-002`。 |
+| 2026-09-03 | 完成 `ARCH-001` pi-web 评估（`docs/research/pi-web-evaluation-20260903.md`），建议路线 B；`OPEN-009` 有了候选答案，待 owner 确认。 |
