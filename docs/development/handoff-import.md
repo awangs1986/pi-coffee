@@ -5,8 +5,9 @@ Use this only while the remote `main` branch is still empty. The attachment is a
 ```bash
 mkdir pi-coffee-handoff
 cd pi-coffee-handoff
-curl -fLO http://testpc:3000/attachments/c69c6dc6-0a26-47f9-ad8a-60342f131e7d
-tar -xzf pi-coffee-source-67f7d8c.tar.gz
+SOURCE_URL='paste the latest source tar.gz URL shown in Issue #6'
+curl -fL "$SOURCE_URL" -o source.tar.gz
+tar -xzf source.tar.gz
 npm install
 npm run check
 git init -b main
@@ -16,4 +17,4 @@ git remote add origin http://testpc:3000/awangs/pi-coffee.git
 git push -u origin main
 ```
 
-If the owner has already pushed `main`, clone normally and do not overwrite it with the attachment. The handoff Issue is [#6](http://testpc:3000/awangs/pi-coffee/issues/6); post the resulting commit and `npm run check` output there before starting 0.1 work.
+If the owner has already pushed `main`, clone normally and do not overwrite it with an attachment. The handoff Issue is [#6](http://testpc:3000/awangs/pi-coffee/issues/6); choose the attachment marked “latest” there, then post the resulting commit and `npm run check` output before starting 0.1 work.
