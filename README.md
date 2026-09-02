@@ -54,6 +54,8 @@ Useful settings:
 
 The first MVP uses Pi's normal credential resolution on the Host VM so the conversation path can be tested without putting a credential in this repository. Moving the upstream credential behind the central Relay is a subsequent PI Coffee ticket, not part of this first vertical slice.
 
+The frame contract is recorded in [`docs/protocol.md`](./docs/protocol.md).
+
 ## Repository tickets
 
 - [PI Coffee map and MVP outcome](http://testpc:3000/awangs/pi-coffee/issues/1)
