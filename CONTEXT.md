@@ -48,6 +48,14 @@ _Avoid_: Browser projection, usage record
 One Pi conversation owned by a Host. A Session remains alive independently of any Browser User connection until it is explicitly stopped or the Host shuts down.
 _Avoid_: tab, request
 
+**Subagent**:
+A focused child Pi Session launched by the optional `pi-subagents` extension for a bounded delegated task. Its transcript and artifacts remain in the owning User VM.
+_Avoid_: worker, remote agent
+
+**Subagent Extension**:
+The locked upstream `pi-subagents` Module plus PI Coffee's small resource Adapter. It is loaded by the Host but its `subagent` and `bg_wait` tools are opt-in through Harness `search_tools`.
+_Avoid_: V5 orchestration, Control Plane worker
+
 ## Conversation stream
 
 **Frame**:

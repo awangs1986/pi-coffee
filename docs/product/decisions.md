@@ -77,6 +77,17 @@ The prompt is appended to Pi's native Base Prompt and is guidance only. It must 
 
 V5 feature migration is a later, separately ticketed phase. No current 0.1 ticket is permission to copy V5 implementation or revive its sandbox/worktree design. The first priority is a reliable web conversation seam.
 
+## `pi-subagents` integration baseline
+
+The Agent Host loads the locked upstream `pi-subagents@0.63.0` Pi extension and
+its shipped resource directories through a small local Adapter. The upstream
+Module owns delegation and child-run orchestration; PI Coffee owns only the
+extension-loading Seam. `subagent` and `bg_wait` remain optional tools exposed
+through Harness `search_tools`, so the frozen V5 Simple/Full tables remain 8/10.
+`PI_COFFEE_SUBAGENTS=off` is the scoped rollback switch and
+`PI_COFFEE_EXTENSIONS=off` disables all extension loading. Real User VM child
+execution and browser observability require a separate acceptance ticket.
+
 ## Harness plugin baseline
 
 The first V5 migration slice is the native Pi Harness extension. It pins the

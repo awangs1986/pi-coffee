@@ -16,7 +16,7 @@ Browser  ── WebSocket ──>  Web Server  ── WebSocket ──>  Host  �
 - Closing or refreshing the browser detaches the connection; it does not stop the Session.
 - Reconnecting with the Session ID and Cursor replays buffered Events.
 - The Web Server has no Pi implementation knowledge; the Pi-specific code is one adapter.
-- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension now exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. Gitea integration, task orchestration, uploads, and image handling remain separate tickets.
+- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is now loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. Gitea integration, task orchestration, uploads, and image handling remain separate tickets.
 
 The Pi adapter uses the upstream package's documented RPC client and is pinned to `@earendil-works/pi-coding-agent@0.84.4` for this first slice. See the upstream [RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) for the underlying command/event semantics.
 
@@ -28,6 +28,9 @@ npm run check
 npm run build
 npm start
 ```
+
+要只验证 `pi-subagents` 的加载（不调用模型），运行
+`npm run smoke:subagents`。
 
 `npm start` runs Host + Web (and the Relay, if `PI_COFFEE_UPSTREAM_KEY` is set) in one Node process for a local smoke run:
 
@@ -58,7 +61,8 @@ Settings:
 | `PI_COFFEE_UPSTREAM_URL` | `https://b.awangsawangs.xyz/v1` | relay | upstream OpenAI-compatible base URL |
 | `PI_COFFEE_UPSTREAM_KEY` | unset | relay | the sole upstream key; **only** the Relay has it |
 | `PI_COFFEE_RELAY_TOKENS` | unset | relay | comma-separated Host tokens; **required** when not on loopback |
-| `PI_COFFEE_EXTENSIONS` | bundled Harness extension | host | colon-separated Pi extension paths; set to `off` to disable automatic Harness loading |
+| `PI_COFFEE_EXTENSIONS` | bundled Harness + pi-subagents | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
+| `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
 
 The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the
@@ -82,4 +86,6 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Harness Lean/Full prompt（V3-derived, Pi-native）](http://testpc:3000/awangs/pi-coffee/issues/14)
 - [Harness Pi plugin：V5 Simple/Full tools + prompt](http://testpc:3000/awangs/pi-coffee/issues/15)
 - [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
+- [pi-subagents 集成与 User VM 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/17)
+- [pi-subagents integration spec](./docs/spec/subagents-plugin.md)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)

@@ -17,10 +17,12 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 11. [`development/wiki-publish.md`](./development/wiki-publish.md): owner procedure for mirroring these pages into Gitea Wiki.
 12. [`spec/harness-prompt.md`](./spec/harness-prompt.md): the canonical V3-derived, Pi-native Lean/Full prompt contract.
 13. [`spec/harness-plugin.md`](./spec/harness-plugin.md): V5 8/10 tool tables, Pi extension wiring, and User VM-native adapters.
+14. [`spec/subagents-plugin.md`](./spec/subagents-plugin.md): locked `pi-subagents` integration, optional-tool semantics, and rollback switches.
 
 ## Research notes
 
 - [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): V3 prompt provenance/content audit, V5 harness mapping, and the proposed PI Coffee `/harness` boundary.
+- [`pi-subagents-audit-20260903.md`](./research/pi-subagents-audit-20260903.md): upstream source/version audit and Pi 0.84.4 loading evidence.
 
 ## Authority order
 

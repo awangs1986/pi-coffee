@@ -187,6 +187,13 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 |---|---|---:|---|---|---|
 | `HARNESS-003` | `READY` | P1 | 先在真实 Linux Mint User VM 和 Web 端验证 10 个基础工具的可靠性、取消、错误和恢复语义，再按单个 ticket 接入扩展工具。首个候选是 API 版增强 Web Search。 | `HARNESS-002` | [#16](http://testpc:3000/awangs/pi-coffee/issues/16) |
 
+### 2.5 `pi-subagents` 扩展切片
+
+| ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
+|---|---|---:|---|---|---|
+| `SUBAGENT-001` | `DONE` | P1 | 锁定并加载官方 `pi-subagents@0.63.0`；通过本地资源 Adapter 暴露其 skills/prompts；让 `search_tools` 可发现/按需激活 `subagent` 与 `bg_wait`，且 Harness Simple/Full 仍为 8/10。 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
+| `SUBAGENT-002` | `READY` | P1 | 在真实 Linux Mint User VM + Web Shell 验证 foreground/background child、完成通知、停止/取消、浏览器断开后继续、Host 重启恢复和资源清理；未通过前不宣称生产可靠。 | `SUBAGENT-001`, `HARNESS-003` | 作为 #17 的后续验收清单 |
+
 ---
 
 ## 3. 后续版本 Backlog（0.1 通过后再启动）
@@ -276,6 +283,7 @@ MVP-001..005 (已完成)
 | pi-web fork/改造/重写 | README、架构 seam 约束 | `D-038`, `ARCH-001`, `OPEN-009` |
 | V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001`, `HARNESS-003` |
 | V3 提示词修补为 Pi Lean/Full，并接入 V5 Harness 工具表 | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042..D-043`, `HARNESS-001..002` |
+| `pi-subagents` 上游扩展接入 Agent Host | [`docs/spec/subagents-plugin.md`](./docs/spec/subagents-plugin.md)、[`docs/research/pi-subagents-audit-20260903.md`](./docs/research/pi-subagents-audit-20260903.md) | `SUBAGENT-001..002`, `HARNESS-003` |
 
 ## 8. 维护记录
 
@@ -287,3 +295,4 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 复核 Gitea V5 基线 `778a3d5`，完成 PI-native Harness extension、8/10 工具表和 VM-native git/verify 适配，登记 `HARNESS-002`（Issue #15）。 |
 | 2026-09-02 | owner 补充 MVP 范围：包含 Codex 式白色主题 Web 界面（`MVP-006`）；MVP 部署形态为 User VM 内 Pi agent + 服务器端 Web/Relay（`MVP-007`），`CP-001` 由此提前进入 MVP。 |
 | 2026-09-03 | 建立 `HARNESS-003`（Issue #16）：先验证 10 个基础工具可靠性，再逐个接入扩展工具。 |
+| 2026-09-03 | 接入锁定的 `pi-subagents@0.63.0`（Issue #17）：保留 Harness 8/10 基础表，增加可选 `subagent`/`bg_wait` 和资源 Adapter；真实 User VM 验收拆为 `SUBAGENT-002`。 |

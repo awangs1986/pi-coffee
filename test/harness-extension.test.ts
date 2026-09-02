@@ -218,6 +218,36 @@ describe("PI Coffee V5 harness extension", () => {
     expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
   });
 
+  it("discovers and deliberately activates optional extension tools without changing V5 counts", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
+    sessions.push(cwd);
+    const pi = new FakePi(cwd);
+    for (const name of ["subagent", "bg_wait"]) {
+      pi.tools.set(name, {
+        name,
+        label: name,
+        description: `${name} optional extension tool`,
+        parameters: {} as never,
+        execute: async () => ({ content: [{ type: "text", text: "" }], details: {} }),
+      });
+    }
+    harnessExtension(pi.asExtensionApi());
+    await pi.emit("session_start", { type: "session_start", reason: "startup" });
+
+    const search = await pi.runTool("search_tools", { action: "search", query: "subagent" });
+    expect(search.content[0].text).toContain("subagent");
+    expect(search.content[0].text).toContain("available for activation");
+    expect(pi.getActiveTools()).toHaveLength(SIMPLE_TOOLS.length);
+
+    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
+    expect(activation.details).toMatchObject({ ok: true, name: "subagent" });
+    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "subagent"]);
+
+    await pi.runCommand("harness", "full");
+    expect(pi.getActiveTools()).toEqual([...FULL_TOOLS]);
+    expect(pi.getActiveTools()).toHaveLength(FULL_TOOLS.length);
+  });
+
   it("reports native VM verification results without V5 gate claims", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
     sessions.push(cwd);

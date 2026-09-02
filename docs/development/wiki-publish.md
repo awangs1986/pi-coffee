@@ -14,5 +14,6 @@ Recommended pages:
 | `PI-Coffee-Topology` | `docs/architecture/topology.md` |
 | `PI-Coffee-Deployment` | `docs/deployment/runbook.md` |
 | `PI-Coffee-Development` | `docs/development/workflow.md` + `docs/development/handoff-import.md` |
+| `PI-Coffee-Subagents` | `docs/spec/subagents-plugin.md` + `docs/research/pi-subagents-audit-20260903.md` + Issue #17 |
 
 Do not paste API keys, OAuth secrets, cookies, VM credentials, transcripts, tool output, or image bytes into Wiki pages. If the Wiki is unavailable, Issue #6 attachments are the supported handoff fallback.

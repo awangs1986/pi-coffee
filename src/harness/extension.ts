@@ -200,8 +200,8 @@ function createSearchToolsTool(pi: ExtensionAPI, currentMode: () => HarnessMode)
     name: "search_tools",
     label: "Search Tools",
     description:
-      "Search tools registered in this Pi process and activate optional tools. git and verify are Full harness tools and cannot be activated independently in Simple.",
-    promptSnippet: "Search registered tools when the active table cannot perform the task.",
+      "Search tools registered in this Pi process and activate optional tools. git and verify are Full harness tools; packaged extensions such as subagent and bg_wait remain optional and do not change the frozen 8/10 base tables.",
+    promptSnippet: "Search registered tools when the active table cannot perform the task; activate an optional extension deliberately.",
     parameters: Type.Object({
       action: Type.Union([Type.Literal("search"), Type.Literal("activate")]),
       query: Type.Optional(Type.String({ description: "name or description search" })),

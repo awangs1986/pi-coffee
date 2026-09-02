@@ -45,11 +45,13 @@ deliverable. Hand-installed systemd units for both machines are in
 
 Gitea OAuth and multi-user routing (one Web Server bridges to one User VM in
 the MVP), the idempotent Deployment Skill with enrollment, VM lifecycle
-management, V5 Guard/permission/snapshot enforcement, task orchestration,
-durable Control Plane context, file uploads, image UI, and Host-restart session
-recovery. The bundled PI Coffee Harness extension is an add-on to the Host;
-its native Git/verify behavior is documented separately and does not revive
-those V5 controls.
+management, V5 Guard/permission/snapshot enforcement, PI Coffee task
+orchestration semantics, durable Control Plane context, file uploads, image UI,
+and Host-restart session recovery. The bundled PI Coffee Harness extension and
+the locked `pi-subagents` delegation extension are Host add-ons; loading them
+does not make task orchestration part of the MVP acceptance contract. Their
+native behavior and remaining User VM acceptance work are documented
+separately and do not revive V5 controls.
 
 ## Evidence in this checkout
 

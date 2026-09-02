@@ -27,7 +27,8 @@ refuse to start on a non-loopback bind without their token (fail closed).
 - Node.js **>= 22.19** (`node -v`). Debian/Mint packages are older; use the
   NodeSource 22.x repository or an official tarball.
 - `git`, `curl`. The pinned original Pi (`@earendil-works/pi-coding-agent@0.84.4`)
-  is installed by `npm ci` inside the checkout; nothing else to install for Pi.
+  and locked `pi-subagents@0.63.0` are installed by `npm ci` inside the
+  checkout; nothing else to install for Pi.
 - Firewall: the server must reach `USER_VM:8788` (Host); the User VM must reach
   `SERVER:8789` (Relay); browsers reach `SERVER:3000` (or your TLS proxy).
   Do not expose 8788/8789 beyond those two peers.
@@ -100,9 +101,14 @@ journalctl -u pi-coffee-host -n 20 --no-pager
 interpolation: the token comes from the Host's environment at request time and
 is never written to disk by PI Coffee.
 
-The Host automatically loads the bundled V5 Harness Pi extension. Set
+The Host automatically loads the bundled V5 Harness and `pi-subagents`
+extension. The `subagent` and `bg_wait` tools remain optional until activated
+through Harness `search_tools`, so the frozen Simple/Full base counts stay
+8/10. Set `PI_COFFEE_SUBAGENTS=off` to keep only Harness; set
 `PI_COFFEE_EXTENSIONS=off` for a transport-only diagnostic, or provide a
-colon-separated list of explicit extension paths to replace the default.
+colon-separated list of explicit extension paths to replace the defaults.
+The package's built-in commands and prompt templates are visible in the Pi RPC
+command list after startup.
 
 ## End-to-end evidence
 
@@ -137,6 +143,9 @@ Then open `http://SERVER:3000/` in a browser and use the shell.
 ```bash
 npm ci && npm run check && npm start        # Host + Web on loopback, Pi with its default credentials
 ```
+
+安装或升级后可先运行 `npm run smoke:subagents`；它使用离线临时目录验证
+`pi-subagents` 扩展和命令注册，不需要模型凭据。
 
 `npm start` (`all`) also starts the Relay when `PI_COFFEE_UPSTREAM_KEY` is set.
 To test a Host that has **no** upstream key on one machine, run three shells:

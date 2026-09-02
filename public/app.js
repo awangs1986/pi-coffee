@@ -362,6 +362,20 @@
       pushEntry({ k: 'note', failure: event.notifyType === 'error', text: String(event.message || '') });
       return;
     }
+    // Pi extensions can publish a visible custom message (for example a
+    // foreground subagent result or a slash-command report). Hidden custom
+    // messages are context-only and must never be copied into the browser's
+    // display cache.
+    if (event.type === 'message_end' && event.message && event.message.role === 'custom' && event.message.display === true) {
+      const text = customMessageText(event.message.content);
+      if (text.trim()) {
+        currentAssistant = undefined;
+        showThinking(false);
+        pushEntry({ k: 'note', text: text.slice(0, 8000) });
+        persistTranscript(false);
+      }
+      return;
+    }
     if (event.type === 'agent_start') {
       setStreaming(true);
       showThinking(true);
@@ -434,6 +448,13 @@
     const block = result && Array.isArray(result.content) ? result.content.find((c) => c.type === 'text') : undefined;
     const text = block && block.text ? block.text : (typeof result === 'string' ? result : '');
     return text.length > 4000 ? text.slice(0, 4000) + '\n…' : text;
+  }
+  function customMessageText(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.filter((part) => part && part.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text)
+      .join('\n');
   }
 
   // ---------- session actions ----------

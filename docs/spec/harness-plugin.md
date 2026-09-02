@@ -26,7 +26,12 @@ V5 的 `capabilities`、`context`、`handoff`、`kernel` 及 Web 能力不是这
 - 在 `before_agent_start` 把现有的 V3-derived `lean`/`full` fixture 追加到 Pi Base Prompt，并用 `<pi_coffee_harness>` 边界去重。动态工具列表只作为运行时事实追加，不改写稳定 prompt 正文。
 - `standard` 映射为 Full + quick profile，`tdd` 映射为 Full + advisory tdd profile；没有第三套工具表。
 
-Host 的 `RpcPiSessionFactory` 支持 `extensions`，`main` 默认加载编译后的 Harness extension。可用 `PI_COFFEE_EXTENSIONS`（Linux 使用冒号分隔）替换扩展列表，设为 `off` 可关闭自动加载。
+Host 的 `RpcPiSessionFactory` 支持 `extensions`，`main` 默认加载编译后的
+Harness、锁定的 `pi-subagents` 入口和资源 Adapter。`subagent`/`bg_wait`
+属于可选扩展工具，不改变 Simple=8、Full=10。可用
+`PI_COFFEE_SUBAGENTS=off` 只关闭该扩展；`PI_COFFEE_EXTENSIONS`（Linux 使用
+冒号分隔）可替换整个扩展列表，设为 `off` 可关闭全部扩展。详见
+[`subagents-plugin.md`](./subagents-plugin.md)。
 
 ## User VM 后端适配
 
