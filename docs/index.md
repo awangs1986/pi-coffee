@@ -16,6 +16,10 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 10. [`development/handoff-import.md`](./development/handoff-import.md): import the temporary source attachment if the remote branch is still empty.
 11. [`development/wiki-publish.md`](./development/wiki-publish.md): owner procedure for mirroring these pages into Gitea Wiki.
 
+## Research notes
+
+- [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): V3 prompt provenance/content audit, V5 harness mapping, and the proposed PI Coffee `/harness` boundary.
+
 ## Authority order
 
 - Gitea Issues are authoritative for scope, status, dependencies, and acceptance comments: [awangs/pi-coffee/issues](http://testpc:3000/awangs/pi-coffee/issues).
