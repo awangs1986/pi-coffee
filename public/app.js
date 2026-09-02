@@ -355,6 +355,13 @@
   }
 
   function handleEvent(event) {
+    // Pi RPC extensions (including the Harness /harness command) surface
+    // fire-and-forget notifications as extension_ui_request frames. They are
+    // informational only; dialog requests remain a future explicit seam.
+    if (event.type === 'extension_ui_request' && event.method === 'notify') {
+      pushEntry({ k: 'note', failure: event.notifyType === 'error', text: String(event.message || '') });
+      return;
+    }
     if (event.type === 'agent_start') {
       setStreaming(true);
       showThinking(true);

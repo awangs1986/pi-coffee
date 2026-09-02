@@ -152,7 +152,9 @@ describe("Web Server seam", () => {
     const js = await fetch(`${base}/app.js`);
     expect(js.status).toBe(200);
     expect(js.headers.get("content-type")).toContain("text/javascript");
-    expect(await js.text()).toContain("'/ws'");
+    const jsText = await js.text();
+    expect(jsText).toContain("'/ws'");
+    expect(jsText).toContain("extension_ui_request");
 
     for (const path of ["/app.txt", "/nested/app.js", "/..%2Fpackage.json", "/../package.json", "/package.json", "/app.js.map"]) {
       const blocked = await fetch(`${base}${path}`);
