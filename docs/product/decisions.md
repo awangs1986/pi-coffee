@@ -67,6 +67,12 @@ The Relay must not add a second model protocol, buffer an entire stream, or writ
 
 The future Deployment Skill is idempotent: install the pinned Pi package, PI Coffee Host, and systemd configuration; accept a one-time Enrollment Token; exchange it for a revocable Host identity; and emit a deployment report. It is a 0.1 deliverable, not required for the local MVP.
 
+## Harness prompt baseline
+
+The current V3 prompt result is the content baseline for PI Coffee. Per the maintainer's provenance note, V3 went through three prompt evolutions: a current Claude Code prompt extraction/material pass, a Pi-specific adaptation, and a stabilization pass. PI Coffee derives two Pi-native profiles from that result: `lean` for the stable behavioral core and `full` for the self-contained engineering/TDD guidance layer.
+
+The prompt is appended to Pi's native Base Prompt and is guidance only. It must describe only tools and Host behavior that are actually available in the current session. It must not invent execution controls, identity, permissions, sandboxing, automatic gates, or rollback. The canonical fixtures and renderer are documented in [`docs/spec/harness-prompt.md`](../spec/harness-prompt.md) and tracked by Gitea Issue [#14](http://testpc:3000/awangs/pi-coffee/issues/14).
+
 ## Explicit deferrals
 
 V5 feature migration is a later, separately ticketed phase. No current 0.1 ticket is permission to copy V5 implementation or revive its sandbox/worktree design. The first priority is a reliable web conversation seam.
