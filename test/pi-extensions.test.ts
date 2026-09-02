@@ -5,6 +5,7 @@ import {
   resolvePiExtensions,
   resolveContextFoldExtension,
   resolvePiLensExtension,
+  resolveRpivTodoExtension,
   resolvePiSubagentsExtension,
   resolvePiSubagentsResourceExtension,
 } from "../src/pi-extensions.js";
@@ -57,6 +58,20 @@ describe("PI Coffee native extension selection", () => {
     expect(enabled.indexOf(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })))
       .toBeLessThan(enabled.indexOf(resolveContextFoldExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })));
     expect(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })).toMatch(/node_modules[\\/]pi-lens[\\/](dist[\\/]index\.js|index\.js)$/);
+  });
+
+  it("keeps rpiv-todo non-visible until explicitly opted in", () => {
+    const defaults = resolvePiExtensions({});
+    expect(defaults.some((path) => /[\\/]rpiv-todo[\\/]/.test(path))).toBe(false);
+
+    const agentEnv = { PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" };
+    const enabled = resolvePiExtensions({ ...agentEnv, PI_COFFEE_RPIV_TODO: "on" });
+    const todo = resolveRpivTodoExtension(agentEnv);
+    expect(enabled).toContain(todo);
+    expect(enabled.indexOf(todo)).toBeLessThan(
+      enabled.indexOf(resolveContextFoldExtension(agentEnv)),
+    );
+    expect(todo).toMatch(/node_modules[\\/]@juicesharp[\\/]rpiv-todo[\\/]index\.ts$/);
   });
 
   it("loads the pinned context-fold entry through Pi's native loader", async () => {

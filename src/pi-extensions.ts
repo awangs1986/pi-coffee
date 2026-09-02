@@ -21,6 +21,8 @@ const resolvePackage = createRequire(import.meta.url).resolve;
  * pi-lens is installed as an opt-in, non-visible integration. It is not added
  * to the default list and therefore does not initialize LSP/diagnostic work or
  * expose any tools unless `PI_COFFEE_PI_LENS=on` is explicitly set.
+ * rpiv-todo is likewise opt-in: its todo tool, `/todos` command, and overlay
+ * are not initialized unless `PI_COFFEE_RPIV_TODO=on` is explicitly set.
  */
 export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): string[] {
   const configured = env.PI_COFFEE_EXTENSIONS?.trim();
@@ -35,6 +37,7 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
     extensions.push(resolvePiSubagentsExtension(), resolvePiSubagentsResourceExtension());
   }
   if (isEnabled(env.PI_COFFEE_PI_LENS)) extensions.push(resolvePiLensExtension(env));
+  if (isEnabled(env.PI_COFFEE_RPIV_TODO)) extensions.push(resolveRpivTodoExtension(env));
   if (!isDisabled(env.PI_COFFEE_CONTEXT_FOLD)) extensions.push(resolveContextFoldExtension(env));
   return extensions;
 }
@@ -72,6 +75,14 @@ export function resolvePiLensExtension(env: NodeJS.ProcessEnv = process.env): st
   const managedEntry = join(agentDir, "npm", "node_modules", "pi-lens", "dist", "index.js");
   if (existsSync(managedEntry)) return managedEntry;
   return resolvePackage("pi-lens");
+}
+
+/** Resolve the optional rpiv-todo native Pi extension without loading it by default. */
+export function resolveRpivTodoExtension(env: NodeJS.ProcessEnv = process.env): string {
+  const agentDir = env.PI_COFFEE_AGENT_DIR ?? env.PI_CODING_AGENT_DIR ?? getAgentDir();
+  const managedEntry = join(agentDir, "npm", "node_modules", "@juicesharp", "rpiv-todo", "index.ts");
+  if (existsSync(managedEntry)) return managedEntry;
+  return resolvePackage("@juicesharp/rpiv-todo/index.ts");
 }
 
 function isDisabled(value: string | undefined): boolean {

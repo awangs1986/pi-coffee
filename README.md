@@ -65,6 +65,7 @@ Settings:
 | `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
 | `PI_COFFEE_CONTEXT_FOLD` | enabled | host | set to `off`/`0`/`false`/`no` to disable context-fold; Pi's native compaction remains available |
 | `PI_COFFEE_PI_LENS` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to pi-lens; it is not loaded or made visible by default |
+| `PI_COFFEE_RPIV_TODO` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to rpiv-todo; its todo tool, command, and overlay are not loaded by default |
 
 context-fold keeps the raw session ledger and only rewrites the per-request copy. Its default
 `CONTEXTFOLD_COMPACT=det` mode emits a deterministic summary for hard compaction. The plugin's
@@ -76,6 +77,10 @@ context-fold tuning remains available through its `CONTEXTFOLD_*` variables and 
 it, initialize its LSP/diagnostic runtime, or add its tools to the model's visible tool set.
 Set `PI_COFFEE_PI_LENS=on` for a Host session when that capability is explicitly requested;
 pi-lens then applies its own dynamic-tool policy (situational tools start inactive).
+
+`@juicesharp/rpiv-todo@2.9.0` is packaged for an explicit opt-in path only. PI Coffee does
+not proactively initialize its todo tool, `/todos` command, or live overlay. Set
+`PI_COFFEE_RPIV_TODO=on` for a Host session when task tracking is explicitly requested.
 
 The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the
