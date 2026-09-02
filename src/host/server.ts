@@ -4,7 +4,9 @@ import { WebSocketServer, WebSocket, type RawData } from "ws";
 import {
   decodeClientFrame,
   encodeFrame,
+  MAX_FRAME_BYTES,
   type ClientFrame,
+  type HistoryEntry,
   type ServerFrame,
 } from "../shared/protocol.js";
 import type { PiSessionFactory } from "./pi-adapter.js";
@@ -16,6 +18,8 @@ export interface HostServerOptions {
   token?: string;
   factory: PiSessionFactory;
   eventBufferSize?: number;
+  /** Stop idle Pi processes after this long; the conversation stays in Pi's session store. */
+  idleTimeoutMs?: number;
 }
 
 export interface HostAddress {
@@ -44,6 +48,7 @@ export class HostServer {
     this.registry = new HostSessionRegistry({
       factory: options.factory,
       eventBufferSize: options.eventBufferSize,
+      ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
     });
     this.http = createServer((request, response) => {
       if (request.url === "/healthz") {
@@ -183,6 +188,10 @@ class HostSocket implements SessionSink {
         case "open":
           await this.open(frame);
           break;
+        case "list_sessions":
+          // Allowed before open: the sidebar needs the list to choose from.
+          this.send({ v: 1, type: "sessions", sessions: await this.registry.list() });
+          break;
         case "prompt":
           await this.prompt(frame);
           break;
@@ -231,6 +240,7 @@ class HostSocket implements SessionSink {
       cursor: result.session.currentCursor,
       state,
     });
+    this.send(boundedHistoryFrame(result.session.id, result.history.entries, result.history.leafId));
     if (result.resync) {
       this.send({
         v: 1,
@@ -289,6 +299,22 @@ class NotOpenError extends Error {
     super("Connection must be opened first");
     this.name = "NotOpenError";
   }
+}
+
+/**
+ * The history frame must respect MAX_FRAME_BYTES. Keep the newest entries and
+ * flag truncation; older conversation stays in the User VM's session file.
+ */
+function boundedHistoryFrame(sessionId: string, entries: HistoryEntry[], leafId: string | null): ServerFrame {
+  const budget = MAX_FRAME_BYTES - 4096;
+  let kept = entries;
+  let truncated = false;
+  const measure = (list: HistoryEntry[]) => Buffer.byteLength(JSON.stringify(list), "utf8");
+  while (kept.length > 0 && measure(kept) > budget) {
+    kept = kept.slice(Math.max(1, Math.floor(kept.length / 4)));
+    truncated = true;
+  }
+  return { v: 1, type: "history", sessionId, entries: kept, leafId, truncated };
 }
 
 function isLoopback(host: string): boolean {

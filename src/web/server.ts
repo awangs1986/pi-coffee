@@ -136,6 +136,7 @@ class BrowserBridge {
   private readonly browser: WebSocket;
   private readonly host: HostClient;
   private hostUnsubscribe?: () => void;
+  private connected = false;
   private opened = false;
   private closed = false;
   private messageQueue: Promise<void> = Promise.resolve();
@@ -201,21 +202,24 @@ class BrowserBridge {
       this.send({ v: 1, type: "pong", nonce: frame.nonce });
       return;
     }
-    if (frame.type !== "open" && !this.opened) {
+    // list_sessions is the one command a browser may send before choosing a
+    // session; everything else needs an open Session on the Host.
+    if (frame.type !== "open" && frame.type !== "list_sessions" && !this.opened) {
       this.send({ v: 1, type: "error", code: "not_open", message: "Send open before other commands" });
       return;
     }
 
     try {
-      if (frame.type === "open") {
-        if (this.opened) {
-          this.send({ v: 1, type: "error", code: "already_open", message: "Connection is already open" });
-          return;
-        }
+      if (frame.type === "open" && this.opened) {
+        this.send({ v: 1, type: "error", code: "already_open", message: "Connection is already open" });
+        return;
+      }
+      if (!this.connected) {
         await this.host.connect();
         this.hostUnsubscribe = this.host.onFrame((hostFrame) => this.send(hostFrame));
-        this.opened = true;
+        this.connected = true;
       }
+      if (frame.type === "open") this.opened = true;
       this.host.send(frame);
     } catch (error) {
       this.send({

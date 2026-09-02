@@ -54,7 +54,8 @@ Settings:
 | `PI_COFFEE_HOST_TOKEN` | unset | web, host | shared Host bearer token; **required** when the Host is not on loopback |
 | `PI_COFFEE_WORKDIR` | current directory | host | Pi working directory |
 | `PI_COFFEE_AGENT_DIR` | Pi default | host | Pi config directory (`models.json`) |
-| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory |
+| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory — the durable conversation store the sidebar and history are served from |
+| `PI_COFFEE_IDLE_TIMEOUT_MS` | `600000` | host | stop a Pi process with no browser attached and nothing running; conversations resume from the store |
 | `PI_COFFEE_PROVIDER` / `PI_COFFEE_MODEL` | Pi default | host | provider/model from `models.json` |
 | `PI_COFFEE_RELAY_TOKEN` | unset | host | this VM's Relay token, interpolated by Pi from `models.json` |
 | `PI_COFFEE_RELAY_BIND` / `PI_COFFEE_RELAY_PORT` | `127.0.0.1` / `8789` | relay | Relay bind |

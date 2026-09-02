@@ -62,6 +62,8 @@ describe("PI Coffee MVP", () => {
     browser.send(encodeFrame({ v: 1, type: "open" }));
     const opened = await frames.next();
     expect(opened.type).toBe("opened");
+    if (opened.type !== "opened") throw new Error("expected opened");
+    expect(await frames.next()).toMatchObject({ type: "history", entries: [] });
     browser.send(encodeFrame({ v: 1, type: "prompt", requestId: "mvp-1", text: "hello Pi" }));
     expect(await frames.next()).toMatchObject({ type: "ack", operation: "prompt", requestId: "mvp-1" });
     expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_start" } });
@@ -69,8 +71,24 @@ describe("PI Coffee MVP", () => {
       type: "event",
       event: { type: "message_update", assistantMessageEvent: { delta: "echo: hello Pi" } },
     });
+    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "message_end" } });
     expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_settled" } });
     browser.close();
     await once(browser, "close");
+
+    // The history for a new browser comes from the Pi process's own entries
+    // (get_entries), projected by the adapter — not from anything the first
+    // browser kept.
+    const again = new WebSocket(`ws://127.0.0.1:${web.address().port}/ws`);
+    await once(again, "open");
+    const againFrames = new FrameQueue(again);
+    again.send(encodeFrame({ v: 1, type: "open", sessionId: opened.sessionId }));
+    expect(await againFrames.next()).toMatchObject({ type: "opened", sessionId: opened.sessionId });
+    expect(await againFrames.next()).toMatchObject({
+      type: "history",
+      entries: [{ kind: "user", text: "hello Pi" }, { kind: "assistant", text: "echo: hello Pi" }],
+    });
+    again.close();
+    await once(again, "close");
   }, 15_000);
 });

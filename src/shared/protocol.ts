@@ -27,12 +27,41 @@ export interface SessionState {
   sessionName?: string;
 }
 
+/**
+ * One row of the conversation list. Derived on the Host from Pi's native
+ * session store in the User VM; the browser never persists it.
+ */
+export interface SessionSummary {
+  id: string;
+  name?: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  preview: string;
+  running: boolean;
+}
+
+/**
+ * Display-ready projection of completed conversation entries. Produced by the
+ * Pi adapter from the durable session file, so a fresh browser sees the whole
+ * conversation without ever having cached anything locally.
+ */
+export type HistoryEntry =
+  | { kind: "user"; id: string; at?: string; text: string; imageCount?: number }
+  | { kind: "assistant"; id: string; at?: string; text: string }
+  | { kind: "tool"; id: string; at?: string; name: string; args: JsonValue; result?: string; isError?: boolean }
+  | { kind: "note"; id: string; at?: string; text: string };
+
 export type ClientFrame =
   | {
       v: typeof PROTOCOL_VERSION;
       type: "open";
       sessionId?: string;
       after?: number;
+    }
+  | {
+      v: typeof PROTOCOL_VERSION;
+      type: "list_sessions";
     }
   | {
       v: typeof PROTOCOL_VERSION;
@@ -97,6 +126,23 @@ export type ServerFrame =
       sessionId: string;
       oldestCursor: number;
       newestCursor: number;
+    }
+  | {
+      v: typeof PROTOCOL_VERSION;
+      type: "sessions";
+      sessions: SessionSummary[];
+    }
+  | {
+      /**
+       * Sent right after `opened`. Completed entries from the durable session;
+       * live `event` frames that follow cover only the in-flight tail.
+       */
+      v: typeof PROTOCOL_VERSION;
+      type: "history";
+      sessionId: string;
+      entries: HistoryEntry[];
+      leafId: string | null;
+      truncated: boolean;
     };
 
 export function encodeFrame(frame: ServerFrame | ClientFrame): string {
@@ -125,6 +171,8 @@ export function decodeClientFrame(input: string | Uint8Array): ClientFrame {
   switch (value.type) {
     case "open":
       return parseOpen(value);
+    case "list_sessions":
+      return { v: PROTOCOL_VERSION, type: "list_sessions" };
     case "prompt":
       return parsePrompt(value);
     case "abort":

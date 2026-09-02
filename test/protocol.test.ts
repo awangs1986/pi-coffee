@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeClientFrame, encodeFrame, MAX_FRAME_BYTES } from "../src/shared/protocol.js";
+import { decodeClientFrame, decodeServerFrame, encodeFrame, MAX_FRAME_BYTES } from "../src/shared/protocol.js";
 
 describe("PI Coffee wire protocol", () => {
   it("round-trips a prompt frame through the public codec", () => {
@@ -28,5 +28,23 @@ describe("PI Coffee wire protocol", () => {
     expect(() =>
       decodeClientFrame(JSON.stringify({ v: 1, type: "prompt", requestId: "", text: "" })),
     ).toThrow(/requestId|text/i);
+  });
+
+  it("accepts the stateless sidebar command and carries history frames opaquely", () => {
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "list_sessions" }))).toEqual({ v: 1, type: "list_sessions" });
+    const history = {
+      v: 1 as const,
+      type: "history" as const,
+      sessionId: "s1",
+      entries: [
+        { kind: "user" as const, id: "u1", text: "hi" },
+        { kind: "tool" as const, id: "c1", name: "bash", args: { command: "ls" }, result: "a", isError: false },
+      ],
+      leafId: "c1",
+      truncated: false,
+    };
+    expect(decodeServerFrame(encodeFrame(history))).toEqual(history);
+    const sessions = { v: 1 as const, type: "sessions" as const, sessions: [{ id: "s1", createdAt: "t", updatedAt: "t", messageCount: 2, preview: "hi", running: false }] };
+    expect(decodeServerFrame(encodeFrame(sessions))).toEqual(sessions);
   });
 });

@@ -1,6 +1,11 @@
 (() => {
   'use strict';
 
+  // The browser is a view. Conversations, their history and their running
+  // state live on the Host in the User VM (Pi's own session store). The only
+  // thing kept here is which conversation this browser last looked at.
+  const ACTIVE_KEY = 'pi-coffee.active.v2';
+
   // ---------- DOM ----------
   const $ = (selector) => document.querySelector(selector);
   const app = $('#app');
@@ -16,77 +21,22 @@
   const sessionMeta = $('#session-meta');
   const sessionList = $('#session-list');
 
-  // ---------- local persistence (display cache only; the Host owns the truth) ----------
-  const STORE = {
-    sessions: 'pi-coffee.sessions.v1',
-    active: 'pi-coffee.active.v1',
-    transcript: (id) => 'pi-coffee.transcript.v1.' + id,
-    legacySession: 'pi-coffee.session-id',
-    legacyCursor: 'pi-coffee.cursor',
-  };
-  const MAX_SESSIONS = 30;
-  const MAX_ENTRIES = 120;
-  const MAX_TEXT = 60_000;
-
-  function loadJson(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-  function saveJson(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota: display cache is best-effort */ }
-  }
-
-  let sessions = loadJson(STORE.sessions, []);
-  let activeId = localStorage.getItem(STORE.active) || null;
-
-  // One-time migration from the single-session MVP shell.
-  const legacyId = localStorage.getItem(STORE.legacySession);
-  if (legacyId && !sessions.some((s) => s.id === legacyId)) {
-    sessions.unshift({ id: legacyId, title: '之前的对话', updatedAt: Date.now(), cursor: Number(localStorage.getItem(STORE.legacyCursor) || 0) });
-    if (!activeId) activeId = legacyId;
-    localStorage.removeItem(STORE.legacySession);
-    localStorage.removeItem(STORE.legacyCursor);
-    persistSessions();
-  }
-
-  function persistSessions() {
-    sessions.sort((a, b) => b.updatedAt - a.updatedAt);
-    for (const dropped of sessions.slice(MAX_SESSIONS)) localStorage.removeItem(STORE.transcript(dropped.id));
-    sessions = sessions.slice(0, MAX_SESSIONS);
-    saveJson(STORE.sessions, sessions);
-    if (activeId) localStorage.setItem(STORE.active, activeId); else localStorage.removeItem(STORE.active);
-  }
-  function sessionEntry(id) { return sessions.find((s) => s.id === id); }
-  function touchSession(id, patch) {
-    const entry = sessionEntry(id);
-    if (!entry) return;
-    Object.assign(entry, patch, { updatedAt: Date.now() });
-    persistSessions();
-  }
-
-  // ---------- transcript model ----------
-  // entries: {k:'user',text} | {k:'assistant',text} | {k:'tool',name,arg,result,error,done} | {k:'note',text,failure}
-  let entries = [];
-  let persistTimer;
-  function persistTranscript(immediate) {
-    clearTimeout(persistTimer);
-    if (!activeId) return;
-    // Bind the target id now: a pending write must never land on a session the
-    // user switched to in the meantime.
-    const targetId = activeId;
-    const snapshot = entries;
-    const write = () => {
-      const trimmed = snapshot.slice(-MAX_ENTRIES).map(({ node, ...e }) => (
-        e.k === 'assistant' || e.k === 'user' ? { ...e, text: (e.text || '').slice(-MAX_TEXT) } : e
-      ));
-      saveJson(STORE.transcript(targetId), trimmed);
-    };
-    if (immediate) write(); else persistTimer = setTimeout(write, 400);
-  }
+  // ---------- state ----------
+  let socket;
+  let reconnectTimer;
+  let connected = false;
+  let opened = false;            // this socket has an open Session on the Host
+  let activeId = localStorage.getItem(ACTIVE_KEY) || null;
+  let pendingOpenId = null;      // session we asked the Host to open on this socket
+  let queuedPrompt = null;       // first message typed before a Session existed
+  let sessions = [];             // SessionSummary[] from the Host
+  let entries = [];              // rendered entries of the active conversation
+  let streaming = false;
+  let requestNumber = 0;
+  let currentAssistant;
+  const openTools = new Map();
+  let lastTool;
+  let thinkingNode;
 
   // ---------- rendering ----------
   function escapeHtml(s) {
@@ -124,7 +74,7 @@
       chip.type = 'button';
       chip.className = 'chip';
       chip.textContent = text;
-      chip.addEventListener('click', () => { promptBox.value = text; promptBox.focus(); autoGrow(); });
+      chip.addEventListener('click', () => { promptBox.value = text; promptBox.focus(); autoGrow(); refreshComposer(); });
       chips.appendChild(chip);
     }
     thread.appendChild(hero);
@@ -139,7 +89,7 @@
       node.className = 'msg user';
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
-      bubble.textContent = entry.text;
+      bubble.textContent = entry.text + (entry.imageCount ? '\n[' + entry.imageCount + ' 张图片]' : '');
       node.appendChild(bubble);
     } else if (entry.k === 'assistant') {
       node = document.createElement('div');
@@ -163,7 +113,6 @@
     }
     entry.node = node;
     thread.appendChild(node);
-    scrollToEnd();
     return node;
   }
 
@@ -181,7 +130,6 @@
     entry.node.querySelector('pre').textContent = entry.result || '';
   }
 
-  let thinkingNode;
   function showThinking(show) {
     if (show && !thinkingNode) {
       thinkingNode = document.createElement('div');
@@ -195,45 +143,55 @@
     }
   }
 
-  function renderThread() {
+  function resetThread() {
     thread.innerHTML = '';
     thinkingNode = undefined;
-    if (entries.length === 0) renderHero();
-    for (const entry of entries) renderEntry(entry);
+    entries = [];
+    currentAssistant = undefined;
+    openTools.clear();
+    lastTool = undefined;
+  }
+
+  function pushEntry(entry) {
+    entries.push(entry);
+    renderEntry(entry);
     scrollToEnd();
+    return entry;
+  }
+
+  function sessionTitle(session) {
+    if (!session) return '新对话';
+    return session.name || session.preview || '新对话';
   }
 
   function renderSessionList() {
     sessionList.innerHTML = '';
-    if (sessions.length === 0) {
+    const known = sessions.slice();
+    if (activeId && !known.some((s) => s.id === activeId)) {
+      known.unshift({ id: activeId, preview: '', running: streaming, messageCount: 0 });
+    }
+    if (known.length === 0) {
       const empty = document.createElement('li');
       empty.className = 'empty-list';
       empty.textContent = '还没有对话';
       sessionList.appendChild(empty);
       return;
     }
-    for (const session of sessions) {
+    for (const session of known) {
       const item = document.createElement('li');
       item.className = 'session-item' + (session.id === activeId ? ' active' : '');
       item.setAttribute('role', 'button');
       item.tabIndex = 0;
+      item.title = (session.updatedAt ? new Date(session.updatedAt).toLocaleString() + ' · ' : '') + (session.messageCount || 0) + ' 条消息';
       const title = document.createElement('span');
       title.className = 'title';
-      title.textContent = session.title || '新对话';
+      title.textContent = sessionTitle(session);
       item.appendChild(title);
-      if (session.id === activeId && streaming) {
+      if (session.running || (session.id === activeId && streaming)) {
         const running = document.createElement('span');
         running.className = 'running';
         item.appendChild(running);
       }
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'remove';
-      remove.title = '从列表移除（Host 上的会话不受影响）';
-      remove.setAttribute('aria-label', '移除对话');
-      remove.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-      remove.addEventListener('click', (event) => { event.stopPropagation(); removeSession(session.id); });
-      item.appendChild(remove);
       const open = () => { switchSession(session.id); closeSidebarOnMobile(); };
       item.addEventListener('click', open);
       item.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } });
@@ -242,23 +200,15 @@
   }
 
   function renderHeader() {
-    const entry = activeId ? sessionEntry(activeId) : undefined;
-    titleEl.textContent = entry && entry.title ? entry.title : '新对话';
+    const session = sessions.find((s) => s.id === activeId);
+    const title = activeId ? sessionTitle(session) : '新对话';
+    titleEl.textContent = title;
     sessionMeta.textContent = activeId ? activeId.slice(0, 8) : '';
-    document.title = (entry && entry.title ? entry.title + ' · ' : '') + 'PI Coffee';
+    document.title = (activeId && title !== '新对话' ? title + ' · ' : '') + 'PI Coffee';
     topbarState.innerHTML = streaming ? '<span class="dot busy"></span>Pi 正在工作…' : '';
   }
 
-  // ---------- connection state ----------
-  let socket;
-  let reconnectTimer;
-  let streaming = false;
-  let connected = false;
-  let requestNumber = 0;
-  let currentAssistant;
-  const openTools = new Map();
-  let lastTool;
-
+  // ---------- connection ----------
   function setConnection(text, kind) {
     statusText.textContent = text;
     dot.className = 'dot' + (kind ? ' ' + kind : '');
@@ -279,11 +229,16 @@
     sendBtn.disabled = !connected || streaming || promptBox.value.trim().length === 0;
     stopBtn.classList.toggle('hidden', !(connected && streaming));
     sendBtn.classList.toggle('hidden', connected && streaming);
-    if (connected) setConnectionLabel();
+    if (connected) {
+      statusText.textContent = streaming ? 'Pi 正在工作…' : '已连接';
+      dot.className = 'dot ' + (streaming ? 'busy' : 'ready');
+    }
   }
-  function setConnectionLabel() {
-    statusText.textContent = streaming ? 'Pi 正在工作…' : '已连接';
-    dot.className = 'dot ' + (streaming ? 'busy' : 'ready');
+
+  function send(frame) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(frame));
+    return true;
   }
 
   function connect() {
@@ -292,18 +247,18 @@
       socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
       try { socket.close(); } catch { /* ignore */ }
     }
+    opened = false;
+    pendingOpenId = null;
     const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(scheme + '//' + location.host + '/ws');
     socket = ws;
     setConnection('连接中…');
     ws.onopen = () => {
-      const frame = { v: 1, type: 'open' };
-      const entry = activeId ? sessionEntry(activeId) : undefined;
-      if (entry) {
-        frame.sessionId = entry.id;
-        if (entry.cursor > 0) frame.after = entry.cursor;
-      }
-      ws.send(JSON.stringify(frame));
+      setConnection('已连接', 'ready');
+      send({ v: 1, type: 'list_sessions' });
+      // Resume the conversation this browser last looked at; otherwise stay on
+      // the empty state until the user sends something or picks one.
+      if (activeId) openSession(activeId);
     };
     ws.onmessage = (event) => {
       let frame;
@@ -312,37 +267,68 @@
     };
     ws.onclose = () => {
       if (socket !== ws) return;
+      opened = false;
       setConnection('连接断开，重连中…（Host 上的任务不会被打断）', 'error');
       reconnectTimer = setTimeout(connect, 1200);
     };
     ws.onerror = () => { if (socket === ws) setConnection('连接错误', 'error'); };
   }
 
+  // One socket carries one Host Session. Switching conversations reconnects.
+  function openSession(id) {
+    if (opened || pendingOpenId) { connect(); return; }
+    pendingOpenId = id || 'new';
+    const frame = { v: 1, type: 'open' };
+    if (id) frame.sessionId = id;
+    send(frame);
+  }
+
   function handleFrame(frame, ws) {
+    if (frame.type === 'sessions') {
+      sessions = Array.isArray(frame.sessions) ? frame.sessions : [];
+      renderSessionList();
+      renderHeader();
+      return;
+    }
     if (frame.type === 'opened') {
-      if (!activeId || activeId !== frame.sessionId) {
-        // A brand-new Host session: register it locally.
-        activeId = frame.sessionId;
-        if (!sessionEntry(activeId)) sessions.unshift({ id: activeId, title: '', updatedAt: Date.now(), cursor: 0 });
-        persistSessions();
-      }
-      touchSession(activeId, { cursor: Math.max(sessionEntry(activeId).cursor || 0, frame.cursor || 0) });
-      setConnection('已连接', 'ready');
-      // The Host owns the run: after a reload it may still be streaming.
+      opened = true;
+      pendingOpenId = null;
+      activeId = frame.sessionId;
+      localStorage.setItem(ACTIVE_KEY, activeId);
+      resetThread();
+      // The Host is the owner: after a reload it may still be streaming.
       const busy = Boolean(frame.state && frame.state.isStreaming);
+      streaming = false;
       setStreaming(busy);
-      if (busy) showThinking(true);
       renderHeader();
       renderSessionList();
       return;
     }
+    if (frame.type === 'history') {
+      if (frame.sessionId !== activeId) return;
+      resetThread();
+      for (const item of frame.entries || []) renderHistoryEntry(item);
+      if (frame.truncated) {
+        entries.unshift({ k: 'note', text: '更早的记录仍保存在 User VM 中，这里只显示最近的部分。' });
+        thread.prepend(renderNoteNode(entries[0]));
+      }
+      if (entries.length === 0) renderHero();
+      if (streaming) showThinking(true);
+      scrollToEnd();
+      // Flush the first message of a brand-new conversation now that the Host
+      // has confirmed the Session.
+      if (queuedPrompt !== null) {
+        const text = queuedPrompt;
+        queuedPrompt = null;
+        submitPrompt(text);
+      }
+      return;
+    }
     if (frame.type === 'resync_required') {
-      pushEntry({ k: 'note', text: '本地进度已过期（Host 保留 ' + frame.oldestCursor + '…' + frame.newestCursor + '）；更早的输出不再补放，新消息将继续显示。' });
-      touchSession(activeId, { cursor: frame.newestCursor });
+      pushEntry({ k: 'note', text: '正在运行的这一段输出有部分未能补放；已完成的消息以上方历史为准。' });
       return;
     }
     if (frame.type === 'event') {
-      if (activeId) touchSession(activeId, { cursor: Math.max(sessionEntry(activeId).cursor || 0, frame.cursor || 0) });
       handleEvent(frame.event || {});
       return;
     }
@@ -350,32 +336,38 @@
       pushEntry({ k: 'note', failure: true, text: '错误（' + frame.code + '）：' + frame.message });
       // A rejected prompt must not leave the composer locked forever.
       setStreaming(frame.code === 'busy');
+      if (frame.code === 'not_open' || frame.code === 'already_open') pendingOpenId = null;
+      if (queuedPrompt !== null && frame.code !== 'busy') {
+        promptBox.value = queuedPrompt;
+        queuedPrompt = null;
+        autoGrow();
+        refreshComposer();
+      }
       if (frame.fatal) ws.close();
     }
   }
 
+  function renderNoteNode(entry) {
+    const node = document.createElement('div');
+    node.className = 'note';
+    node.textContent = entry.text;
+    entry.node = node;
+    return node;
+  }
+
+  function renderHistoryEntry(item) {
+    if (item.kind === 'user') {
+      pushEntry({ k: 'user', text: item.text || '', imageCount: item.imageCount || 0 });
+    } else if (item.kind === 'assistant') {
+      pushEntry({ k: 'assistant', text: item.text || '' });
+    } else if (item.kind === 'tool') {
+      pushEntry({ k: 'tool', name: item.name, arg: summarizeArgs(item.args), result: item.result || '', done: true, error: Boolean(item.isError) });
+    } else if (item.kind === 'note') {
+      pushEntry({ k: 'note', text: item.text || '' });
+    }
+  }
+
   function handleEvent(event) {
-    // Pi RPC extensions (including the Harness /harness command) surface
-    // fire-and-forget notifications as extension_ui_request frames. They are
-    // informational only; dialog requests remain a future explicit seam.
-    if (event.type === 'extension_ui_request' && event.method === 'notify') {
-      pushEntry({ k: 'note', failure: event.notifyType === 'error', text: String(event.message || '') });
-      return;
-    }
-    // Pi extensions can publish a visible custom message (for example a
-    // foreground subagent result or a slash-command report). Hidden custom
-    // messages are context-only and must never be copied into the browser's
-    // display cache.
-    if (event.type === 'message_end' && event.message && event.message.role === 'custom' && event.message.display === true) {
-      const text = customMessageText(event.message.content);
-      if (text.trim()) {
-        currentAssistant = undefined;
-        showThinking(false);
-        pushEntry({ k: 'note', text: text.slice(0, 8000) });
-        persistTranscript(false);
-      }
-      return;
-    }
     if (event.type === 'agent_start') {
       setStreaming(true);
       showThinking(true);
@@ -392,7 +384,6 @@
       if (!currentAssistant) currentAssistant = pushEntry({ k: 'assistant', text: '' });
       currentAssistant.text += delta.delta || '';
       updateAssistantNode(currentAssistant);
-      persistTranscript(false);
       return;
     }
     if (event.type === 'tool_execution_start') {
@@ -413,11 +404,29 @@
         if (event.toolCallId) openTools.delete(event.toolCallId);
       }
       showThinking(true);
-      persistTranscript(false);
+      return;
+    }
+    // Pi RPC extensions (including the Harness /harness command) surface
+    // fire-and-forget notifications as extension_ui_request frames. They are
+    // informational only; dialog requests remain a future explicit seam.
+    if (event.type === 'extension_ui_request' && event.method === 'notify') {
+      pushEntry({ k: 'note', failure: event.notifyType === 'error', text: String(event.message || '') });
       return;
     }
     if (event.type === 'message_end' && event.message && event.message.stopReason === 'error') {
       pushEntry({ k: 'note', failure: true, text: '模型调用失败：' + (event.message.errorMessage || '未知错误') });
+      return;
+    }
+    // Pi extensions can publish a visible custom message (for example a
+    // foreground subagent result or a slash-command report). Hidden custom
+    // messages are context-only and are not shown.
+    if (event.type === 'message_end' && event.message && event.message.role === 'custom' && event.message.display === true) {
+      const text = customMessageText(event.message.content);
+      if (text.trim()) {
+        currentAssistant = undefined;
+        showThinking(false);
+        pushEntry({ k: 'note', text: text.slice(0, 8000) });
+      }
       return;
     }
     if (event.type === 'auto_retry_start') {
@@ -428,15 +437,17 @@
       setStreaming(false);
       for (const entry of openTools.values()) { entry.done = true; updateToolNode(entry); }
       openTools.clear();
-      persistTranscript(true);
+      // The store just gained messages; refresh titles/counts from the Host.
+      send({ v: 1, type: 'list_sessions' });
     }
   }
 
-  function pushEntry(entry) {
-    entries.push(entry);
-    if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
-    renderEntry(entry);
-    return entry;
+  function customMessageText(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.filter((part) => part && part.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text)
+      .join('\n');
   }
 
   function summarizeArgs(args) {
@@ -449,63 +460,30 @@
     const text = block && block.text ? block.text : (typeof result === 'string' ? result : '');
     return text.length > 4000 ? text.slice(0, 4000) + '\n…' : text;
   }
-  function customMessageText(content) {
-    if (typeof content === 'string') return content;
-    if (!Array.isArray(content)) return '';
-    return content.filter((part) => part && part.type === 'text' && typeof part.text === 'string')
-      .map((part) => part.text)
-      .join('\n');
-  }
 
   // ---------- session actions ----------
-  function loadTranscript(id) {
-    entries = id ? loadJson(STORE.transcript(id), []) : [];
-    for (const entry of entries) delete entry.node;
-    // Anything cached as running ended with a previous page; the live state
-    // comes from the Host's opened frame.
-    for (const entry of entries) if (entry.k === 'tool' && !entry.done) entry.done = true;
-  }
-
   function switchSession(id) {
-    if (id === activeId && socket && socket.readyState === WebSocket.OPEN) return;
-    persistTranscript(true);
+    if (id === activeId && opened) return;
     activeId = id;
-    persistSessions();
+    localStorage.setItem(ACTIVE_KEY, id);
     streaming = false;
-    currentAssistant = undefined;
-    openTools.clear();
-    loadTranscript(id);
-    renderThread();
+    resetThread();
     renderHeader();
     renderSessionList();
+    // A socket owns one Host Session; reconnect and open the chosen one.
     connect();
   }
 
   function newSession() {
-    persistTranscript(true);
     activeId = null;
-    persistSessions();
+    localStorage.removeItem(ACTIVE_KEY);
     streaming = false;
-    currentAssistant = undefined;
-    openTools.clear();
-    entries = [];
-    renderThread();
+    resetThread();
+    renderHero();
     renderHeader();
     renderSessionList();
     connect();
     promptBox.focus();
-  }
-
-  function removeSession(id) {
-    sessions = sessions.filter((s) => s.id !== id);
-    localStorage.removeItem(STORE.transcript(id));
-    if (id === activeId) {
-      persistSessions();
-      newSession();
-      return;
-    }
-    persistSessions();
-    renderSessionList();
   }
 
   // ---------- composer ----------
@@ -524,26 +502,33 @@
     event.preventDefault();
     const text = promptBox.value.trim();
     if (!text || !socket || socket.readyState !== WebSocket.OPEN || streaming) return;
+    if (!opened) {
+      // First message of a brand-new conversation: open a Session on the Host,
+      // then send once `opened` arrives.
+      queuedPrompt = text;
+      openSession(null);
+      promptBox.value = '';
+      autoGrow();
+      setStreaming(true);
+      showThinking(true);
+      return;
+    }
+    submitPrompt(text);
+  });
+  function submitPrompt(text) {
     const requestId = 'web-' + Date.now() + '-' + (++requestNumber);
     pushEntry({ k: 'user', text });
-    if (activeId) {
-      const entry = sessionEntry(activeId);
-      if (entry && !entry.title) touchSession(activeId, { title: text.replace(/\s+/g, ' ').slice(0, 40) });
-      else touchSession(activeId, {});
-    }
-    persistTranscript(true);
     setStreaming(true);
     showThinking(true);
-    socket.send(JSON.stringify({ v: 1, type: 'prompt', requestId, text }));
+    send({ v: 1, type: 'prompt', requestId, text });
     promptBox.value = '';
     autoGrow();
     renderHeader();
-    renderSessionList();
     promptBox.focus();
-  });
+  }
   stopBtn.addEventListener('click', () => {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify({ v: 1, type: 'abort' }));
+    if (!opened) return;
+    send({ v: 1, type: 'abort' });
     pushEntry({ k: 'note', text: '已请求停止当前任务。' });
   });
 
@@ -553,11 +538,13 @@
   $('#close-side').addEventListener('click', () => app.classList.remove('side-open'));
   function closeSidebarOnMobile() { app.classList.remove('side-open'); }
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeSidebarOnMobile(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && socket && socket.readyState === WebSocket.OPEN) send({ v: 1, type: 'list_sessions' });
+  });
 
   // ---------- boot ----------
-  if (activeId && !sessionEntry(activeId)) activeId = null;
-  loadTranscript(activeId);
-  renderThread();
+  resetThread();
+  renderHero();
   renderHeader();
   renderSessionList();
   autoGrow();
