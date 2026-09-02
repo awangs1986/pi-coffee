@@ -13,6 +13,7 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 7. [`deployment/runbook.md`](./deployment/runbook.md): local smoke run and target VM deployment.
 8. [`development/workflow.md`](./development/workflow.md): test, review, and Gitea workflow.
 9. [`development/handoff-import.md`](./development/handoff-import.md): import the temporary source attachment if the remote branch is still empty.
+10. [`development/wiki-publish.md`](./development/wiki-publish.md): owner procedure for mirroring these pages into Gitea Wiki.
 
 ## Authority order
 
