@@ -86,22 +86,33 @@ output is the acceptance evidence for [#5](http://testpc:3000/awangs/pi-coffee/i
 
 ## Browser shell
 
-`public/` is a dependency-free static shell (`index.html`, `app.css`, `app.js`)
-served by the Web Server from an allow-list of flat file names. It follows the
-familiar Codex layout in a white theme:
+`public/` is a build-free static shell served by the Web Server from an
+allow-list of flat file names: `index.html`, `app.css`, ES modules `app.js`
+(controller), `render.js` (Markdown, tool cards, diff), `highlight.js`,
+`diff.js`, plus two vendored MIT libraries copied from `node_modules` at build
+time (`vendor-marked.js`, `vendor-purify.js`). It follows the familiar Codex
+layout in a white theme; the gap list and roadmap are in
+[`web-shell-roadmap.md`](./web-shell-roadmap.md).
 
 - Left sidebar: "新对话", the list of conversations **from the User VM's session
   store** (served by the Host on `list_sessions`), and the connection state.
   Selecting a conversation opens that Session on the Host, which resumes it
   from the store if no Pi process is live for it.
-- Main column: user messages as light bubbles, assistant text rendered with a
-  minimal escaped Markdown subset (fenced code, inline code, bold), tool
-  executions as collapsible cards (`tool name`, argument summary, running /
-  完成 / 失败, result), and notes for model errors, auto-retry and
-  `resync_required`.
-- Composer: rounded card, Enter sends, Shift+Enter inserts a newline. While the
-  Host reports `isStreaming` the send button becomes a stop button that sends
-  `abort`.
+- Main column: user messages as light bubbles (with image thumbnails),
+  assistant text rendered as sanitized GFM Markdown with highlighted code
+  blocks and copy buttons, one run's tool calls grouped under a collapsible
+  "工作过程" with per-tool views (edit → the patch Pi recorded, write → added
+  lines, read → code, bash → command and output), and notes for model errors,
+  auto-retry, extension notifications and `resync_required`. Assistant
+  messages offer copy and regenerate.
+- Sidebar: search, time groups, rename/delete menu (delete removes the file
+  from the User VM store after confirmation); the Host pushes list changes.
+- Composer: rounded card, Enter sends, Shift+Enter inserts a newline; model and
+  thinking selectors (`get_models`), `/` command palette (`get_commands`),
+  image paste/drop, a context-usage chip that compacts on click
+  (`get_stats`/`compact`). While the Host reports `isStreaming` the composer
+  stays usable: messages are queued (`follow_up`) or interjected (`steer`),
+  and a stop button sends `abort`. `Ctrl/⌘+K` starts a new conversation.
 
 The shell is stateless (ADR-0008): on every `open` it renders the `history`
 frame the Host projects from Pi's durable session file, then applies only the

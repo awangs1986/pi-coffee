@@ -29,13 +29,25 @@ Host -> Web Server -> Browser: ack | event | error | sessions
 ```json
 {"v":1,"type":"list_sessions"}
 {"v":1,"type":"open","sessionId":"optional","after":42}
-{"v":1,"type":"prompt","requestId":"r-1","text":"hello"}
+{"v":1,"type":"prompt","requestId":"r-1","text":"hello","images":[{"type":"image","mimeType":"image/jpeg","data":"<base64>"}],"mode":"follow_up"}
 {"v":1,"type":"abort","requestId":"r-1"}
+{"v":1,"type":"rename_session","requestId":"n-1","sessionId":"optional (default: the open one)","name":"Coffee plan"}
+{"v":1,"type":"delete_session","requestId":"d-1","sessionId":"…"}
+{"v":1,"type":"get_models"}
+{"v":1,"type":"set_model","requestId":"m-1","provider":"cpa","id":"gpt-5.5"}
+{"v":1,"type":"set_thinking","requestId":"t-1","level":"high"}
+{"v":1,"type":"get_commands"}
+{"v":1,"type":"get_stats"}
+{"v":1,"type":"compact","requestId":"c-1"}
 {"v":1,"type":"ping","nonce":"n-1"}
 {"v":1,"type":"close"}
 ```
 
-The MVP accepts image-shaped input in the wire type for forward compatibility, but the browser does not expose upload controls yet.
+`prompt.mode` decides how a message joins a Session that is already running: omitted/`prompt` requires an idle Session (`busy` error otherwise); `follow_up` queues it for after the run; `steer` interrupts after the current tool calls. On an idle Session both fall back to a plain prompt so nothing is silently parked. Pi reports the queue via the `queue_update` event.
+
+`list_sessions`, `rename_session` and `delete_session` are sidebar commands and are accepted before `open`. `delete_session` stops a live Pi process for that conversation and removes its file from the User VM's session store. Every other command needs an open Session (`not_open` error).
+
+Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`); the browser downscales before sending. Bulk uploads into the Task inbox are `FILE-001`.
 
 ## Server frames
 
@@ -48,10 +60,15 @@ The MVP accepts image-shaped input in the wire type for forward compatibility, b
   {"kind":"tool","id":"call-1","at":"…","name":"bash","args":{"command":"ls"},"result":"a.txt","isError":false},
   {"kind":"note","id":"…","text":"会话上下文已压缩…"}
 ]}
-{"v":1,"type":"ack","operation":"prompt","requestId":"r-1"}
+{"v":1,"type":"ack","operation":"prompt | steer | follow_up | abort | rename_session | delete_session | set_model | set_thinking | compact","requestId":"r-1"}
+{"v":1,"type":"models","models":[{"provider":"cpa","id":"gpt-5.4-mini","contextWindow":200000,"reasoning":true}],"current":{"provider":"cpa","id":"gpt-5.4-mini"},"thinkingLevel":"medium","thinkingLevels":["off","low","medium","high"]}
+{"v":1,"type":"commands","commands":[{"name":"harness","description":"…","source":"extension"}]}
+{"v":1,"type":"stats","sessionId":"…","stats":{"userMessages":3,"assistantMessages":3,"toolCalls":2,"tokens":{"input":1200,"output":340,"cacheRead":0,"cacheWrite":0,"total":1540},"cost":0.0042,"contextUsage":{"tokens":1540,"contextWindow":200000,"percent":0.77}}}
 {"v":1,"type":"event","sessionId":"…","cursor":1,"event":{"type":"message_update"}}
 {"v":1,"type":"error","code":"busy","message":"…","requestId":"r-2"}
 ```
+
+`sessions` is also **pushed** by the Host to every connected browser whenever the list may have changed (a conversation was created, finished a run, was renamed, deleted, or its idle Pi process was stopped), so sidebars stay in sync without polling. `history.entries[kind=tool]` may carry `diff`: the patch Pi itself recorded for an `edit`, so a reloaded browser renders the same change view as the live one.
 
 `history.entries` follows the active branch of Pi's entry tree (leaf → root); abandoned branches are omitted, compactions and branch switches appear as notes so the user sees the whole past conversation rather than the model's current context. The frame is bounded by `MAX_FRAME_BYTES`: when a conversation does not fit, the newest entries are kept and `truncated` is `true` — the rest stays in the User VM's session file. Tool results are capped at 4000 characters. Session-file paths never appear in any frame.
 

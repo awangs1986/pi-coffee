@@ -41,6 +41,25 @@ describe("original Pi RPC adapter", () => {
         expect.objectContaining({ kind: "assistant", text: "echo: hello from adapter" }),
       ]);
       expect(history.leafId).toBe(history.entries.at(-1)?.id);
+
+      // Conversation controls map one-to-one onto documented RPC commands.
+      await session.rename("Adapter run");
+      expect((await session.getState()).sessionName).toBe("Adapter run");
+      const models = await session.getModels();
+      expect(models).toMatchObject({ current: { provider: "fake", id: "fake-mini" }, thinkingLevel: "medium", thinkingLevels: ["off", "low", "medium", "high"] });
+      expect(models.models.map((m) => m.id)).toEqual(["fake-mini", "fake-large"]);
+      await session.setModel("fake", "fake-large");
+      await session.setThinkingLevel("high");
+      expect(await session.getModels()).toMatchObject({ current: { id: "fake-large" }, thinkingLevel: "high" });
+      expect(await session.getCommands()).toEqual([
+        { name: "harness", description: "Switch harness mode", source: "extension" },
+        { name: "review", description: "Review the diff", source: "prompt" },
+      ]);
+      expect(await session.getStats()).toMatchObject({ userMessages: 1, assistantMessages: 1, tokens: { total: 1540 }, cost: 0.0042, contextUsage: { percent: 0.77 } });
+      await session.steer("focus");
+      await session.followUp("then summarize");
+      await waitFor(() => events.filter((event) => isEvent(event, "queue_update")).length === 2);
+      await session.compact();
     } finally {
       unsubscribe();
       await session.stop();
@@ -81,6 +100,10 @@ describe("original Pi RPC adapter", () => {
       } finally {
         await session.stop();
       }
+      // Deleting removes the file from the store; unknown ids are reported, not thrown.
+      expect(await factory.delete(id)).toBe(true);
+      expect(await factory.list()).toEqual([]);
+      expect(await factory.delete(id)).toBe(false);
     } finally {
       rmSync(sessionDir, { recursive: true, force: true });
     }

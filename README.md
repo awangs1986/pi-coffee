@@ -65,6 +65,10 @@ Settings:
 | `PI_COFFEE_EXTENSIONS` | bundled Harness + pi-subagents | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
 | `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
 
+The browser shell in `public/` is build-free ES modules. `npm run build` copies
+two MIT libraries (`marked`, `dompurify`) from `node_modules` into
+`public/vendor-*.js` (git-ignored) and `dist/public/`; nothing else is bundled.
+
 The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the
 upstream key. Nothing in this repository contains a credential.

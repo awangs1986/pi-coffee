@@ -202,9 +202,10 @@ class BrowserBridge {
       this.send({ v: 1, type: "pong", nonce: frame.nonce });
       return;
     }
-    // list_sessions is the one command a browser may send before choosing a
-    // session; everything else needs an open Session on the Host.
-    if (frame.type !== "open" && frame.type !== "list_sessions" && !this.opened) {
+    // Sidebar commands may arrive before a session is chosen; everything else
+    // needs an open Session on the Host.
+    const sidebarCommand = frame.type === "list_sessions" || frame.type === "delete_session" || frame.type === "rename_session";
+    if (frame.type !== "open" && !sidebarCommand && !this.opened) {
       this.send({ v: 1, type: "error", code: "not_open", message: "Send open before other commands" });
       return;
     }

@@ -14,6 +14,7 @@ class FrameQueue {
   constructor(private readonly socket: WebSocket) {
     socket.on("message", (data) => {
       const frame = decodeServerFrame(data as Buffer);
+      if (frame.type === "sessions") return; // sidebar broadcasts are not part of this path
       const waiter = this.waiters.shift();
       if (waiter) waiter(frame);
       else this.frames.push(frame);

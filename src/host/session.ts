@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type {
+  CommandInfo,
   ImageInput,
   JsonValue,
   ServerFrame,
   SessionState,
+  SessionStats,
   SessionSummary,
 } from "../shared/protocol.js";
-import type { PiHistory, PiSessionFactory, PiSession } from "./pi-adapter.js";
+import type { PiHistory, PiModels, PiSessionFactory, PiSession } from "./pi-adapter.js";
 
 export interface SessionSink {
   send(frame: ServerFrame): void;
@@ -19,6 +21,8 @@ export interface HostSessionOptions {
   /** Stop the Pi process after this long with no browser attached and nothing running. 0 disables. */
   idleTimeoutMs?: number;
   onIdle?: (session: HostSession) => void;
+  /** Called when a run starts or settles (the conversation list's running flag / counts change). */
+  onLifecycle?: (session: HostSession) => void;
 }
 
 export interface SessionOpenResult {
@@ -39,6 +43,7 @@ export class HostSession {
   private readonly eventBufferSize: number;
   private readonly idleTimeoutMs: number;
   private readonly onIdle?: (session: HostSession) => void;
+  private readonly onLifecycle?: (session: HostSession) => void;
   private readonly sinks = new Set<SessionSink>();
   private readonly events: ServerFrame[] = [];
   private pi?: PiSession;
@@ -58,6 +63,7 @@ export class HostSession {
     this.eventBufferSize = Math.max(1, options.eventBufferSize ?? 256);
     this.idleTimeoutMs = Math.max(0, options.idleTimeoutMs ?? 0);
     this.onIdle = options.onIdle;
+    this.onLifecycle = options.onLifecycle;
   }
 
   async start(): Promise<void> {
@@ -147,9 +153,34 @@ export class HostSession {
     }
   }
 
+  /** Join a busy run: steer interrupts after current tool calls, follow_up waits for the end. */
+  async enqueue(mode: "steer" | "follow_up", text: string, images?: ImageInput[]): Promise<void> {
+    if (!this.pi || !this.started) throw new Error("Session is not ready");
+    if (mode === "steer") await this.pi.steer(text, images);
+    else await this.pi.followUp(text, images);
+  }
+
   async abort(): Promise<void> {
     if (!this.pi || !this.started) throw new Error("Session is not ready");
     await this.pi.abort();
+  }
+
+  async rename(name: string): Promise<void> {
+    if (!this.pi || !this.started) throw new Error("Session is not ready");
+    await this.pi.rename(name);
+    this.state = { ...this.state, sessionName: name };
+  }
+
+  getModels(): Promise<PiModels> { return this.ready().getModels(); }
+  setModel(provider: string, id: string): Promise<void> { return this.ready().setModel(provider, id); }
+  setThinkingLevel(level: string): Promise<void> { return this.ready().setThinkingLevel(level); }
+  getCommands(): Promise<CommandInfo[]> { return this.ready().getCommands(); }
+  getStats(): Promise<SessionStats> { return this.ready().getStats(); }
+  compact(): Promise<void> { return this.ready().compact(); }
+
+  private ready(): PiSession {
+    if (!this.pi || !this.started) throw new Error("Session is not ready");
+    return this.pi;
   }
 
   async stop(): Promise<void> {
@@ -188,12 +219,17 @@ export class HostSession {
   private handlePiEvent(event: unknown): void {
     const safeEvent = toJsonValue(event);
     let settled = false;
+    let lifecycle = false;
     if (isRecord(safeEvent) && typeof safeEvent.type === "string") {
-      if (safeEvent.type === "agent_start") this.state = { ...this.state, isStreaming: true };
+      if (safeEvent.type === "agent_start") {
+        this.state = { ...this.state, isStreaming: true };
+        lifecycle = true;
+      }
       if (safeEvent.type === "agent_settled") {
         this.state = { ...this.state, isStreaming: false };
         this.activeRequestId = undefined;
         settled = true;
+        lifecycle = true;
         void this.refreshState();
       }
     }
@@ -203,7 +239,6 @@ export class HostSession {
     if (isRecord(safeEvent) && (safeEvent.type === "message_end" || safeEvent.type === "agent_settled")) {
       this.lastMessageEndCursor = this.cursor;
     }
-    if (settled) this.scheduleIdleCheck();
     const frame: ServerFrame = {
       v: 1,
       type: "event",
@@ -215,6 +250,8 @@ export class HostSession {
     this.events.push(frame);
     while (this.events.length > this.eventBufferSize) this.events.shift();
     for (const sink of this.sinks) sink.send(frame);
+    if (settled) this.scheduleIdleCheck();
+    if (lifecycle) this.onLifecycle?.(this);
   }
 
   private async refreshState(): Promise<void> {
@@ -240,11 +277,24 @@ export class HostSessionRegistry {
   private readonly eventBufferSize: number;
   private readonly idleTimeoutMs: number;
   private readonly sessions = new Map<string, HostSession>();
+  private readonly changeListeners = new Set<() => void>();
 
   constructor(options: { factory: PiSessionFactory; eventBufferSize?: number; idleTimeoutMs?: number }) {
     this.factory = options.factory;
     this.eventBufferSize = options.eventBufferSize ?? 256;
     this.idleTimeoutMs = options.idleTimeoutMs ?? 10 * 60 * 1000;
+  }
+
+  /** Fires whenever the conversation list may have changed (new, settled, renamed, deleted, retired). */
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  private notifyChange(): void {
+    for (const listener of this.changeListeners) {
+      try { listener(); } catch { /* a bad listener must not break the registry */ }
+    }
   }
 
   async open(id?: string, after?: number): Promise<SessionOpenResult> {
@@ -255,10 +305,13 @@ export class HostSessionRegistry {
       eventBufferSize: this.eventBufferSize,
       idleTimeoutMs: this.idleTimeoutMs,
       onIdle: (idle) => void this.retire(idle),
+      onLifecycle: () => this.notifyChange(),
     });
     this.sessions.set(session.id, session);
     try {
-      return await session.prepare(after);
+      const result = await session.prepare(after);
+      if (!existing) this.notifyChange();
+      return result;
     } catch (error) {
       if (!existing) {
         this.sessions.delete(session.id);
@@ -266,6 +319,25 @@ export class HostSessionRegistry {
       }
       throw error;
     }
+  }
+
+  /** Rename any conversation; a stored-but-idle one is resumed for the call. */
+  async rename(id: string, name: string): Promise<void> {
+    const { session } = await this.open(id);
+    await session.rename(name);
+    this.notifyChange();
+  }
+
+  /** Delete a conversation from the store, stopping its Pi process first. */
+  async delete(id: string): Promise<boolean> {
+    const live = this.sessions.get(id);
+    if (live) {
+      this.sessions.delete(id);
+      await live.stop().catch(() => undefined);
+    }
+    const removed = await this.factory.delete(id);
+    this.notifyChange();
+    return removed || live !== undefined;
   }
 
   /** Durable conversations from the store, decorated with what is live right now. */
@@ -302,6 +374,7 @@ export class HostSessionRegistry {
     if (this.sessions.get(session.id) !== session) return;
     this.sessions.delete(session.id);
     await session.stop().catch(() => undefined);
+    this.notifyChange();
   }
 
   async close(): Promise<void> {

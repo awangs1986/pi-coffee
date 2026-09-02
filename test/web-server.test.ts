@@ -26,6 +26,15 @@ class FakePiSession implements PiSession {
   async getHistory() {
     return { entries: [...this.history], leafId: this.history.at(-1)?.id ?? null };
   }
+  async steer(): Promise<void> {}
+  async followUp(): Promise<void> {}
+  async rename(): Promise<void> {}
+  async getModels() { return { models: [], current: null, thinkingLevel: "medium", thinkingLevels: [] }; }
+  async setModel(): Promise<void> {}
+  async setThinkingLevel(): Promise<void> {}
+  async getCommands() { return []; }
+  async getStats() { return { userMessages: 0, assistantMessages: 0, toolCalls: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }; }
+  async compact(): Promise<void> {}
 
   async abort(): Promise<void> {
     this.state = { ...this.state, isStreaming: false };
@@ -63,18 +72,26 @@ class FakeFactory implements PiSessionFactory {
     const now = new Date().toISOString();
     return [...this.sessions.keys()].map((id) => ({ id, createdAt: now, updatedAt: now, messageCount: 0, preview: "" }));
   }
+
+  async delete(sessionId: string): Promise<boolean> {
+    return this.sessions.delete(sessionId);
+  }
 }
 
+/** `sessions` broadcasts can arrive at any time; read them via nextSessions(). */
 class FrameQueue {
   private readonly frames: ServerFrame[] = [];
+  private readonly sessionFrames: ServerFrame[] = [];
   private readonly waiters: Array<(frame: ServerFrame) => void> = [];
+  private readonly sessionWaiters: Array<(frame: ServerFrame) => void> = [];
 
   constructor(private readonly socket: WebSocket) {
     socket.on("message", (data) => {
       const frame = decodeServerFrame(data as Buffer);
-      const waiter = this.waiters.shift();
+      const [queue, waiters] = frame.type === "sessions" ? [this.sessionFrames, this.sessionWaiters] : [this.frames, this.waiters];
+      const waiter = waiters.shift();
       if (waiter) waiter(frame);
-      else this.frames.push(frame);
+      else queue.push(frame);
     });
   }
 
@@ -82,6 +99,12 @@ class FrameQueue {
     const frame = this.frames.shift();
     if (frame) return Promise.resolve(frame);
     return new Promise((resolve) => this.waiters.push(resolve));
+  }
+
+  nextSessions(): Promise<ServerFrame> {
+    const frame = this.sessionFrames.shift();
+    if (frame) return Promise.resolve(frame);
+    return new Promise((resolve) => this.sessionWaiters.push(resolve));
   }
 }
 
@@ -119,7 +142,7 @@ describe("Web Server seam", () => {
     // The sidebar asks for the list before any session exists; the bridge
     // forwards it to the Host without requiring open first.
     browser.send(encodeFrame({ v: 1, type: "list_sessions" }));
-    expect(await frames.next()).toMatchObject({ type: "sessions", sessions: [] });
+    expect(await frames.nextSessions()).toMatchObject({ type: "sessions", sessions: [] });
 
     browser.send(encodeFrame({ v: 1, type: "open" }));
     const opened = await frames.next();
@@ -144,7 +167,7 @@ describe("Web Server seam", () => {
     const reconnected = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
     const replay = new FrameQueue(reconnected);
     reconnected.send(encodeFrame({ v: 1, type: "list_sessions" }));
-    expect(await replay.next()).toMatchObject({ type: "sessions", sessions: [{ id: sessionId }] });
+    expect(await replay.nextSessions()).toMatchObject({ type: "sessions", sessions: [{ id: sessionId }] });
     reconnected.send(encodeFrame({ v: 1, type: "open", sessionId }));
     expect(await replay.next()).toMatchObject({ type: "opened", sessionId });
     expect(await replay.next()).toMatchObject({

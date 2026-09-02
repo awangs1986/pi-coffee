@@ -66,6 +66,25 @@ export class HostServer {
       this.sockets.add(hostSocket);
       hostSocket.onClose = () => this.sockets.delete(hostSocket);
     });
+    // Every browser's sidebar mirrors the same store: push the list whenever
+    // it changes instead of making each browser poll.
+    this.registry.onChange(() => void this.broadcastSessions());
+  }
+
+  private broadcastTimer?: ReturnType<typeof setTimeout>;
+
+  private async broadcastSessions(): Promise<void> {
+    if (this.broadcastTimer !== undefined) return;
+    this.broadcastTimer = setTimeout(async () => {
+      this.broadcastTimer = undefined;
+      if (this.sockets.size === 0) return;
+      try {
+        const sessions = await this.registry.list();
+        for (const socket of this.sockets) socket.send({ v: 1, type: "sessions", sessions });
+      } catch {
+        // Listing is best-effort; the browser can still ask explicitly.
+      }
+    }, 150);
   }
 
   async start(): Promise<void> {
@@ -192,11 +211,62 @@ class HostSocket implements SessionSink {
           // Allowed before open: the sidebar needs the list to choose from.
           this.send({ v: 1, type: "sessions", sessions: await this.registry.list() });
           break;
+        case "delete_session":
+          // Allowed before open: deleting from the sidebar must not require
+          // attaching to the conversation first.
+          if (!(await this.registry.delete(frame.sessionId))) {
+            this.send({ v: 1, type: "error", code: "unknown_session", message: "No such conversation", ...rid(frame) });
+            break;
+          }
+          if (this.session?.id === frame.sessionId) {
+            this.session = undefined;
+            this.opened = false;
+          }
+          this.send({ v: 1, type: "ack", operation: "delete_session", ...rid(frame) });
+          break;
+        case "rename_session":
+          if (frame.sessionId !== undefined && frame.sessionId !== this.session?.id) {
+            await this.registry.rename(frame.sessionId, frame.name);
+          } else {
+            if (!this.session || !this.opened) throw new NotOpenError();
+            await this.registry.rename(this.session.id, frame.name);
+          }
+          this.send({ v: 1, type: "ack", operation: "rename_session", ...rid(frame) });
+          break;
         case "prompt":
           await this.prompt(frame);
           break;
         case "abort":
           await this.abort(frame);
+          break;
+        case "get_models": {
+          if (!this.session || !this.opened) throw new NotOpenError();
+          const models = await this.session.getModels();
+          this.send({ v: 1, type: "models", ...models });
+          break;
+        }
+        case "set_model":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          await this.session.setModel(frame.provider, frame.id);
+          this.send({ v: 1, type: "ack", operation: "set_model", ...rid(frame) });
+          break;
+        case "set_thinking":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          await this.session.setThinkingLevel(frame.level);
+          this.send({ v: 1, type: "ack", operation: "set_thinking", ...rid(frame) });
+          break;
+        case "get_commands":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "commands", commands: await this.session.getCommands() });
+          break;
+        case "get_stats":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "stats", sessionId: this.session.id, stats: await this.session.getStats() });
+          break;
+        case "compact":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "ack", operation: "compact", ...rid(frame) });
+          await this.session.compact();
           break;
         case "ping":
           if (!this.opened) throw new NotOpenError();
@@ -216,7 +286,7 @@ class HostSocket implements SessionSink {
             ? "not_open"
             : "operation_failed",
         message: error instanceof Error ? error.message : "Operation failed",
-        ...(frame.type === "prompt" ? { requestId: frame.requestId } : {}),
+        ...rid(frame),
       });
     }
   }
@@ -255,7 +325,19 @@ class HostSocket implements SessionSink {
   }
 
   private async prompt(frame: Extract<ClientFrame, { type: "prompt" }>): Promise<void> {
-    if (!this.session || !this.opened) throw new Error("Connection must be opened first");
+    if (!this.session || !this.opened) throw new NotOpenError();
+    if (frame.mode === "steer" || frame.mode === "follow_up") {
+      // Joining a busy run: Pi owns the queue and reports it via queue_update.
+      // If nothing is running, treat it as a plain prompt so the message is
+      // never silently parked.
+      if (this.session.isStreaming) {
+        // Same contract as prompt: the ack means "accepted at the seam"; Pi's
+        // queue_update event follows and is the authoritative queue state.
+        this.send({ v: 1, type: "ack", operation: frame.mode, requestId: frame.requestId });
+        await this.session.enqueue(frame.mode, frame.text, frame.images);
+        return;
+      }
+    }
     this.session.reservePrompt(frame.requestId);
     // Acknowledgement means the command crossed the seam and was accepted;
     // lifecycle events continue asynchronously after it.
@@ -292,6 +374,10 @@ class HostSocket implements SessionSink {
     this.session?.detach(this);
     this.onClose();
   }
+}
+
+function rid(frame: ClientFrame): { requestId?: string } {
+  return "requestId" in frame && typeof frame.requestId === "string" ? { requestId: frame.requestId } : {};
 }
 
 class NotOpenError extends Error {

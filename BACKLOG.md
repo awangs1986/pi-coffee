@@ -165,6 +165,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `SHELL-001` | `READY` | P0 | 单 Browser Shell 多 Task/Session、持久 ID/cursor、同 Task 串行、跨 Task 并行、refresh/close 后继续。 | `MVP-002`–`MVP-004`, `ID-001` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001b` | `DONE` | P0 | **会话列表与历史来自 User VM 的 Pi 会话存储**（ADR-0008）：Host `list_sessions` / `history` 帧，按 id 用 `--session <file>` 恢复，浏览器零本地缓存，空闲 Pi 进程自动停止并可恢复。owner 决策：计算全在 Host、记录永久存 VM、每次打开可见历史。 | `MVP-006` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001a` | `READY` | P0 | Extension UI 走通到浏览器：`ui_request/ui_response` 帧、confirm/select/input/editor 对话框、notify/setStatus/setWidget 呈现（路线 B，见 `ARCH-001`）。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
+| `SHELL-001c` | `DONE` | P0 | **Codex 式体验 A/B/C**：完整 Markdown + 高亮 + 复制、工具卡（edit 用 Pi 记录的 patch）、工作过程折叠、重命名/删除/搜索/分组/列表推送、运行中排队与插话、模型/thinking 选择、斜杠命令面板、图片粘贴、用量与压缩、快捷键。缺口与排期见 [`docs/spec/web-shell-roadmap.md`](./docs/spec/web-shell-roadmap.md)。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `FILE-001` | `READY` | P0 | Task inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Task 限定下载引用。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
 | `OPS-001` | `READY` | P0 | Web/Relay/Host/Gitea/VM 故障语义、健康检查、浏览器断线连续性、手动快照恢复和发布验收。 | `CP-001`, `ID-001`, `DEP-001`, `FILE-001` | [#12](http://testpc:3000/awangs/pi-coffee/issues/12) |
 
@@ -300,3 +301,4 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 接入锁定的 `pi-subagents@0.63.0`（Issue #17）：保留 Harness 8/10 基础表，增加可选 `subagent`/`bg_wait` 和资源 Adapter；真实 User VM 验收拆为 `SUBAGENT-002`。 |
 | 2026-09-03 | 完成 `ARCH-001` pi-web 评估（`docs/research/pi-web-evaluation-20260903.md`），建议路线 B；`OPEN-009` 有了候选答案，待 owner 确认。 |
 | 2026-09-03 | owner 选定路线 B 并重申约束：计算全在 Host、聊天记录永久存 VM、每次打开 Web 可见历史。落地 `SHELL-001b` + ADR-0008：浏览器零缓存，会话列表/历史由 Host 从 Pi 会话存储提供，空闲 Pi 进程自动停止并可恢复。`ARCH-001` 关闭，`OPEN-009` 已回答。 |
+| 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |

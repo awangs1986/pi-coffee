@@ -1,7 +1,17 @@
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RpcClient, SessionManager } from "@earendil-works/pi-coding-agent";
-import type { HistoryEntry, ImageInput, JsonValue, SessionState, SessionSummary } from "../shared/protocol.js";
+import type {
+  CommandInfo,
+  HistoryEntry,
+  ImageInput,
+  JsonValue,
+  ModelChoice,
+  SessionState,
+  SessionStats,
+  SessionSummary,
+} from "../shared/protocol.js";
 
 export interface PiHistory {
   entries: HistoryEntry[];
@@ -15,12 +25,30 @@ export type PiSessionListing = Omit<SessionSummary, "running">;
  * The only Pi-specific seam in PI Coffee.  The Host and Web Server depend on
  * this small interface rather than on Pi's SDK or RPC implementation.
  */
+export interface PiModels {
+  models: ModelChoice[];
+  current: { provider: string; id: string } | null;
+  thinkingLevel: string;
+  thinkingLevels: string[];
+}
+
 export interface PiSession {
   prompt(text: string, images?: ImageInput[]): Promise<void>;
+  /** Interrupt a running turn after its current tool calls. */
+  steer(text: string, images?: ImageInput[]): Promise<void>;
+  /** Queue a message for after the current run finishes. */
+  followUp(text: string, images?: ImageInput[]): Promise<void>;
   abort(): Promise<void>;
   getState(): Promise<SessionState>;
   /** Completed conversation entries from the durable session, display-ready. */
   getHistory(): Promise<PiHistory>;
+  rename(name: string): Promise<void>;
+  getModels(): Promise<PiModels>;
+  setModel(provider: string, id: string): Promise<void>;
+  setThinkingLevel(level: string): Promise<void>;
+  getCommands(): Promise<CommandInfo[]>;
+  getStats(): Promise<SessionStats>;
+  compact(): Promise<void>;
   onEvent(listener: (event: unknown) => void): () => void;
   stop(): Promise<void>;
 }
@@ -30,6 +58,8 @@ export interface PiSessionFactory {
   create(options: { sessionId: string }): Promise<PiSession>;
   /** Conversations in the durable store, newest first. */
   list(): Promise<PiSessionListing[]>;
+  /** Remove a conversation from the durable store. Resolves false when unknown. */
+  delete(sessionId: string): Promise<boolean>;
 }
 
 export interface RpcPiSessionFactoryOptions {
@@ -83,6 +113,13 @@ export class RpcPiSessionFactory implements PiSessionFactory {
 
   async list(): Promise<PiSessionListing[]> {
     return (await this.listWithPaths()).map(({ path: _path, ...listing }) => listing);
+  }
+
+  async delete(sessionId: string): Promise<boolean> {
+    const existing = (await this.listWithPaths()).find((session) => session.id === sessionId);
+    if (existing === undefined) return false;
+    await rm(existing.path, { force: true });
+    return true;
   }
 
   /**
@@ -156,6 +193,14 @@ class RpcPiSession implements PiSession {
     await this.client.prompt(text, images as never);
   }
 
+  async steer(text: string, images?: ImageInput[]): Promise<void> {
+    await this.client.steer(text, images as never);
+  }
+
+  async followUp(text: string, images?: ImageInput[]): Promise<void> {
+    await this.client.followUp(text, images as never);
+  }
+
   async abort(): Promise<void> {
     await this.client.abort();
   }
@@ -172,6 +217,80 @@ class RpcPiSession implements PiSession {
   async getHistory(): Promise<PiHistory> {
     const result = await this.client.getEntries();
     return projectHistory(result.entries as unknown[], result.leafId ?? null);
+  }
+
+  async rename(name: string): Promise<void> {
+    await this.client.setSessionName(name);
+  }
+
+  async getModels(): Promise<PiModels> {
+    const [available, state, levels] = await Promise.all([
+      this.client.getAvailableModels(),
+      this.client.getState(),
+      this.client.getAvailableThinkingLevels(),
+    ]);
+    const current = state.model as { provider?: unknown; id?: unknown } | undefined;
+    return {
+      models: available.map((model) => ({
+        provider: model.provider,
+        id: model.id,
+        contextWindow: model.contextWindow,
+        reasoning: model.reasoning,
+      })),
+      current: current && typeof current.provider === "string" && typeof current.id === "string"
+        ? { provider: current.provider, id: current.id }
+        : null,
+      thinkingLevel: String(state.thinkingLevel),
+      thinkingLevels: levels.map(String),
+    };
+  }
+
+  async setModel(provider: string, id: string): Promise<void> {
+    await this.client.setModel(provider, id);
+  }
+
+  async setThinkingLevel(level: string): Promise<void> {
+    await this.client.setThinkingLevel(level as never);
+  }
+
+  async getCommands(): Promise<CommandInfo[]> {
+    const commands = await this.client.getCommands();
+    return commands.map((command) => ({
+      name: command.name,
+      ...(command.description === undefined ? {} : { description: command.description }),
+      source: command.source,
+    }));
+  }
+
+  async getStats(): Promise<SessionStats> {
+    const stats = await this.client.getSessionStats() as unknown as Record<string, unknown>;
+    const tokens = (stats.tokens ?? {}) as Record<string, unknown>;
+    const usage = stats.contextUsage as Record<string, unknown> | undefined;
+    const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+    return {
+      userMessages: num(stats.userMessages),
+      assistantMessages: num(stats.assistantMessages),
+      toolCalls: num(stats.toolCalls),
+      tokens: {
+        input: num(tokens.input),
+        output: num(tokens.output),
+        cacheRead: num(tokens.cacheRead),
+        cacheWrite: num(tokens.cacheWrite),
+        total: num(tokens.total),
+      },
+      cost: num(stats.cost),
+      ...(usage === undefined ? {} : {
+        contextUsage: {
+          tokens: typeof usage.tokens === "number" ? usage.tokens : null,
+          contextWindow: num(usage.contextWindow),
+          percent: typeof usage.percent === "number" ? usage.percent : null,
+        },
+      }),
+    };
+  }
+
+  async compact(): Promise<void> {
+    await this.client.compact();
   }
 
   onEvent(listener: (event: unknown) => void): () => void {
@@ -246,9 +365,14 @@ export function projectHistory(rawEntries: unknown[], leafId: string | null): Pi
         const callId = stringOr(message.toolCallId, "");
         const tool = toolsByCallId.get(callId);
         const result = textOf(content).slice(0, MAX_TOOL_RESULT_CHARS);
+        // Pi's edit tool records the diff it applied; keep it so a reloaded
+        // browser shows the same change view as the live one did.
+        const details = isRecord(message.details) ? message.details : undefined;
+        const diff = details ? stringOr(details.patch, stringOr(details.diff, "")) : "";
         if (tool) {
           tool.result = result;
           tool.isError = message.isError === true;
+          if (diff.length > 0) tool.diff = diff.slice(0, MAX_TOOL_RESULT_CHARS * 4);
         } else {
           out.push({ kind: "tool", id, ...stamp, name: stringOr(message.toolName, "tool"), args: null, result, isError: message.isError === true });
         }

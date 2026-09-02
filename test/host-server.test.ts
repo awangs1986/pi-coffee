@@ -36,6 +36,31 @@ class FakePiSession implements PiSession {
     return { entries: [...this.history], leafId: this.history.at(-1)?.id ?? null };
   }
 
+  readonly queued: Array<{ mode: string; text: string }> = [];
+  async steer(text: string): Promise<void> {
+    this.queued.push({ mode: "steer", text });
+    this.emit({ type: "queue_update", steering: [text], followUp: [] });
+  }
+  async followUp(text: string): Promise<void> {
+    this.queued.push({ mode: "follow_up", text });
+    this.emit({ type: "queue_update", steering: [], followUp: [text] });
+  }
+  name?: string;
+  async rename(name: string): Promise<void> { this.name = name; this.state = { ...this.state, sessionName: name }; }
+  model = { provider: "fake", id: "fake-mini" };
+  thinking = "medium";
+  async getModels() {
+    return { models: [{ provider: "fake", id: "fake-mini" }, { provider: "fake", id: "fake-large" }], current: this.model, thinkingLevel: this.thinking, thinkingLevels: ["off", "low", "medium", "high"] };
+  }
+  async setModel(provider: string, id: string): Promise<void> { this.model = { provider, id }; }
+  async setThinkingLevel(level: string): Promise<void> { this.thinking = level; }
+  async getCommands() { return [{ name: "harness", description: "Switch harness mode", source: "extension" as const }]; }
+  async getStats() {
+    return { userMessages: 1, assistantMessages: 1, toolCalls: 0, tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, total: 15 }, cost: 0.001, contextUsage: { tokens: 15, contextWindow: 1000, percent: 1.5 } };
+  }
+  compacted = 0;
+  async compact(): Promise<void> { this.compacted += 1; }
+
   async abort(): Promise<void> {
     this.state = { ...this.state, isStreaming: false };
     this.emit({ type: "agent_settled" });
@@ -83,14 +108,26 @@ class FakeFactory implements PiSessionFactory {
     const now = new Date().toISOString();
     return [
       ...this.stored.map((item) => ({ id: item.id, createdAt: now, updatedAt: now, messageCount: 2, preview: item.preview })),
-      ...[...this.sessions.entries()].map(([id, session]) => ({
-        id,
-        createdAt: now,
-        updatedAt: now,
-        messageCount: session.history.length,
-        preview: session.history.find((entry) => entry.kind === "user")?.text ?? "",
-      })),
+      ...[...this.sessions.entries()]
+        .filter(([id]) => !this.stored.some((item) => item.id === id))
+        .map(([id, session]) => ({
+          id,
+          ...(session.name === undefined ? {} : { name: session.name }),
+          createdAt: now,
+          updatedAt: now,
+          messageCount: session.history.length,
+          preview: session.history.find((entry) => entry.kind === "user")?.text ?? "",
+        })),
     ];
+  }
+
+  readonly deleted: string[] = [];
+  async delete(sessionId: string): Promise<boolean> {
+    this.deleted.push(sessionId);
+    const known = this.sessions.delete(sessionId);
+    const index = this.stored.findIndex((item) => item.id === sessionId);
+    if (index >= 0) this.stored.splice(index, 1);
+    return known || index >= 0;
   }
 }
 
@@ -101,13 +138,25 @@ afterEach(async () => {
   server = undefined;
 });
 
+/**
+ * Ordered frame reader. `sessions` broadcasts can arrive at any moment, so
+ * `next()` skips them and `nextSessions()` waits for one explicitly.
+ */
 class FrameQueue {
   private readonly frames: ServerFrame[] = [];
+  private readonly sessionFrames: ServerFrame[] = [];
   private readonly waiters: Array<(frame: ServerFrame) => void> = [];
+  private readonly sessionWaiters: Array<(frame: ServerFrame) => void> = [];
 
   constructor(private readonly socket: WebSocket) {
     socket.on("message", (data) => {
       const frame = decodeServerFrame(data as Buffer);
+      if (frame.type === "sessions") {
+        const waiter = this.sessionWaiters.shift();
+        if (waiter) waiter(frame);
+        else this.sessionFrames.push(frame);
+        return;
+      }
       const waiter = this.waiters.shift();
       if (waiter) waiter(frame);
       else this.frames.push(frame);
@@ -130,12 +179,26 @@ class FrameQueue {
       });
     });
   }
+
+  nextSessions(): Promise<Extract<ServerFrame, { type: "sessions" }>> {
+    const frame = this.sessionFrames.shift();
+    if (frame) return Promise.resolve(frame as Extract<ServerFrame, { type: "sessions" }>);
+    return new Promise((resolve) => this.sessionWaiters.push((f) => resolve(f as Extract<ServerFrame, { type: "sessions" }>)));
+  }
 }
 
 async function connect(port: number): Promise<WebSocket> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/host`);
   await once(socket, "open");
   return socket;
+}
+
+async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("condition not met in time");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 describe("Host WebSocket seam", () => {
@@ -247,7 +310,7 @@ describe("Host WebSocket seam", () => {
     const frames = new FrameQueue(socket);
 
     socket.send(encodeFrame({ v: 1, type: "list_sessions" }));
-    const listed = await frames.next();
+    const listed = await frames.nextSessions();
     expect(listed).toMatchObject({ type: "sessions", sessions: [{ id: "stored-1", preview: "an older conversation", running: false }] });
 
     // Opening a stored session resumes it through the factory by id.
@@ -290,6 +353,118 @@ describe("Host WebSocket seam", () => {
     expect(factory.sessions.get(opened.sessionId)).toBe(firstPi); // same fake object reused by the factory
     expect(firstPi.startedTwice).toBe(true);
     second.close();
+  });
+
+  it("joins a busy run with steer/follow_up and falls back to a plain prompt when idle", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory });
+    await server.start();
+    const socket = await connect(server.address().port);
+    const frames = new FrameQueue(socket);
+    socket.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await frames.next(); // history
+    const pi = factory.sessions.get(opened.sessionId)!;
+
+    // Idle session + follow_up mode: behaves like a normal prompt.
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p1", text: "first", mode: "follow_up" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "prompt", requestId: "p1" });
+    for (let i = 0; i < 4; i++) await frames.next();
+
+    // Busy session: the message is queued through Pi, not rejected as busy.
+    pi.holdAfterDelta = true;
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p2", text: "second" }));
+    for (let i = 0; i < 3; i++) await frames.next(); // ack, agent_start, delta
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p3", text: "also do this", mode: "follow_up" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "follow_up", requestId: "p3" });
+    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "queue_update", followUp: ["also do this"] } });
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p4", text: "actually stop", mode: "steer" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "steer", requestId: "p4" });
+    expect(pi.queued).toEqual([{ mode: "follow_up", text: "also do this" }, { mode: "steer", text: "actually stop" }]);
+    // A plain prompt while busy is still refused.
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p5", text: "plain" }));
+    await frames.next(); // queue_update from steer
+    expect(await frames.next()).toMatchObject({ type: "error", code: "busy", requestId: "p5" });
+    pi.finish("second");
+    socket.close();
+  });
+
+  it("exposes models, thinking, commands, stats and compact through the seam", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory });
+    await server.start();
+    const socket = await connect(server.address().port);
+    const frames = new FrameQueue(socket);
+    socket.send(encodeFrame({ v: 1, type: "get_models" }));
+    expect(await frames.next()).toMatchObject({ type: "error", code: "not_open" });
+    socket.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await frames.next();
+    const pi = factory.sessions.get(opened.sessionId)!;
+
+    socket.send(encodeFrame({ v: 1, type: "get_models" }));
+    expect(await frames.next()).toMatchObject({ type: "models", current: { id: "fake-mini" }, thinkingLevel: "medium", thinkingLevels: ["off", "low", "medium", "high"] });
+    socket.send(encodeFrame({ v: 1, type: "set_model", requestId: "m1", provider: "fake", id: "fake-large" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "set_model", requestId: "m1" });
+    expect(pi.model).toEqual({ provider: "fake", id: "fake-large" });
+    socket.send(encodeFrame({ v: 1, type: "set_thinking", level: "high" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "set_thinking" });
+    expect(pi.thinking).toBe("high");
+    socket.send(encodeFrame({ v: 1, type: "get_commands" }));
+    expect(await frames.next()).toMatchObject({ type: "commands", commands: [{ name: "harness", source: "extension" }] });
+    socket.send(encodeFrame({ v: 1, type: "get_stats" }));
+    expect(await frames.next()).toMatchObject({ type: "stats", sessionId: opened.sessionId, stats: { cost: 0.001, contextUsage: { percent: 1.5 } } });
+    socket.send(encodeFrame({ v: 1, type: "compact", requestId: "c1" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "compact", requestId: "c1" });
+    await waitFor(() => pi.compacted === 1);
+    socket.close();
+  });
+
+  it("renames and deletes conversations and pushes the list to every connected browser", async () => {
+    const factory = new FakeFactory();
+    factory.stored.push({ id: "stored-1", preview: "old one" });
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory });
+    await server.start();
+    const port = server.address().port;
+
+    // A second browser that only watches the sidebar.
+    const watcher = await connect(port);
+    const watcherFrames = new FrameQueue(watcher);
+    watcher.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    expect((await watcherFrames.nextSessions()).sessions.map((s) => s.id)).toEqual(["stored-1"]);
+
+    const socket = await connect(port);
+    const frames = new FrameQueue(socket);
+    socket.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await frames.next();
+    // The watcher learns about the new conversation without asking.
+    const pushed = await watcherFrames.nextSessions();
+    expect(pushed.sessions.map((s) => s.id)).toContain(opened.sessionId);
+
+    socket.send(encodeFrame({ v: 1, type: "rename_session", requestId: "n1", name: "Coffee plan" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "rename_session", requestId: "n1" });
+    expect(factory.sessions.get(opened.sessionId)!.name).toBe("Coffee plan");
+    const afterRename = await watcherFrames.nextSessions();
+    expect(afterRename.sessions.find((s) => s.id === opened.sessionId)?.name).toBe("Coffee plan");
+
+    // Deleting a stored conversation from the sidebar, before/without opening it.
+    watcher.send(encodeFrame({ v: 1, type: "delete_session", requestId: "d1", sessionId: "stored-1" }));
+    expect(await watcherFrames.next()).toMatchObject({ type: "ack", operation: "delete_session", requestId: "d1" });
+    expect(factory.deleted).toEqual(["stored-1"]);
+    expect((await watcherFrames.nextSessions()).sessions.map((s) => s.id)).not.toContain("stored-1");
+    watcher.send(encodeFrame({ v: 1, type: "delete_session", requestId: "d2", sessionId: "nope" }));
+    expect(await watcherFrames.next()).toMatchObject({ type: "error", code: "unknown_session", requestId: "d2" });
+
+    // Deleting the live conversation stops its Pi process.
+    socket.send(encodeFrame({ v: 1, type: "delete_session", requestId: "d3", sessionId: opened.sessionId }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "delete_session", requestId: "d3" });
+    await waitFor(() => factory.deleted.includes(opened.sessionId));
+    socket.close();
+    watcher.close();
   });
 
   it("refuses to listen on a non-loopback address without a transport token", async () => {

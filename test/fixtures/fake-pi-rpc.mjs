@@ -8,6 +8,10 @@ let messageCount = 0;
 let streaming = false;
 const entries = [];
 let nextEntry = 0;
+let sessionName;
+let model = { provider: "fake", id: "fake-mini", contextWindow: 200000, reasoning: false };
+let thinkingLevel = "medium";
+const queue = { steering: [], followUp: [] };
 const resumedFrom = process.argv.indexOf("--session") >= 0 ? process.argv[process.argv.indexOf("--session") + 1] : undefined;
 
 function send(value) {
@@ -43,17 +47,74 @@ for await (const line of input) {
   switch (command.type) {
     case "get_state":
       response("get_state", command.id, {
+        model,
         isStreaming: streaming,
         isCompacting: false,
-        thinkingLevel: "medium",
+        thinkingLevel,
         steeringMode: "all",
         followUpMode: "one-at-a-time",
         sessionId: "fake-session",
         sessionFile: undefined,
+        ...(sessionName === undefined ? {} : { sessionName }),
         autoCompactionEnabled: true,
         messageCount,
-        pendingMessageCount: 0,
+        pendingMessageCount: queue.steering.length + queue.followUp.length,
       });
+      break;
+    case "set_session_name":
+      sessionName = command.name;
+      response("set_session_name", command.id);
+      break;
+    case "get_available_models":
+      response("get_available_models", command.id, {
+        models: [model, { provider: "fake", id: "fake-large", contextWindow: 400000, reasoning: true }],
+      });
+      break;
+    case "set_model":
+      model = { provider: command.provider, id: command.modelId, contextWindow: 400000, reasoning: true };
+      response("set_model", command.id, { model });
+      break;
+    case "get_available_thinking_levels":
+      response("get_available_thinking_levels", command.id, { levels: ["off", "low", "medium", "high"] });
+      break;
+    case "set_thinking_level":
+      thinkingLevel = command.level;
+      response("set_thinking_level", command.id);
+      break;
+    case "get_commands":
+      response("get_commands", command.id, {
+        commands: [
+          { name: "harness", description: "Switch harness mode", source: "extension", sourceInfo: {} },
+          { name: "review", description: "Review the diff", source: "prompt", sourceInfo: {} },
+        ],
+      });
+      break;
+    case "get_session_stats":
+      response("get_session_stats", command.id, {
+        sessionId: "fake-session",
+        userMessages: entries.filter((e) => e.message.role === "user").length,
+        assistantMessages: entries.filter((e) => e.message.role === "assistant").length,
+        toolCalls: 0,
+        toolResults: 0,
+        totalMessages: entries.length,
+        tokens: { input: 1200, output: 340, cacheRead: 0, cacheWrite: 0, total: 1540 },
+        cost: 0.0042,
+        contextUsage: { tokens: 1540, contextWindow: 200000, percent: 0.77 },
+      });
+      break;
+    case "compact":
+      response("compact", command.id, { summary: "compacted", firstKeptEntryId: entries.at(-1)?.id ?? null, tokensBefore: 1540 });
+      send({ type: "compaction_end" });
+      break;
+    case "steer":
+      queue.steering.push(command.message);
+      response("steer", command.id);
+      send({ type: "queue_update", steering: [...queue.steering], followUp: [...queue.followUp] });
+      break;
+    case "follow_up":
+      queue.followUp.push(command.message);
+      response("follow_up", command.id);
+      send({ type: "queue_update", steering: [...queue.steering], followUp: [...queue.followUp] });
       break;
     case "get_entries": {
       const since = command.since;

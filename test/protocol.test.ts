@@ -47,4 +47,19 @@ describe("PI Coffee wire protocol", () => {
     const sessions = { v: 1 as const, type: "sessions" as const, sessions: [{ id: "s1", createdAt: "t", updatedAt: "t", messageCount: 2, preview: "hi", running: false }] };
     expect(decodeServerFrame(encodeFrame(sessions))).toEqual(sessions);
   });
+
+  it("decodes the conversation-control commands and validates their fields", () => {
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "prompt", requestId: "r", text: "x", mode: "follow_up" }))).toEqual({ v: 1, type: "prompt", requestId: "r", text: "x", mode: "follow_up" });
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "prompt", requestId: "r", text: "x", mode: "prompt" }))).toEqual({ v: 1, type: "prompt", requestId: "r", text: "x" });
+    expect(() => decodeClientFrame(JSON.stringify({ v: 1, type: "prompt", requestId: "r", text: "x", mode: "later" }))).toThrow(/mode/);
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "rename_session", name: "Plan", requestId: "n1" }))).toEqual({ v: 1, type: "rename_session", requestId: "n1", name: "Plan" });
+    expect(() => decodeClientFrame(JSON.stringify({ v: 1, type: "rename_session", name: "" }))).toThrow(/name/);
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "delete_session", sessionId: "s1" }))).toEqual({ v: 1, type: "delete_session", sessionId: "s1" });
+    expect(() => decodeClientFrame(JSON.stringify({ v: 1, type: "delete_session" }))).toThrow(/sessionId/);
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "set_model", provider: "cpa", id: "gpt-5.5" }))).toEqual({ v: 1, type: "set_model", provider: "cpa", id: "gpt-5.5" });
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "set_thinking", level: "high" }))).toEqual({ v: 1, type: "set_thinking", level: "high" });
+    for (const type of ["get_models", "get_commands", "get_stats", "compact"]) {
+      expect(decodeClientFrame(JSON.stringify({ v: 1, type }))).toEqual({ v: 1, type });
+    }
+  });
 });

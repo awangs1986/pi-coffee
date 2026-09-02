@@ -23,6 +23,7 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 
 - [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): V3 prompt provenance/content audit, V5 harness mapping, and the proposed PI Coffee `/harness` boundary.
 - [`pi-subagents-audit-20260903.md`](./research/pi-subagents-audit-20260903.md): upstream source/version audit and Pi 0.84.4 loading evidence.
+- [`spec/web-shell-roadmap.md`](./spec/web-shell-roadmap.md): what the Codex-style browser shell has (A/B/C) and what is still missing (D/E/F/G), with the order to build it.
 - [`pi-web-evaluation-20260903.md`](./research/pi-web-evaluation-20260903.md): `ARCH-001` evaluation of agegr/pi-web against the PI Coffee deployment shape and ADRs; recommends keeping the Host/Web seam and borrowing its extension-UI, native-session-history and reconnection designs.
 
 ## Authority order
