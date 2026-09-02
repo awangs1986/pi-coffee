@@ -38,8 +38,9 @@ export class RpcPiSessionFactory implements PiSessionFactory {
     this.options = options;
   }
 
-  async create(_options: { sessionId: string }): Promise<PiSession> {
+  async create(options: { sessionId: string }): Promise<PiSession> {
     const args = [...(this.options.args ?? [])];
+    if (!args.includes("--session-id")) args.push("--session-id", options.sessionId);
     if (this.options.sessionDir !== undefined) {
       args.push("--session-dir", this.options.sessionDir);
     }
