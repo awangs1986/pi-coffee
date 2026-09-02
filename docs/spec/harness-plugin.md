@@ -62,4 +62,8 @@ npm run check
 - `test/harness-tools.test.ts`：8/10 计数、缺失工具 fail-closed、原生 Git 适配和 TDD 明确降级；
 - `test/pi-adapter.test.ts`：扩展参数传播。
 
-这张工具表和适配边界对应 Gitea `HARNESS-002` 工单。后续要恢复 V5 的快照/Worktree 编排或 Web capability，必须另立工单和 ADR，不能把本适配器悄悄扩成第二套安全模型。
+这张工具表和适配边界对应 Gitea `HARNESS-002` 工单。下一阶段的可靠性
+矩阵和扩展工具接入计划记录在
+[`HARNESS-003`](http://testpc:3000/awangs/pi-coffee/issues/16)。后续要恢复
+V5 的快照/Worktree 编排或 Web capability，必须另立工单和 ADR，不能把本
+适配器悄悄扩成第二套安全模型。

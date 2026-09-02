@@ -81,4 +81,5 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [MVP → 0.1 handoff](http://testpc:3000/awangs/pi-coffee/issues/6)
 - [Harness Lean/Full prompt（V3-derived, Pi-native）](http://testpc:3000/awangs/pi-coffee/issues/14)
 - [Harness Pi plugin：V5 Simple/Full tools + prompt](http://testpc:3000/awangs/pi-coffee/issues/15)
+- [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)

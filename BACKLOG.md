@@ -181,6 +181,12 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `QA-001` | `READY` | `OPS-001` | Debian Web/Control Plane + Linux Mint User VM 的 clean install/restart/upgrade 验收矩阵。 | fresh VM/快照恢复记录和发布清单附在 Issue。 |
 | `DOC-001` | `OPEN` | `OPS-001` | 将 `BACKLOG.md`、决策、MVP、0.1、拓扑、部署和开发入口镜像到 Gitea Wiki。 | Wiki 页面与 Git commit 对齐；不放敏感数据；Git 仍为版本化源。 |
 
+### 2.4 Harness 后续计划
+
+| ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
+|---|---|---:|---|---|---|
+| `HARNESS-003` | `READY` | P1 | 先在真实 Linux Mint User VM 和 Web 端验证 10 个基础工具的可靠性、取消、错误和恢复语义，再按单个 ticket 接入扩展工具。首个候选是 API 版增强 Web Search。 | `HARNESS-002` | [#16](http://testpc:3000/awangs/pi-coffee/issues/16) |
+
 ---
 
 ## 3. 后续版本 Backlog（0.1 通过后再启动）
@@ -268,7 +274,7 @@ MVP-001..005 (已完成)
 | 文件上传、图片消息、原图和引用 | ADR-0007 | `D-030..D-035`, `FILE-001`, `MODEL-001` |
 | 自动化 Deployment Skill、Pi 原生插件、模块化、Rust | [`docs/development/workflow.md`](./docs/development/workflow.md) | `D-036..D-040`, `DEP-001`, `ARCH-002`, `PERF-001/002` |
 | pi-web fork/改造/重写 | README、架构 seam 约束 | `D-038`, `ARCH-001`, `OPEN-009` |
-| V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001` |
+| V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001`, `HARNESS-003` |
 | V3 提示词修补为 Pi Lean/Full，并接入 V5 Harness 工具表 | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042..D-043`, `HARNESS-001..002` |
 
 ## 8. 维护记录
@@ -280,3 +286,4 @@ MVP-001..005 (已完成)
 | 2026-09-02 | 根据 V3 三次提示词演化的维护者确认，完成 PI Coffee Lean/Full prompt fixture 与 `HARNESS-001`（Issue #14）。 |
 | 2026-09-03 | 复核 Gitea V5 基线 `778a3d5`，完成 PI-native Harness extension、8/10 工具表和 VM-native git/verify 适配，登记 `HARNESS-002`（Issue #15）。 |
 | 2026-09-02 | owner 补充 MVP 范围：包含 Codex 式白色主题 Web 界面（`MVP-006`）；MVP 部署形态为 User VM 内 Pi agent + 服务器端 Web/Relay（`MVP-007`），`CP-001` 由此提前进入 MVP。 |
+| 2026-09-03 | 建立 `HARNESS-003`（Issue #16）：先验证 10 个基础工具可靠性，再逐个接入扩展工具。 |
