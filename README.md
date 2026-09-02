@@ -16,7 +16,7 @@ Browser  ── WebSocket ──>  Web Server  ── WebSocket ──>  Host  �
 - Closing or refreshing the browser detaches the connection; it does not stop the Session.
 - Reconnecting with the Session ID and Cursor replays buffered Events.
 - The Web Server has no Pi implementation knowledge; the Pi-specific code is one adapter.
-- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is now loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. Gitea integration, task orchestration, uploads, and image handling remain separate tickets.
+- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is now loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
 
 The Pi adapter uses the upstream package's documented RPC client and is pinned to `@earendil-works/pi-coding-agent@0.84.4` for this first slice. See the upstream [RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) for the underlying command/event semantics.
 
