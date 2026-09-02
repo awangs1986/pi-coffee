@@ -13,7 +13,8 @@
     "check": "npm run build && npm test",
     "start": "node dist/src/main.js all",
     "start:host": "node dist/src/main.js host",
-    "start:web": "node dist/src/main.js web"
+    "start:web": "node dist/src/main.js web",
+    "start:relay": "node dist/src/main.js relay"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.84.4",
