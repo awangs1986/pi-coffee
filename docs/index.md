@@ -5,7 +5,7 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 ## Read in this order
 
 1. [`AGENTS.md`](../AGENTS.md): repository guardrails and completion rule.
-2. [`../BACKLOG.md`](../BACKLOG.md): the complete discussion-derived backlog and traceability map.
+2. [`../BACKLOG.md`](../BACKLOG.md): the complete discussion-derived backlog and traceability map ([Gitea Issue #13](http://testpc:3000/awangs/pi-coffee/issues/13)).
 3. [`product/decisions.md`](./product/decisions.md): decisions carried over from the design conversation, with their MVP/0.1 status.
 4. [`spec/mvp.md`](./spec/mvp.md): the implemented first vertical slice and its evidence.
 5. [`spec/0.1.md`](./spec/0.1.md): the next release contract and ticket order.
