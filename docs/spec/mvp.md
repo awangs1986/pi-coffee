@@ -113,6 +113,11 @@ layout in a white theme; the gap list and roadmap are in
   (`get_stats`/`compact`). While the Host reports `isStreaming` the composer
   stays usable: messages are queued (`follow_up`) or interjected (`steer`),
   and a stop button sends `abort`. `Ctrl/⌘+K` starts a new conversation.
+- Extension UI: Pi extensions' `ctx.ui.confirm/select/input/editor` become
+  modal dialogs answered over `ui_response` (re-delivered after a reload while
+  the extension is still waiting); `notify`, `setStatus`, `setWidget` and
+  `set_editor_text` render as notes, status chips, a widget strip and composer
+  prefill.
 
 The shell is stateless (ADR-0008): on every `open` it renders the `history`
 frame the Host projects from Pi's durable session file, then applies only the

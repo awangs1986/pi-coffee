@@ -7,6 +7,7 @@ import type {
   SessionState,
   SessionStats,
   SessionSummary,
+  UiResponse,
 } from "../shared/protocol.js";
 import type { PiHistory, PiModels, PiSessionFactory, PiSession } from "./pi-adapter.js";
 
@@ -53,6 +54,8 @@ export class HostSession {
   private lastMessageEndCursor = 0;
   private state: SessionState = { isStreaming: false, messageCount: 0 };
   private activeRequestId?: string;
+  /** Extension dialogs awaiting an answer, keyed by request id. */
+  private readonly pendingUi = new Map<string, ServerFrame>();
   private started = false;
   private startPromise?: Promise<void>;
   private idleTimer?: ReturnType<typeof setTimeout>;
@@ -171,6 +174,24 @@ export class HostSession {
     this.state = { ...this.state, sessionName: name };
   }
 
+  hasPendingUi(id: string): boolean {
+    return this.pendingUi.has(id);
+  }
+
+  /** Answer a pending extension dialog; unknown ids are ignored (already answered or timed out). */
+  async respondUi(response: UiResponse): Promise<boolean> {
+    if (!this.pendingUi.has(response.id)) return false;
+    // Remove first so a duplicate answer racing with Pi's follow-on events is rejected.
+    this.pendingUi.delete(response.id);
+    await this.ready().respondUi(response);
+    return true;
+  }
+
+  /** Dialogs Pi is still blocked on; re-sent to every browser that opens the Session. */
+  get pendingUiRequests(): ServerFrame[] {
+    return [...this.pendingUi.values()];
+  }
+
   getModels(): Promise<PiModels> { return this.ready().getModels(); }
   setModel(provider: string, id: string): Promise<void> { return this.ready().setModel(provider, id); }
   setThinkingLevel(level: string): Promise<void> { return this.ready().setThinkingLevel(level); }
@@ -230,6 +251,8 @@ export class HostSession {
         this.activeRequestId = undefined;
         settled = true;
         lifecycle = true;
+        // Whatever dialogs were open have been answered or timed out by now.
+        this.pendingUi.clear();
         void this.refreshState();
       }
     }
@@ -249,6 +272,9 @@ export class HostSession {
     };
     this.events.push(frame);
     while (this.events.length > this.eventBufferSize) this.events.shift();
+    if (isRecord(safeEvent) && safeEvent.type === "extension_ui_request" && typeof safeEvent.id === "string" && isDialogMethod(safeEvent.method)) {
+      this.pendingUi.set(safeEvent.id, frame);
+    }
     for (const sink of this.sinks) sink.send(frame);
     if (settled) this.scheduleIdleCheck();
     if (lifecycle) this.onLifecycle?.(this);
@@ -344,15 +370,19 @@ export class HostSessionRegistry {
   async list(): Promise<SessionSummary[]> {
     const stored = await this.factory.list();
     const known = new Set(stored.map((item) => item.id));
-    const summaries: SessionSummary[] = stored.map((item) => ({
-      ...item,
-      running: this.sessions.get(item.id)?.isStreaming ?? false,
-    }));
-    // A conversation that was just opened may not have a file yet (Pi writes
-    // it with the first message); still show it so the sidebar matches the
-    // browser's active session.
+    // Pi writes the session file at startup; a conversation nobody has spoken
+    // in yet is noise in a shared list (the opening browser shows it locally).
+    const summaries: SessionSummary[] = stored
+      .filter((item) => item.messageCount > 0)
+      .map((item) => ({
+        ...item,
+        running: this.sessions.get(item.id)?.isStreaming ?? false,
+      }));
+    // A conversation that was just opened has no file yet (Pi writes it with
+    // the first message). Like Codex, it only appears in everyone's list once
+    // it has content; the browser that opened it shows it locally meanwhile.
     for (const session of this.sessions.values()) {
-      if (known.has(session.id)) continue;
+      if (known.has(session.id) || session.currentState.messageCount === 0) continue;
       const now = new Date().toISOString();
       summaries.unshift({
         id: session.id,
@@ -373,7 +403,10 @@ export class HostSessionRegistry {
   private async retire(session: HostSession): Promise<void> {
     if (this.sessions.get(session.id) !== session) return;
     this.sessions.delete(session.id);
+    const empty = session.currentState.messageCount === 0;
     await session.stop().catch(() => undefined);
+    // An abandoned empty conversation leaves no trace in the store.
+    if (empty) await this.factory.delete(session.id).catch(() => undefined);
     this.notifyChange();
   }
 
@@ -381,6 +414,10 @@ export class HostSessionRegistry {
     await Promise.all([...this.sessions.values()].map((session) => session.stop()));
     this.sessions.clear();
   }
+}
+
+function isDialogMethod(method: unknown): boolean {
+  return method === "select" || method === "confirm" || method === "input" || method === "editor";
 }
 
 function toJsonValue(value: unknown, depth = 0): JsonValue {

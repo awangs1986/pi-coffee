@@ -91,7 +91,20 @@ export type AckOperation =
   | "delete_session"
   | "set_model"
   | "set_thinking"
-  | "compact";
+  | "compact"
+  | "ui_response";
+
+/**
+ * The browser's answer to an extension dialog (`extension_ui_request` with
+ * method select / confirm / input / editor). Mirrors Pi's RPC response shape:
+ * exactly one of value, confirmed or cancelled.
+ */
+export interface UiResponse {
+  id: string;
+  value?: string;
+  confirmed?: boolean;
+  cancelled?: boolean;
+}
 
 export type ClientFrame =
   | {
@@ -133,6 +146,7 @@ export type ClientFrame =
   | { v: typeof PROTOCOL_VERSION; type: "get_commands" }
   | { v: typeof PROTOCOL_VERSION; type: "get_stats" }
   | { v: typeof PROTOCOL_VERSION; type: "compact"; requestId?: string }
+  | ({ v: typeof PROTOCOL_VERSION; type: "ui_response"; requestId?: string } & UiResponse)
   | {
       v: typeof PROTOCOL_VERSION;
       type: "abort";
@@ -285,6 +299,28 @@ export function decodeClientFrame(input: string | Uint8Array): ClientFrame {
       };
     case "set_thinking":
       return { v: PROTOCOL_VERSION, type: "set_thinking", ...withRequestId(value), level: requiredString(value.level, "level", 32) };
+    case "ui_response": {
+      const id = requiredString(value.id, "id", 256);
+      const hasValue = value.value !== undefined;
+      const hasConfirmed = value.confirmed !== undefined;
+      const hasCancelled = value.cancelled !== undefined;
+      if ([hasValue, hasConfirmed, hasCancelled].filter(Boolean).length !== 1) {
+        throw new ProtocolError("invalid_field", "ui_response needs exactly one of value, confirmed, cancelled");
+      }
+      if (hasValue && typeof value.value !== "string") throw new ProtocolError("invalid_field", "value must be a string");
+      if (hasValue && (value.value as string).length > MAX_PROMPT_CHARS) throw new ProtocolError("invalid_field", "value is too long");
+      if (hasConfirmed && typeof value.confirmed !== "boolean") throw new ProtocolError("invalid_field", "confirmed must be a boolean");
+      if (hasCancelled && value.cancelled !== true) throw new ProtocolError("invalid_field", "cancelled must be true");
+      return {
+        v: PROTOCOL_VERSION,
+        type: "ui_response",
+        ...withRequestId(value),
+        id,
+        ...(hasValue ? { value: value.value as string } : {}),
+        ...(hasConfirmed ? { confirmed: value.confirmed as boolean } : {}),
+        ...(hasCancelled ? { cancelled: true } : {}),
+      };
+    }
     case "prompt":
       return parsePrompt(value);
     case "abort":

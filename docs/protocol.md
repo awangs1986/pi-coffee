@@ -39,9 +39,28 @@ Host -> Web Server -> Browser: ack | event | error | sessions
 {"v":1,"type":"get_commands"}
 {"v":1,"type":"get_stats"}
 {"v":1,"type":"compact","requestId":"c-1"}
+{"v":1,"type":"ui_response","requestId":"u-1","id":"<extension_ui_request id>","value":"Allow"}
+{"v":1,"type":"ui_response","id":"…","confirmed":true}
+{"v":1,"type":"ui_response","id":"…","cancelled":true}
 {"v":1,"type":"ping","nonce":"n-1"}
 {"v":1,"type":"close"}
 ```
+
+### Extension UI
+
+Pi extensions talk to the user through `ctx.ui.*`. In RPC mode Pi emits them as
+`extension_ui_request` events, which the Host forwards unchanged inside `event`
+frames. Fire-and-forget methods (`notify`, `setStatus`, `setWidget`,
+`setTitle`, `set_editor_text`) need no answer; the browser renders them (note,
+status chip, widget strip, composer prefill). Dialog methods (`select`,
+`confirm`, `input`, `editor`) block the extension until the browser sends
+`ui_response` with the same `id` and exactly one of `value` / `confirmed` /
+`cancelled` — the same shape as Pi's `extension_ui_response`. The Host keeps
+the dialogs Pi is still waiting on and re-sends them after `history` to any
+browser that opens the Session, so a reload or a second device can answer. An
+answer to an id nobody is waiting on (already answered, timed out, or the run
+settled) gets `error{code:"unknown_ui_request"}`. `custom()` is TUI-only and is
+not supported.
 
 `prompt.mode` decides how a message joins a Session that is already running: omitted/`prompt` requires an idle Session (`busy` error otherwise); `follow_up` queues it for after the run; `steer` interrupts after the current tool calls. On an idle Session both fall back to a plain prompt so nothing is silently parked. Pi reports the queue via the `queue_update` event.
 
@@ -60,7 +79,7 @@ Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`
   {"kind":"tool","id":"call-1","at":"…","name":"bash","args":{"command":"ls"},"result":"a.txt","isError":false},
   {"kind":"note","id":"…","text":"会话上下文已压缩…"}
 ]}
-{"v":1,"type":"ack","operation":"prompt | steer | follow_up | abort | rename_session | delete_session | set_model | set_thinking | compact","requestId":"r-1"}
+{"v":1,"type":"ack","operation":"prompt | steer | follow_up | abort | rename_session | delete_session | set_model | set_thinking | compact | ui_response","requestId":"r-1"}
 {"v":1,"type":"models","models":[{"provider":"cpa","id":"gpt-5.4-mini","contextWindow":200000,"reasoning":true}],"current":{"provider":"cpa","id":"gpt-5.4-mini"},"thinkingLevel":"medium","thinkingLevels":["off","low","medium","high"]}
 {"v":1,"type":"commands","commands":[{"name":"harness","description":"…","source":"extension"}]}
 {"v":1,"type":"stats","sessionId":"…","stats":{"userMessages":3,"assistantMessages":3,"toolCalls":2,"tokens":{"input":1200,"output":340,"cacheRead":0,"cacheWrite":0,"total":1540},"cost":0.0042,"contextUsage":{"tokens":1540,"contextWindow":200000,"percent":0.77}}}

@@ -35,6 +35,7 @@ class FakePiSession implements PiSession {
   async getCommands() { return []; }
   async getStats() { return { userMessages: 0, assistantMessages: 0, toolCalls: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }; }
   async compact(): Promise<void> {}
+  async respondUi(): Promise<void> {}
 
   async abort(): Promise<void> {
     this.state = { ...this.state, isStreaming: false };
@@ -70,7 +71,7 @@ class FakeFactory implements PiSessionFactory {
 
   async list() {
     const now = new Date().toISOString();
-    return [...this.sessions.keys()].map((id) => ({ id, createdAt: now, updatedAt: now, messageCount: 0, preview: "" }));
+    return [...this.sessions.entries()].map(([id, session]) => ({ id, createdAt: now, updatedAt: now, messageCount: session.history.length, preview: session.history[0]?.text ?? "" }));
   }
 
   async delete(sessionId: string): Promise<boolean> {

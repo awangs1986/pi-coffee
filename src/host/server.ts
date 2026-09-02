@@ -268,6 +268,19 @@ class HostSocket implements SessionSink {
           this.send({ v: 1, type: "ack", operation: "compact", ...rid(frame) });
           await this.session.compact();
           break;
+        case "ui_response": {
+          if (!this.session || !this.opened) throw new NotOpenError();
+          const { v: _v, type: _t, requestId: _r, ...response } = frame;
+          if (!this.session.hasPendingUi(response.id)) {
+            this.send({ v: 1, type: "error", code: "unknown_ui_request", message: "That dialog is no longer waiting for an answer", ...rid(frame) });
+            break;
+          }
+          // Ack first: the answer crossed the seam. Pi's follow-on events
+          // (the run resuming) arrive after it.
+          this.send({ v: 1, type: "ack", operation: "ui_response", ...rid(frame) });
+          await this.session.respondUi(response);
+          break;
+        }
         case "ping":
           if (!this.opened) throw new NotOpenError();
           this.send({ v: 1, type: "pong", nonce: frame.nonce });
@@ -322,6 +335,12 @@ class HostSocket implements SessionSink {
       return;
     }
     for (const replay of result.replay) this.send(replay);
+    // A dialog Pi is still blocked on must reach this browser even if the
+    // request itself predates the replay window (e.g. after a reload).
+    const replayed = new Set(result.replay.map((frame) => (frame.type === "event" ? frame.cursor : -1)));
+    for (const pending of result.session.pendingUiRequests) {
+      if (pending.type === "event" && !replayed.has(pending.cursor)) this.send(pending);
+    }
   }
 
   private async prompt(frame: Extract<ClientFrame, { type: "prompt" }>): Promise<void> {

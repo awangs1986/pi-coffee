@@ -35,6 +35,16 @@ function appendEntry(message) {
   return entry;
 }
 
+const pendingDialogs = new Map();
+function finishTurn(text) {
+  send({ type: "message_update", usage: {}, assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: text } });
+  const assistant = { role: "assistant", content: [{ type: "text", text }] };
+  appendEntry(assistant);
+  send({ type: "message_end", message: assistant });
+  streaming = false;
+  send({ type: "agent_settled" });
+}
+
 if (resumedFrom !== undefined) {
   appendEntry({ role: "user", content: [{ type: "text", text: `resumed from ${resumedFrom}` }] });
   appendEntry({ role: "assistant", content: [{ type: "text", text: "welcome back" }] });
@@ -125,8 +135,34 @@ for await (const line of input) {
       });
       break;
     }
+    case "extension_ui_response": {
+      // A blocked dialog resolves; finish the turn with the answer as text.
+      const waiting = pendingDialogs.get(command.id);
+      if (!waiting) break;
+      pendingDialogs.delete(command.id);
+      const answer = command.cancelled ? "cancelled" : command.confirmed !== undefined ? `confirmed=${command.confirmed}` : `value=${command.value}`;
+      finishTurn(`answer: ${answer}`);
+      break;
+    }
     case "prompt": {
       response("prompt", command.id);
+      if (command.message.startsWith("ask:") || command.message.startsWith("choose:")) {
+        // Simulate an extension calling ctx.ui.confirm() / ctx.ui.select():
+        // the run blocks until the client answers.
+        setImmediate(() => {
+          streaming = true;
+          send({ type: "agent_start" });
+          appendEntry({ role: "user", content: [{ type: "text", text: command.message }] });
+          const id = `ui-${(nextEntry += 1)}`;
+          pendingDialogs.set(id, true);
+          if (command.message.startsWith("ask:")) {
+            send({ type: "extension_ui_request", id, method: "confirm", title: command.message.slice(4).trim(), message: "fake extension asks" });
+          } else {
+            send({ type: "extension_ui_request", id, method: "select", title: command.message.slice(7).trim(), options: ["Allow", "Block"] });
+          }
+        });
+        break;
+      }
       setImmediate(() => {
         streaming = true;
         send({ type: "agent_start" });

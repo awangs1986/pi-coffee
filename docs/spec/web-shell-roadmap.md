@@ -23,15 +23,17 @@
 | | 上下文用量 / 成本 / 压缩 | `get_stats` → 顶栏 chip；点击 → `compact` |
 | | 快捷键 | `Ctrl/⌘+K` 新对话、`Esc` 停止/关闭弹层、空输入 `↑` 召回上一条 |
 
+### D. Extension UI（`SHELL-001a`，已交付）
+
+| 项 | 实现 |
+|---|---|
+| D1 对话框 | `extension_ui_request` 原样经 `event` 到浏览器；浏览器模态框（select 选项按钮 / confirm 是·否 / input / editor），排队逐个显示，`Esc` = 取消；回答走 `ui_response{id, value\|confirmed\|cancelled}`，Host 经 RPC 子协议写回 Pi。Host 保存挂起的对话，任何浏览器 `open` 后在 `history` 之后重发——刷新页面或换设备都能作答；已结束/超时的请求回 `unknown_ui_request` |
+| D2 即发即忘 | `setStatus` → 顶栏 chip；`setWidget` → 输入框上方 widget 条；`set_editor_text` → 填入输入框；`notify` → 提示条；`setTitle` 忽略（终端标题语义） |
+| D3 `custom()` | TUI 专用，不支持（Pi 在 RPC 模式下本身返回 `undefined`） |
+
+已用真实 Pi 扩展（`ctx.ui.confirm → select → input`，带 `setStatus/setWidget`）在无头浏览器里走通，含刷新后重发。
+
 ## 1. 还缺什么
-
-### D. Extension UI（`SHELL-001a`，V5 插件在网页可用的前提）
-
-| 项 | 内容 | 改哪里 |
-|---|---|---|
-| D1 | `confirm / select / input / editor` 对话框：插件问用户时浏览器能答 | 协议 `ui_request`（Host→浏览器，含 `id/method/payload`）与 `ui_response`；Host 侧挂起表 + 超时/会话替换保护（参考 pi-web `pendingUiResponses`）；浏览器模态框 |
-| D2 | `setStatus / setWidget / setTitle` | `setStatus` → 顶栏状态；`setWidget` → 消息流上方的 widget 区；`setTitle` → 会话名同步 |
-| D3 | `custom()`（TUI 专用）明确不支持 | Host 返回取消 + 通知，不模拟终端 |
 
 ### E. 状态与连续性
 
@@ -64,12 +66,12 @@
 
 ## 2. 排期建议
 
-1. **D（Extension UI）**：下一步；没有它 V5 插件只能"跑"不能"问"。
-2. **E1 / E2 / E4**：小改动、体验收益大，可与 D 并行。
-3. **F1 / F2 / F3**：视觉层，等 D 落地后一起做，避免两次重画。
-4. **E5**：等真实用户出现 1 MiB 以上的会话再做。
-5. **E3**：`REC-001`，归 0.1 `OPS-001`。
+1. **E1 / E2 / E4**：小改动、体验收益大；下一步。
+2. **F1 / F2 / F3**：视觉层，一起做，避免两次重画。
+3. **E5**：等真实用户出现 1 MiB 以上的会话再做。
+4. **E3**：`REC-001`，归 0.1 `OPS-001`。
+5. 与 V5 插件移植（`PLUGIN-001`）并行：D 已就位，插件装上即可在网页上"问"和"答"。
 
 ## 3. 技术栈判断
 
-三文件 shell 已拆成 ES modules（`app.js` 控制器、`render.js` 渲染、`highlight.js`、`diff.js`），加两份 vendored 库，无构建步骤。`app.js` 约 600 行、`render.js` 约 300 行——仍在原生 JS 的舒适区。**切轻框架的触发条件**保持不变：D 落地后若模态框/widget/对话的状态机让 `app.js` 超过约 1500 行，再切 Preact（vendored，无构建）；不上 Next.js。
+shell 是 ES modules（`app.js` 控制器、`render.js` 渲染、`highlight.js`、`diff.js`）加两份 vendored 库，无构建步骤。D 落地后 `app.js` 约 750 行、`render.js` 约 320 行——仍在原生 JS 的舒适区。**切轻框架的触发条件**：`app.js` 超过约 1500 行或需要第四个有状态面板时，再切 Preact（vendored，无构建）；不上 Next.js。

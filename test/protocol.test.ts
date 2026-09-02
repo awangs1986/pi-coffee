@@ -62,4 +62,13 @@ describe("PI Coffee wire protocol", () => {
       expect(decodeClientFrame(JSON.stringify({ v: 1, type }))).toEqual({ v: 1, type });
     }
   });
+
+  it("validates extension dialog answers: exactly one of value, confirmed, cancelled", () => {
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "ui_response", id: "u1", value: "Allow" }))).toEqual({ v: 1, type: "ui_response", id: "u1", value: "Allow" });
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "ui_response", id: "u1", confirmed: false }))).toEqual({ v: 1, type: "ui_response", id: "u1", confirmed: false });
+    expect(decodeClientFrame(JSON.stringify({ v: 1, type: "ui_response", id: "u1", cancelled: true, requestId: "r" }))).toEqual({ v: 1, type: "ui_response", requestId: "r", id: "u1", cancelled: true });
+    expect(() => decodeClientFrame(JSON.stringify({ v: 1, type: "ui_response", id: "u1" }))).toThrow(/exactly one/);
+    expect(() => decodeClientFrame(JSON.stringify({ v: 1, type: "ui_response", id: "u1", value: "a", confirmed: true }))).toThrow(/exactly one/);
+    expect(() => decodeClientFrame(JSON.stringify({ v: 1, type: "ui_response", id: "u1", cancelled: false }))).toThrow(/cancelled/);
+  });
 });

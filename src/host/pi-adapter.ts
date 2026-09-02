@@ -11,6 +11,7 @@ import type {
   SessionState,
   SessionStats,
   SessionSummary,
+  UiResponse,
 } from "../shared/protocol.js";
 
 export interface PiHistory {
@@ -49,6 +50,8 @@ export interface PiSession {
   getCommands(): Promise<CommandInfo[]>;
   getStats(): Promise<SessionStats>;
   compact(): Promise<void>;
+  /** Answer a blocking extension dialog (select / confirm / input / editor). */
+  respondUi(response: UiResponse): Promise<void>;
   onEvent(listener: (event: unknown) => void): () => void;
   stop(): Promise<void>;
 }
@@ -291,6 +294,22 @@ class RpcPiSession implements PiSession {
 
   async compact(): Promise<void> {
     await this.client.compact();
+  }
+
+  async respondUi(response: UiResponse): Promise<void> {
+    // The documented RPC sub-protocol answers a dialog by writing an
+    // `extension_ui_response` line to Pi's stdin, and Pi sends nothing back.
+    // RpcClient (0.84.4) exposes no method for that one-way write and its
+    // `send` waits for a reply, so this is the single place PI Coffee reaches
+    // for the child process. It is guarded by the adapter conformance test.
+    const child = (this.client as unknown as { process?: { stdin?: { write(chunk: string): boolean } | null } | null }).process;
+    const stdin = child?.stdin;
+    if (!stdin) throw new Error("Pi process is not running");
+    const payload: Record<string, unknown> = { type: "extension_ui_response", id: response.id };
+    if (response.cancelled === true) payload.cancelled = true;
+    else if (response.confirmed !== undefined) payload.confirmed = response.confirmed;
+    else payload.value = response.value ?? "";
+    stdin.write(`${JSON.stringify(payload)}\n`);
   }
 
   onEvent(listener: (event: unknown) => void): () => void {

@@ -60,6 +60,17 @@ describe("original Pi RPC adapter", () => {
       await session.followUp("then summarize");
       await waitFor(() => events.filter((event) => isEvent(event, "queue_update")).length === 2);
       await session.compact();
+
+      // Extension dialog round trip: the request arrives as an event, the
+      // answer goes back over the RPC sub-protocol and unblocks the run.
+      events.length = 0;
+      await session.prompt("ask: proceed?");
+      await waitFor(() => events.some((event) => isEvent(event, "extension_ui_request")));
+      const request = events.find((event) => isEvent(event, "extension_ui_request")) as { id: string; method: string; title: string };
+      expect(request).toMatchObject({ method: "confirm", title: "proceed?" });
+      await session.respondUi({ id: request.id, confirmed: true });
+      await waitFor(() => events.some((event) => isEvent(event, "agent_settled")));
+      expect((await session.getHistory()).entries.at(-1)).toMatchObject({ kind: "assistant", text: "answer: confirmed=true" });
     } finally {
       unsubscribe();
       await session.stop();

@@ -17,6 +17,9 @@ const ui = {
   model: $('#model'), thinking: $('#thinking'), modeWrap: $('#mode-wrap'), mode: $('#mode'),
   modal: $('#modal'), modalTitle: $('#modal-title'), modalText: $('#modal-text'), modalInput: $('#modal-input'),
   modalOk: $('#modal-ok'), modalCancel: $('#modal-cancel'), toast: $('#toast'),
+  extStatus: $('#ext-status'), widgets: $('#widgets'),
+  uiModal: $('#ui-modal'), uiTitle: $('#ui-title'), uiText: $('#ui-text'), uiOptions: $('#ui-options'), uiInput: $('#ui-input'),
+  uiEditor: $('#ui-editor'), uiMeta: $('#ui-meta'), uiOk: $('#ui-ok'), uiNo: $('#ui-no'), uiCancel: $('#ui-cancel'),
 };
 
 // ---------- state ----------
@@ -370,7 +373,8 @@ function connect() {
   ws.onerror = () => { if (socket === ws) setConnection('连接错误', 'error'); };
 }
 function openSession(id) {
-  if (opened || pendingOpenId) { connect(); return; }
+  if (pendingOpenId) return;            // an open is already in flight on this socket
+  if (opened) { connect(); return; }    // one socket owns one Session: start over
   pendingOpenId = id || 'new';
   const frame = { v: 1, type: 'open' };
   if (id) frame.sessionId = id;
@@ -396,6 +400,7 @@ function handleFrame(frame, ws) {
       localStorage.setItem(ACTIVE_KEY, activeId);
       statsCache = null;
       resetThread();
+      clearExtensionUi();
       streaming = false;
       setStreaming(Boolean(frame.state && frame.state.isStreaming));
       renderHeader();
@@ -413,6 +418,7 @@ function handleFrame(frame, ws) {
       return;
     case 'commands':
       commands = Array.isArray(frame.commands) ? frame.commands : [];
+      renderSlash();
       return;
     case 'stats':
       if (frame.sessionId === activeId) { statsCache = frame.stats; renderStats(); }
@@ -475,7 +481,7 @@ function handleEvent(event) {
     return;
   }
   if (type === 'queue_update') { renderQueue(event); return; }
-  if (type === 'extension_ui_request' && event.method === 'notify') { pushNote(String(event.message || ''), event.notifyType === 'error'); return; }
+  if (type === 'extension_ui_request') { handleExtensionUi(event); return; }
   if (type === 'message_end' && event.message && event.message.stopReason === 'error') { pushNote('模型调用失败：' + (event.message.errorMessage || '未知错误'), true); return; }
   if (type === 'message_end' && event.message && event.message.role === 'custom' && event.message.display === true) {
     const text = customMessageText(event.message.content);
@@ -489,6 +495,8 @@ function handleEvent(event) {
     for (const entry of openTools.values()) { entry.done = true; fillToolCard(entry.node, entry); }
     openTools.clear();
     renderQueue({ steering: [], followUp: [] });
+    // Any dialog still open was resolved by Pi (timeout/default); drop it.
+    if (uiCurrent || uiQueue.length) { uiQueue.length = 0; closeUiDialog(); }
     send({ v: 1, type: 'get_stats' });
   }
 }
@@ -497,6 +505,132 @@ function customMessageText(content) {
   if (!Array.isArray(content)) return '';
   return content.filter((p) => p && p.type === 'text' && typeof p.text === 'string').map((p) => p.text).join('\n');
 }
+
+// ---------- extension UI (Pi ctx.ui.* over RPC) ----------
+const extStatuses = new Map();   // statusKey -> text
+const extWidgets = new Map();    // widgetKey -> { lines, placement }
+const uiQueue = [];              // pending dialog requests, shown one at a time
+const uiSeen = new Set();        // request ids already shown or answered
+let uiCurrent = null;
+
+function handleExtensionUi(event) {
+  switch (event.method) {
+    case 'notify':
+      pushNote(String(event.message || ''), event.notifyType === 'error');
+      return;
+    case 'setStatus':
+      if (event.statusText === undefined || event.statusText === null || event.statusText === '') extStatuses.delete(event.statusKey);
+      else extStatuses.set(event.statusKey, String(event.statusText));
+      renderExtStatus();
+      return;
+    case 'setWidget':
+      if (!Array.isArray(event.widgetLines) || event.widgetLines.length === 0) extWidgets.delete(event.widgetKey);
+      else extWidgets.set(event.widgetKey, { lines: event.widgetLines.map(String), placement: event.widgetPlacement || 'aboveEditor' });
+      renderWidgets();
+      return;
+    case 'setTitle':
+      // Pi means the terminal title; here it is informational only.
+      return;
+    case 'set_editor_text':
+      ui.prompt.value = String(event.text || '');
+      autoGrow();
+      refreshComposer();
+      return;
+    case 'select':
+    case 'confirm':
+    case 'input':
+    case 'editor':
+      if (!event.id || uiSeen.has(event.id)) return;
+      uiSeen.add(event.id);
+      uiQueue.push(event);
+      pushNote('扩展请求你的输入：' + (event.title || event.method));
+      showNextUiDialog();
+      return;
+    default:
+      return;
+  }
+}
+
+function renderExtStatus() {
+  ui.extStatus.innerHTML = '';
+  for (const [key, text] of extStatuses) {
+    const chip = el('span', 'ext-chip', text);
+    chip.title = key;
+    ui.extStatus.appendChild(chip);
+  }
+}
+function renderWidgets() {
+  ui.widgets.innerHTML = '';
+  ui.widgets.classList.toggle('hidden', extWidgets.size === 0);
+  for (const [key, widget] of extWidgets) {
+    const box = el('pre', 'widget');
+    box.title = key;
+    box.textContent = widget.lines.join('\n');
+    ui.widgets.appendChild(box);
+  }
+}
+function clearExtensionUi() {
+  extStatuses.clear();
+  extWidgets.clear();
+  uiQueue.length = 0;
+  uiSeen.clear();
+  closeUiDialog();
+  renderExtStatus();
+  renderWidgets();
+}
+
+function showNextUiDialog() {
+  if (uiCurrent || uiQueue.length === 0) return;
+  uiCurrent = uiQueue.shift();
+  const req = uiCurrent;
+  ui.uiTitle.textContent = req.title || ({ select: '请选择', confirm: '请确认', input: '请输入', editor: '请编辑' })[req.method];
+  ui.uiText.textContent = req.message || '';
+  ui.uiText.classList.toggle('hidden', !req.message);
+  ui.uiOptions.classList.toggle('hidden', req.method !== 'select');
+  ui.uiInput.classList.toggle('hidden', req.method !== 'input');
+  ui.uiEditor.classList.toggle('hidden', req.method !== 'editor');
+  ui.uiNo.classList.toggle('hidden', req.method !== 'confirm');
+  ui.uiOk.classList.toggle('hidden', req.method === 'select');
+  ui.uiOk.textContent = req.method === 'confirm' ? '是' : '确定';
+  ui.uiMeta.textContent = (req.timeout ? `超时 ${Math.round(req.timeout / 1000)} 秒后按默认处理 · ` : '') + (uiQueue.length ? `还有 ${uiQueue.length} 个请求排队` : '');
+  ui.uiOptions.innerHTML = '';
+  if (req.method === 'select') {
+    (req.options || []).forEach((option, index) => {
+      const button = el('button', 'ui-option', String(option));
+      button.type = 'button';
+      button.setAttribute('role', 'option');
+      button.addEventListener('click', () => answerUi({ value: String(option) }));
+      if (index === 0) setTimeout(() => button.focus(), 0);
+      ui.uiOptions.appendChild(button);
+    });
+  }
+  if (req.method === 'input') { ui.uiInput.value = ''; ui.uiInput.placeholder = req.placeholder || ''; setTimeout(() => ui.uiInput.focus(), 0); }
+  if (req.method === 'editor') { ui.uiEditor.value = req.prefill || ''; setTimeout(() => ui.uiEditor.focus(), 0); }
+  if (req.method === 'confirm') setTimeout(() => ui.uiOk.focus(), 0);
+  ui.uiModal.classList.remove('hidden');
+}
+function answerUi(answer) {
+  if (!uiCurrent) return;
+  const id = uiCurrent.id;
+  send({ v: 1, type: 'ui_response', requestId: requestId('ui'), id, ...answer });
+  const summary = answer.cancelled ? '已取消' : answer.confirmed !== undefined ? (answer.confirmed ? '已确认' : '已拒绝') : '已回答：' + String(answer.value).slice(0, 80);
+  pushNote(summary + '（' + (uiCurrent.title || uiCurrent.method) + '）');
+  closeUiDialog();
+  showNextUiDialog();
+}
+function closeUiDialog() {
+  uiCurrent = null;
+  ui.uiModal.classList.add('hidden');
+}
+ui.uiOk.addEventListener('click', () => {
+  if (!uiCurrent) return;
+  if (uiCurrent.method === 'confirm') answerUi({ confirmed: true });
+  else if (uiCurrent.method === 'input') answerUi({ value: ui.uiInput.value });
+  else if (uiCurrent.method === 'editor') answerUi({ value: ui.uiEditor.value });
+});
+ui.uiNo.addEventListener('click', () => answerUi({ confirmed: false }));
+ui.uiCancel.addEventListener('click', () => answerUi({ cancelled: true }));
+ui.uiInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ui.uiOk.click(); } });
 
 // ---------- queue strip ----------
 function renderQueue(event) {
@@ -643,7 +777,15 @@ function autoGrow() {
   ui.prompt.style.height = 'auto';
   ui.prompt.style.height = Math.min(ui.prompt.scrollHeight, 220) + 'px';
 }
-ui.prompt.addEventListener('input', () => { autoGrow(); refreshComposer(); slashIndex = 0; renderSlash(); });
+ui.prompt.addEventListener('input', () => {
+  autoGrow();
+  refreshComposer();
+  slashIndex = 0;
+  // The command list comes from the Pi process of an open Session. Typing "/"
+  // before the first message opens the new conversation early to fetch it.
+  if (ui.prompt.value.startsWith('/') && !opened && !pendingOpenId && connected) openSession(null);
+  renderSlash();
+});
 ui.prompt.addEventListener('keydown', (event) => {
   const slashOpen = !ui.slash.classList.contains('hidden');
   if (slashOpen) {
@@ -663,10 +805,12 @@ $('#composer').addEventListener('submit', (event) => {
   if ((!text && attachments.length === 0) || !socket || socket.readyState !== WebSocket.OPEN) return;
   const images = attachments.slice();
   if (!opened) {
+    // First message of a brand-new conversation: (re)use the in-flight open
+    // and send once `history` confirms the Session.
     queuedPrompt = { text, images };
     attachments = [];
     renderAttachments();
-    openSession(null);
+    if (!pendingOpenId) openSession(null);
     ui.prompt.value = '';
     autoGrow();
     setStreaming(true);
@@ -734,6 +878,7 @@ ui.toBottom.addEventListener('click', scrollToEnd);
 document.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); newSession(); return; }
   if (event.key === 'Escape') {
+    if (!ui.uiModal.classList.contains('hidden')) { answerUi({ cancelled: true }); return; }
     if (!ui.modal.classList.contains('hidden')) { ui.modalCancel.click(); return; }
     if (menuNode) { closeMenu(); return; }
     if (!ui.slash.classList.contains('hidden')) { ui.slash.classList.add('hidden'); return; }

@@ -61,6 +61,17 @@ class FakePiSession implements PiSession {
   compacted = 0;
   async compact(): Promise<void> { this.compacted += 1; }
 
+  /** Simulates an extension dialog: emits the request, resolves on respondUi. */
+  readonly uiAnswers: unknown[] = [];
+  askUser(id: string): void {
+    this.emit({ type: "extension_ui_request", id, method: "confirm", title: "Proceed?", message: "fake extension asks" });
+  }
+  async respondUi(response: unknown): Promise<void> {
+    this.uiAnswers.push(response);
+    this.emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "echo: asked" } });
+    this.finish("asked");
+  }
+
   async abort(): Promise<void> {
     this.state = { ...this.state, isStreaming: false };
     this.emit({ type: "agent_settled" });
@@ -108,8 +119,9 @@ class FakeFactory implements PiSessionFactory {
     const now = new Date().toISOString();
     return [
       ...this.stored.map((item) => ({ id: item.id, createdAt: now, updatedAt: now, messageCount: 2, preview: item.preview })),
+      // Like Pi, a conversation gets a file only once it has a message.
       ...[...this.sessions.entries()]
-        .filter(([id]) => !this.stored.some((item) => item.id === id))
+        .filter(([id, session]) => !this.stored.some((item) => item.id === id) && session.history.length > 0)
         .map(([id, session]) => ({
           id,
           ...(session.name === undefined ? {} : { name: session.name }),
@@ -441,9 +453,15 @@ describe("Host WebSocket seam", () => {
     const opened = await frames.next();
     if (opened.type !== "opened") throw new Error("expected opened");
     await frames.next();
-    // The watcher learns about the new conversation without asking.
-    const pushed = await watcherFrames.nextSessions();
-    expect(pushed.sessions.map((s) => s.id)).toContain(opened.sessionId);
+    // An empty new conversation is not listed yet (Codex behaviour); the
+    // watcher learns about it, without asking, once it has content.
+    const emptyPush = await watcherFrames.nextSessions();
+    expect(emptyPush.sessions.map((s) => s.id)).not.toContain(opened.sessionId);
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p1", text: "hello" }));
+    for (let i = 0; i < 5; i++) await frames.next();
+    let pushed = await watcherFrames.nextSessions();
+    while (!pushed.sessions.some((s) => s.id === opened.sessionId)) pushed = await watcherFrames.nextSessions();
+    expect(pushed.sessions.find((s) => s.id === opened.sessionId)?.messageCount).toBe(2);
 
     socket.send(encodeFrame({ v: 1, type: "rename_session", requestId: "n1", name: "Coffee plan" }));
     expect(await frames.next()).toMatchObject({ type: "ack", operation: "rename_session", requestId: "n1" });
@@ -465,6 +483,56 @@ describe("Host WebSocket seam", () => {
     await waitFor(() => factory.deleted.includes(opened.sessionId));
     socket.close();
     watcher.close();
+  });
+
+  it("carries extension dialogs to the browser, re-delivers them to a reconnecting browser, and routes the answer back", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory });
+    await server.start();
+    const port = server.address().port;
+    const first = await connect(port);
+    const firstFrames = new FrameQueue(first);
+    first.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await firstFrames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await firstFrames.next();
+    const pi = factory.sessions.get(opened.sessionId)!;
+
+    // A run starts and the extension asks a question; the browser goes away.
+    pi.holdAfterDelta = true;
+    first.send(encodeFrame({ v: 1, type: "prompt", requestId: "p1", text: "do something risky" }));
+    for (let i = 0; i < 3; i++) await firstFrames.next(); // ack, agent_start, delta
+    pi.askUser("ui-1");
+    expect(await firstFrames.next()).toMatchObject({ type: "event", event: { type: "extension_ui_request", id: "ui-1", method: "confirm" } });
+    // Answering with an id nobody is waiting on is reported, not swallowed.
+    first.send(encodeFrame({ v: 1, type: "ui_response", requestId: "x", id: "nope", confirmed: true }));
+    expect(await firstFrames.next()).toMatchObject({ type: "error", code: "unknown_ui_request", requestId: "x" });
+    first.close();
+    await once(first, "close");
+
+    // A fresh browser opens the same Session: history, the in-flight tail,
+    // and the still-pending dialog (once, not twice).
+    const second = await connect(port);
+    const secondFrames = new FrameQueue(second);
+    second.send(encodeFrame({ v: 1, type: "open", sessionId: opened.sessionId }));
+    expect(await secondFrames.next()).toMatchObject({ type: "opened", state: { isStreaming: true } });
+    expect(await secondFrames.next()).toMatchObject({ type: "history" });
+    const tail: ServerFrame[] = [];
+    for (let i = 0; i < 3; i++) tail.push(await secondFrames.next()); // agent_start, delta, ui request (from replay)
+    const requests = tail.filter((f) => f.type === "event" && (f.event as { type?: string }).type === "extension_ui_request");
+    expect(requests).toHaveLength(1);
+
+    second.send(encodeFrame({ v: 1, type: "ui_response", requestId: "a1", id: "ui-1", confirmed: true }));
+    expect(await secondFrames.next()).toMatchObject({ type: "ack", operation: "ui_response", requestId: "a1" });
+    expect(pi.uiAnswers).toEqual([{ id: "ui-1", confirmed: true }]);
+    // The fake finishes the turn once answered.
+    expect(await secondFrames.next()).toMatchObject({ type: "event", event: { assistantMessageEvent: { delta: "echo: asked" } } });
+    expect(await secondFrames.next()).toMatchObject({ type: "event", event: { type: "message_end" } });
+    expect(await secondFrames.next()).toMatchObject({ type: "event", event: { type: "agent_settled" } });
+    // Once settled, the dialog is gone: a second answer is unknown.
+    second.send(encodeFrame({ v: 1, type: "ui_response", id: "ui-1", cancelled: true }));
+    expect(await secondFrames.next()).toMatchObject({ type: "error", code: "unknown_ui_request" });
+    second.close();
   });
 
   it("refuses to listen on a non-loopback address without a transport token", async () => {
