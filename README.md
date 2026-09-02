@@ -78,4 +78,5 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Web Server and browser shell](http://testpc:3000/awangs/pi-coffee/issues/4)
 - [End-to-end verification and runbook](http://testpc:3000/awangs/pi-coffee/issues/5)
 - [MVP → 0.1 handoff](http://testpc:3000/awangs/pi-coffee/issues/6)
+- [Harness Lean/Full prompt（V3-derived, Pi-native）](http://testpc:3000/awangs/pi-coffee/issues/14)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)

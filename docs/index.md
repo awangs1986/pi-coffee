@@ -15,6 +15,7 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 9. [`development/workflow.md`](./development/workflow.md): test, review, and Gitea workflow.
 10. [`development/handoff-import.md`](./development/handoff-import.md): import the temporary source attachment if the remote branch is still empty.
 11. [`development/wiki-publish.md`](./development/wiki-publish.md): owner procedure for mirroring these pages into Gitea Wiki.
+12. [`spec/harness-prompt.md`](./spec/harness-prompt.md): the canonical V3-derived, Pi-native Lean/Full prompt contract.
 
 ## Research notes
 
