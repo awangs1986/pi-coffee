@@ -56,10 +56,17 @@ The first MVP uses Pi's normal credential resolution on the Host VM so the conve
 
 The frame contract is recorded in [`docs/protocol.md`](./docs/protocol.md).
 
+The consolidated discussion backlog is [`BACKLOG.md`](./BACKLOG.md). It records the
+decisions, implementation status, dependencies, open engineering questions, and
+explicit non-goals behind the MVP → 0.1 plan.
+
 ## Repository tickets
 
+- [PI Coffee consolidated backlog](./BACKLOG.md)
 - [PI Coffee map and MVP outcome](http://testpc:3000/awangs/pi-coffee/issues/1)
 - [Host/Web Server protocol and continuity](http://testpc:3000/awangs/pi-coffee/issues/2)
 - [Original Pi Host adapter](http://testpc:3000/awangs/pi-coffee/issues/3)
 - [Web Server and browser shell](http://testpc:3000/awangs/pi-coffee/issues/4)
 - [End-to-end verification and runbook](http://testpc:3000/awangs/pi-coffee/issues/5)
+- [MVP → 0.1 handoff](http://testpc:3000/awangs/pi-coffee/issues/6)
+- [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)

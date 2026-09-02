@@ -5,8 +5,9 @@ PI Coffee is the independent product in this repository. The current Picode Gite
 ## First read
 
 1. Read [`docs/index.md`](./docs/index.md) to choose the relevant branch of the documentation.
-2. Read the linked Gitea Issue before changing scope: [PI Coffee map](http://testpc:3000/awangs/pi-coffee/issues/1).
-3. For the current implementation, trust the code and tests in this checkout; for planned behaviour, trust [`docs/spec/0.1.md`](./docs/spec/0.1.md) and its ticket links.
+2. Read [`BACKLOG.md`](./BACKLOG.md) for the discussion-derived scope, status, dependencies, open questions, and explicit non-goals.
+3. Read the linked Gitea Issue before changing scope: [PI Coffee map](http://testpc:3000/awangs/pi-coffee/issues/1).
+4. For the current implementation, trust the code and tests in this checkout; for planned behaviour, trust [`docs/spec/0.1.md`](./docs/spec/0.1.md) and its ticket links.
 
 ## Working rules
 

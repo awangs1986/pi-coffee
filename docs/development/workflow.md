@@ -9,11 +9,11 @@ npm install
 npm run check
 ```
 
-If the remote is still empty, use the handoff attachment or ask the repository owner to push the local baseline before beginning implementation.
+The remote `main` is populated. If a future repository migration is ever empty, use the handoff attachment or ask the repository owner to push the versioned baseline before beginning implementation.
 
 ## Choose work
 
-Read the relevant Gitea Issue first. The current MVP Issues are [#1–#5](http://testpc:3000/awangs/pi-coffee/issues). The 0.1 contract is [`docs/spec/0.1.md`](../spec/0.1.md). Keep one active ticket per change and post evidence before closing it.
+Read [`BACKLOG.md`](../../BACKLOG.md), then the relevant Gitea Issue first. The current MVP Issues are [#1–#5](http://testpc:3000/awangs/pi-coffee/issues). The 0.1 contract is [`docs/spec/0.1.md`](../spec/0.1.md). Keep one active ticket per change and post evidence before closing it.
 
 ## Code seams
 

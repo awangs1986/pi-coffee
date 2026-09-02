@@ -7,6 +7,7 @@ Recommended pages:
 | Wiki page | Source file |
 |---|---|
 | `PI-Coffee-Handoff` | `docs/index.md` + Issue #6 |
+| `PI-Coffee-Backlog` | `BACKLOG.md` + the backlog Issue |
 | `PI-Coffee-Product-Decisions` | `docs/product/decisions.md` |
 | `PI-Coffee-MVP` | `docs/spec/mvp.md` |
 | `PI-Coffee-0.1` | `docs/spec/0.1.md` |

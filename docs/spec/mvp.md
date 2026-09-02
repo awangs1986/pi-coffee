@@ -50,4 +50,4 @@ From a fresh clone, the colleague can install dependencies, get a green `npm run
 
 ## Known gaps before calling it deployed
 
-The current local baseline is not yet present on the remote main branch, and the real CPA/central credential path has not been wired. Host-process restart recovery, authentication, VM systemd units, and upload/image handling belong to 0.1.
+The real CPA/central credential path has not been wired. Host-process restart recovery, authentication, VM systemd units, and upload/image handling belong to 0.1. The current remote `main` contains this MVP baseline; a fresh clone has passed `npm ci && npm run check`.
