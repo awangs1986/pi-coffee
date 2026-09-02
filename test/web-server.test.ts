@@ -40,8 +40,14 @@ class FakePiSession implements PiSession {
 }
 
 class FakeFactory implements PiSessionFactory {
-  async create(_options: { sessionId: string }): Promise<PiSession> {
-    return new FakePiSession();
+  private readonly sessions = new Map<string, FakePiSession>();
+
+  async create(options: { sessionId: string }): Promise<PiSession> {
+    const existing = this.sessions.get(options.sessionId);
+    if (existing) return existing;
+    const session = new FakePiSession();
+    this.sessions.set(options.sessionId, session);
+    return session;
   }
 }
 
@@ -110,8 +116,19 @@ describe("Web Server seam", () => {
     const settled = await frames.next();
     expect(settled.type).toBe("event");
     if (settled.type !== "event") throw new Error("expected event");
+    const cursor = settled.cursor;
+    const sessionId = opened.sessionId;
     browser.close();
     await once(browser, "close");
+
+    const reconnected = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
+    const replay = new FrameQueue(reconnected);
+    reconnected.send(encodeFrame({ v: 1, type: "open", sessionId, after: 0 }));
+    expect(await replay.next()).toMatchObject({ type: "opened", sessionId });
+    const replayed: ServerFrame[] = [];
+    while (replayed.length < cursor) replayed.push(await replay.next());
+    expect(replayed.some((frame) => frame.type === "event" && frame.cursor === cursor)).toBe(true);
+    reconnected.close();
   });
 
   it("returns a structured error when the browser sends malformed JSON", async () => {

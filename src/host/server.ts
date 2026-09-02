@@ -124,12 +124,15 @@ class HostSocket implements SessionSink {
   private session?: HostSession;
   private opened = false;
   private closed = false;
+  private messageQueue: Promise<void> = Promise.resolve();
   onClose: () => void = () => undefined;
 
   constructor(socket: WebSocket, _request: IncomingMessage, registry: HostSessionRegistry, _token?: string) {
     this.socket = socket;
     this.registry = registry;
-    socket.on("message", (data) => void this.handleMessage(data));
+    socket.on("message", (data) => {
+      this.messageQueue = this.messageQueue.then(() => this.handleMessage(data)).catch(() => undefined);
+    });
     socket.on("close", () => void this.detach());
     socket.on("error", () => void this.detach());
   }

@@ -137,12 +137,21 @@ class BrowserBridge {
   private hostUnsubscribe?: () => void;
   private opened = false;
   private closed = false;
+  private messageQueue: Promise<void> = Promise.resolve();
   onClose: () => void = () => undefined;
 
   constructor(browser: WebSocket, options: BrowserBridgeOptions) {
     this.browser = browser;
-    this.host = new HostClient(options);
-    browser.on("message", (data: RawData) => void this.handleMessage(data));
+    this.host = new HostClient({
+      ...options,
+      onUnavailable: (error) => {
+        this.send({ v: 1, type: "error", code: "host_unavailable", message: error.message });
+        this.close();
+      },
+    });
+    browser.on("message", (data: RawData) => {
+      this.messageQueue = this.messageQueue.then(() => this.handleMessage(data)).catch(() => undefined);
+    });
     browser.on("close", () => this.close());
     browser.on("error", () => this.close());
   }

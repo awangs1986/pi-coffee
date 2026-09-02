@@ -36,6 +36,7 @@ export class HostSession {
   private state: SessionState = { isStreaming: false, messageCount: 0 };
   private activeRequestId?: string;
   private started = false;
+  private startPromise?: Promise<void>;
 
   constructor(options: HostSessionOptions) {
     this.id = options.id ?? randomUUID();
@@ -45,17 +46,25 @@ export class HostSession {
 
   async start(): Promise<void> {
     if (this.started) return;
-    this.pi = await this.factory.create({ sessionId: this.id });
-    this.unsubscribe = this.pi.onEvent((event) => this.handlePiEvent(event));
+    if (this.startPromise) return this.startPromise;
+    this.startPromise = (async () => {
+      this.pi = await this.factory.create({ sessionId: this.id });
+      this.unsubscribe = this.pi.onEvent((event) => this.handlePiEvent(event));
+      try {
+        this.state = await this.pi.getState();
+        this.started = true;
+      } catch (error) {
+        this.unsubscribe?.();
+        this.unsubscribe = undefined;
+        await this.pi.stop();
+        this.pi = undefined;
+        throw error;
+      }
+    })();
     try {
-      this.state = await this.pi.getState();
-      this.started = true;
-    } catch (error) {
-      this.unsubscribe?.();
-      this.unsubscribe = undefined;
-      await this.pi.stop();
-      this.pi = undefined;
-      throw error;
+      await this.startPromise;
+    } finally {
+      this.startPromise = undefined;
     }
   }
 
@@ -120,6 +129,13 @@ export class HostSession {
   }
 
   async stop(): Promise<void> {
+    if (this.startPromise) {
+      try {
+        await this.startPromise;
+      } catch {
+        // A failed startup has already cleaned up its adapter.
+      }
+    }
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     if (this.pi) await this.pi.stop();

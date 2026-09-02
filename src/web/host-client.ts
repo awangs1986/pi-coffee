@@ -4,12 +4,15 @@ import { decodeServerFrame, encodeFrame, type ServerFrame } from "../shared/prot
 export interface HostClientOptions {
   url: string;
   token?: string;
+  onUnavailable?: (error: Error) => void;
 }
 
 /** Small adapter for one Web Server ↔ Host connection. */
 export class HostClient {
   private readonly options: HostClientOptions;
   private socket?: WebSocket;
+  private intentionalClose = false;
+  private ready = false;
   private readonly listeners = new Set<(frame: ServerFrame) => void>();
 
   constructor(options: HostClientOptions) {
@@ -23,6 +26,7 @@ export class HostClient {
       : { Authorization: `Bearer ${this.options.token}` };
     const socket = new WebSocket(this.options.url, headers === undefined ? undefined : { headers });
     this.socket = socket;
+    this.intentionalClose = false;
     socket.on("message", (data: RawData) => {
       try {
         const frame = decodeServerFrame(rawDataToBytes(data));
@@ -32,6 +36,14 @@ export class HostClient {
         // bridge will report a structured error to the browser.
         this.close();
       }
+    });
+    socket.on("error", (error) => {
+      if (this.ready && !this.intentionalClose) {
+        this.options.onUnavailable?.(error instanceof Error ? error : new Error("Host socket error"));
+      }
+    });
+    socket.on("close", () => {
+      if (this.ready && !this.intentionalClose) this.options.onUnavailable?.(new Error("Host connection closed"));
     });
     await new Promise<void>((resolve, reject) => {
       const onOpen = () => {
@@ -55,6 +67,7 @@ export class HostClient {
       socket.once("error", onError);
       socket.once("close", onClose);
     });
+    this.ready = true;
   }
 
   send(frame: Parameters<typeof encodeFrame>[0]): void {
@@ -72,6 +85,8 @@ export class HostClient {
   close(): void {
     const socket = this.socket;
     this.socket = undefined;
+    this.intentionalClose = true;
+    this.ready = false;
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.close();
   }
 }
