@@ -12,6 +12,7 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 6. [`protocol.md`](./protocol.md): the current browser ↔ Web Server ↔ Host frame contract.
 7. [`deployment/runbook.md`](./deployment/runbook.md): local smoke run and target VM deployment.
 8. [`development/workflow.md`](./development/workflow.md): test, review, and Gitea workflow.
+9. [`development/handoff-import.md`](./development/handoff-import.md): import the temporary source attachment if the remote branch is still empty.
 
 ## Authority order
 
