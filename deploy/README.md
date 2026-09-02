@@ -15,5 +15,7 @@ Rules baked into these files:
 - The Host refuses to start on a non-loopback bind without `PI_COFFEE_HOST_TOKEN`; the Relay refuses without `PI_COFFEE_RELAY_TOKENS`.
 - The Host unit runs as the VM owner, not a service account: Pi needs that user's shell and files. The VM is the isolation boundary.
 - Nothing here creates, snapshots or restores VMs. That stays an owner operation.
+- The User VM Host loads the bundled V5 Harness Pi extension by default; use
+  `PI_COFFEE_EXTENSIONS=off` only for a transport-only diagnostic.
 
 These are the MVP hand-installed units. The idempotent Deployment Skill with enrollment (`DEP-001`, #9) replaces the manual copy steps in 0.1.
