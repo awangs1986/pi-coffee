@@ -30,4 +30,4 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 
 ## Current handoff state
 
-The remote `main` contains the MVP baseline, the discussion backlog, and a real-model evidence script (`scripts/smoke-real-model.mjs`; setup in the runbook). A fresh clone passes `npm ci && npm run check`; the real-model path has been reproduced against the CPA relay. Recorded evidence lives in the handoff Issue and [#5](http://testpc:3000/awangs/pi-coffee/issues/5).
+The remote `main` contains the MVP in its deployment shape: Agent Host + original Pi for the User VM, Web Server + LLM Relay for the server, the Codex-style browser shell, systemd/env templates in `deploy/`, and a real-model evidence script (`scripts/smoke-real-model.mjs`). A fresh clone passes `npm ci && npm run check`; the three-process path has been reproduced on a workstation across a LAN interface with the Host holding no upstream key. Installing it on the real server and User VM is the owner's step, driven by the task brief on [#5](http://testpc:3000/awangs/pi-coffee/issues/5); Relay evidence is on [#7](http://testpc:3000/awangs/pi-coffee/issues/7).

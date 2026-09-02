@@ -1,0 +1,13 @@
+{
+  "providers": {
+    "cpa": {
+      "baseUrl": "http://SERVER_IP:8789/v1",
+      "api": "openai-completions",
+      "apiKey": "$PI_COFFEE_RELAY_TOKEN",
+      "models": [
+        { "id": "gpt-5.4-mini", "name": "GPT-5.4 mini (via Relay)", "reasoning": true, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 16384 },
+        { "id": "gpt-5.5",      "name": "GPT-5.5 (via Relay)",      "reasoning": true, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 16384 }
+      ]
+    }
+  }
+}

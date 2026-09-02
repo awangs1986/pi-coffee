@@ -146,6 +146,8 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `MVP-003` | `DONE` | User VM 侧原版 Pi RPC adapter、Session registry、native `--session-id` 传播。 | [#3](http://testpc:3000/awangs/pi-coffee/issues/3) | `test/pi-adapter.test.ts` 与 fake RPC fixture。 |
 | `MVP-004` | `DONE` | 独立 Web Server、静态浏览器 Shell、Host Bridge、流式 `text_delta`。 | [#4](http://testpc:3000/awangs/pi-coffee/issues/4) | `test/web-server.test.ts`、浏览器入口 `/`、`/healthz`。 |
 | `MVP-005` | `DONE` | 端到端测试、启动命令、分离进程配置、交接文档和远程 main。 | [#5](http://testpc:3000/awangs/pi-coffee/issues/5)、[#6](http://testpc:3000/awangs/pi-coffee/issues/6) | commit `eacb697`；fresh clone `npm ci && npm run check`，5 个测试文件/10 个测试通过。 |
+| `MVP-006` | `DONE` | Codex 式白色主题浏览器 Shell：侧栏对话列表、Markdown 子集、工具卡片、停止键、本地显示缓存；静态资源白名单。 | [#4](http://testpc:3000/awangs/pi-coffee/issues/4) | `5b6a6e43`；headless 浏览器驱动截图贴在 #4。 |
+| `MVP-007` | `DONE` | MVP 部署形态定为 **User VM 内 Pi + Host，服务器上 Web + Relay**；`CP-001` Relay 提前进入 MVP；两侧 systemd 单元与 env 模板（`deploy/`）；跨接口三进程分离验证。 | [#5](http://testpc:3000/awangs/pi-coffee/issues/5)、[#7](http://testpc:3000/awangs/pi-coffee/issues/7) | `test/relay-server.test.ts` 13 tests；工作站三进程经局域网 IP 的 smoke；服务器/User VM 实装由 owner 按 #5 任务书执行。 |
 
 ### 2.2 0.1 必做切片
 
@@ -153,7 +155,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
-| `CP-001` | `READY` | P0 | Debian Control Plane 的透明 LLM Relay，唯一 key、双 API、JSON/SSE、models/compact、限量 metadata。 | `MVP-005` | [#7](http://testpc:3000/awangs/pi-coffee/issues/7) |
+| `CP-001` | `DONE` | P0 | Debian Control Plane 的透明 LLM Relay，唯一 key、双 API、JSON/SSE、models/compact、限量 metadata。**已随 `MVP-007` 提前交付**；`PERF-001`/`OBS-001` 仍归 0.1。 | `MVP-005` | [#7](http://testpc:3000/awangs/pi-coffee/issues/7) |
 | `ID-001` | `READY` | P0 | 内部 Gitea OAuth、logout/cookie 生命周期、固定 User VM/Host 路由、身份撤销和 fail-closed。 | `MVP-005` | [#8](http://testpc:3000/awangs/pi-coffee/issues/8) |
 | `DEP-001` | `READY` | P0 | Linux Mint Xfce User VM 的 Deployment Skill、固定 Pi 版本、systemd、一次性 enrollment、report/health/stop。 | `MVP-003`, `MVP-005` | [#9](http://testpc:3000/awangs/pi-coffee/issues/9) |
 | `SHELL-001` | `READY` | P0 | 单 Browser Shell 多 Task/Session、持久 ID/cursor、同 Task 串行、跨 Task 并行、refresh/close 后继续。 | `MVP-002`–`MVP-004`, `ID-001` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
@@ -270,3 +272,4 @@ MVP-001..005 (已完成)
 |---|---|
 | 2026-09-02 | 根据今天的多轮讨论建立本 Backlog；MVP 标记为当前 main 已实现，0.1 六个切片映射到 Gitea Issues #7–#12。 |
 | 2026-09-02 | 在项目 1 建立 `Backlog` 列并加入 Issue #13，作为后续功能 ticket 的默认入口。 |
+| 2026-09-02 | owner 补充 MVP 范围：包含 Codex 式白色主题 Web 界面（`MVP-006`）；MVP 部署形态为 User VM 内 Pi agent + 服务器端 Web/Relay（`MVP-007`），`CP-001` 由此提前进入 MVP。 |
