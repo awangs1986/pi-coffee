@@ -56,7 +56,8 @@ result handoff 和 supervision 都留在上游 Module 内，因此调用方只�
 Web Shell 会把 Pi `display: true` 的 custom message（包括可见的
 foreground 子 Agent 结果和 slash-command 报告）显示为通知；`display: false`
 的 context-only 内容不会写入浏览器显示缓存。后台完成结果是否需要主动
-推送到浏览器，列入 `SUBAGENT-002` 的真实 User VM 观察性验收。
+推送到浏览器，列入 [`SUBAGENT-002`](http://testpc:3000/awangs/pi-coffee/issues/18)
+的真实 User VM 观察性验收。
 
 ## 配置和回退
 
@@ -103,5 +104,6 @@ Control Plane。
    不加载任何扩展。
 
 真实 User VM 的 foreground/background child、取消、浏览器断开后继续、Host
-重启恢复和资源清理不在本次加载切片中；它们记录在对应 Gitea 工单中，完成
-前不能把本插件称为生产可靠。
+重启恢复和资源清理不在本次加载切片中；它们记录在
+[`SUBAGENT-002`](http://testpc:3000/awangs/pi-coffee/issues/18)，完成前不能
+把本插件称为生产可靠。

@@ -192,7 +192,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
 | `SUBAGENT-001` | `DONE` | P1 | 锁定并加载官方 `pi-subagents@0.63.0`；通过本地资源 Adapter 暴露其 skills/prompts；让 `search_tools` 可发现/按需激活 `subagent` 与 `bg_wait`，且 Harness Simple/Full 仍为 8/10。 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
-| `SUBAGENT-002` | `READY` | P1 | 在真实 Linux Mint User VM + Web Shell 验证 foreground/background child、完成通知、停止/取消、浏览器断开后继续、Host 重启恢复和资源清理；未通过前不宣称生产可靠。 | `SUBAGENT-001`, `HARNESS-003` | 作为 #17 的后续验收清单 |
+| `SUBAGENT-002` | `READY` | P1 | 在真实 Linux Mint User VM + Web Shell 验证 foreground/background child、完成通知、停止/取消、浏览器断开后继续、Host 重启恢复和资源清理；未通过前不宣称生产可靠。 | `SUBAGENT-001`, `HARNESS-003` | [#18](http://testpc:3000/awangs/pi-coffee/issues/18) |
 
 ---
 

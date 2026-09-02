@@ -87,5 +87,6 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Harness Pi plugin：V5 Simple/Full tools + prompt](http://testpc:3000/awangs/pi-coffee/issues/15)
 - [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
 - [pi-subagents 集成与 User VM 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/17)
+- [pi-subagents User VM/Web 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/18)
 - [pi-subagents integration spec](./docs/spec/subagents-plugin.md)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)
