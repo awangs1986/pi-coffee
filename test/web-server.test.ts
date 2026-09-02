@@ -131,6 +131,35 @@ describe("Web Server seam", () => {
     reconnected.close();
   });
 
+  it("serves the shell assets from public/ and nothing else", async () => {
+    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    await host.start();
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
+    await web.start();
+    const base = `http://127.0.0.1:${web.address().port}`;
+
+    const page = await fetch(`${base}/`);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    const html = await page.text();
+    expect(html).toContain('href="/app.css"');
+    expect(html).toContain('src="/app.js"');
+
+    const css = await fetch(`${base}/app.css`);
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(await css.text()).toContain("color-scheme: light");
+
+    const js = await fetch(`${base}/app.js`);
+    expect(js.status).toBe(200);
+    expect(js.headers.get("content-type")).toContain("text/javascript");
+    expect(await js.text()).toContain("'/ws'");
+
+    for (const path of ["/app.txt", "/nested/app.js", "/..%2Fpackage.json", "/../package.json", "/package.json", "/app.js.map"]) {
+      const blocked = await fetch(`${base}${path}`);
+      expect(blocked.status, path).toBe(404);
+    }
+  });
+
   it("returns a structured error when the browser sends malformed JSON", async () => {
     host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
     await host.start();

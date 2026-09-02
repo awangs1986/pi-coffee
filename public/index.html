@@ -3,200 +3,61 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
     <title>PI Coffee</title>
-    <style>
-      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-      * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; background: #111827; color: #e5e7eb; }
-      header { height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #273449; background: #151f31; }
-      .brand { font-weight: 700; letter-spacing: .04em; }
-      .status { display: flex; align-items: center; gap: 8px; color: #9ca3af; font-size: 13px; }
-      .dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
-      .dot.ready { background: #34d399; }
-      .dot.error { background: #f87171; }
-      main { width: min(900px, 100%); margin: 0 auto; display: flex; flex-direction: column; min-height: calc(100vh - 56px); }
-      #transcript { flex: 1; padding: 24px 18px 120px; overflow-y: auto; }
-      .message { max-width: 82%; padding: 12px 15px; margin: 0 0 14px; border-radius: 12px; white-space: pre-wrap; line-height: 1.55; overflow-wrap: anywhere; }
-      .message.user { margin-left: auto; background: #2563eb; color: white; }
-      .message.assistant { margin-right: auto; background: #1f2937; border: 1px solid #334155; }
-      .message.system { max-width: 100%; color: #9ca3af; font-size: 13px; padding: 6px 0; }
-      .message.tool { max-width: 100%; color: #a5b4fc; font-size: 12.5px; padding: 4px 10px; border-left: 2px solid #4f46e5; font-family: ui-monospace, Menlo, Consolas, monospace; }
-      .message.tool.error { color: #fca5a5; border-left-color: #ef4444; }
-      .message.failure { max-width: 100%; color: #fecaca; background: #3f1d1d; border: 1px solid #7f1d1d; font-size: 13px; }
-      .dot.busy { background: #60a5fa; animation: pulse 1s infinite alternate; }
-      @keyframes pulse { from { opacity: .35; } to { opacity: 1; } }
-      form { position: fixed; bottom: 0; left: 0; right: 0; padding: 14px max(18px, calc((100vw - 900px) / 2 + 18px)); background: linear-gradient(transparent, #111827 18%); }
-      .composer { display: flex; gap: 10px; padding: 10px; border: 1px solid #334155; border-radius: 14px; background: #182235; box-shadow: 0 12px 32px #0006; }
-      textarea { flex: 1; min-height: 44px; max-height: 160px; resize: vertical; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; line-height: 1.45; }
-      button { align-self: flex-end; border: 0; border-radius: 9px; padding: 10px 16px; background: #3b82f6; color: white; font-weight: 600; cursor: pointer; }
-      button:disabled { opacity: .45; cursor: not-allowed; }
-      .meta { padding: 0 18px 8px; color: #64748b; font-size: 11px; text-align: right; }
-      code { color: #93c5fd; }
-    </style>
+    <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <header>
-      <div class="brand">PI Coffee</div>
-      <div class="status"><span id="dot" class="dot"></span><span id="status">连接中…</span></div>
-    </header>
-    <main>
-      <section id="transcript" aria-live="polite">
-        <div class="message system">这是 PI Coffee MVP。当前对话由 User VM 中的原版 Pi agent Host 处理。</div>
-      </section>
-      <div class="meta">session: <code id="session">new</code></div>
-    </main>
-    <form id="composer">
-      <div class="composer">
-        <textarea id="prompt" placeholder="和 Pi 说点什么…" aria-label="Prompt"></textarea>
-        <button id="send" type="submit" disabled>发送</button>
-      </div>
-    </form>
-    <script>
-      (() => {
-        const transcript = document.querySelector('#transcript');
-        const prompt = document.querySelector('#prompt');
-        const send = document.querySelector('#send');
-        const status = document.querySelector('#status');
-        const dot = document.querySelector('#dot');
-        const sessionLabel = document.querySelector('#session');
-        const sessionKey = 'pi-coffee.session-id';
-        const cursorKey = 'pi-coffee.cursor';
-        let socket;
-        let sessionId = localStorage.getItem(sessionKey) || undefined;
-        let cursor = Number(localStorage.getItem(cursorKey) || 0);
-        let assistant;
-        let requestNumber = 0;
-        let reconnectTimer;
-        let streaming = false;
+    <div class="app" id="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <div class="brand"><span class="brand-mark">π</span><span>PI Coffee</span></div>
+          <button class="icon-btn" id="close-side" type="button" aria-label="收起侧栏" title="收起侧栏">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <button class="new-task" id="new-task" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          新对话
+        </button>
+        <div class="side-label">对话</div>
+        <ul class="session-list" id="session-list"></ul>
+        <div class="sidebar-foot"><span id="dot" class="dot"></span><span id="status">连接中…</span></div>
+      </aside>
 
-        function setStatus(text, kind) {
-          status.textContent = text;
-          dot.className = 'dot' + (kind ? ' ' + kind : '');
-          send.disabled = !socket || socket.readyState !== WebSocket.OPEN || streaming;
-        }
+      <main class="main">
+        <header class="topbar">
+          <button class="icon-btn menu" id="open-side" type="button" aria-label="打开侧栏">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div class="topbar-title" id="title">新对话</div>
+          <div class="topbar-state" id="topbar-state"></div>
+          <div class="topbar-meta" id="session-meta"></div>
+        </header>
 
-        function setStreaming(active) {
-          streaming = active;
-          if (!socket || socket.readyState !== WebSocket.OPEN) return;
-          setStatus(active ? 'Pi 正在工作…' : '已连接', active ? 'busy' : 'ready');
-        }
+        <div class="scroller" id="scroller">
+          <div class="thread" id="thread"></div>
+        </div>
 
-        function summarizeArgs(args) {
-          if (!args || typeof args !== 'object') return '';
-          const text = args.command || args.path || args.file_path || args.pattern || JSON.stringify(args);
-          return String(text).slice(0, 160);
-        }
-
-        function summarizeResult(result) {
-          const block = result && Array.isArray(result.content) ? result.content.find((c) => c.type === 'text') : undefined;
-          const text = block && block.text ? block.text : '';
-          const firstLines = text.split('\n').slice(0, 3).join('\n');
-          return firstLines.length < text.length ? firstLines + '\n…' : firstLines;
-        }
-
-        function addMessage(kind, text) {
-          const node = document.createElement('div');
-          node.className = 'message ' + kind;
-          node.textContent = text || '';
-          transcript.appendChild(node);
-          transcript.scrollTop = transcript.scrollHeight;
-          return node;
-        }
-
-        function connect() {
-          clearTimeout(reconnectTimer);
-          const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
-          socket = new WebSocket(scheme + '//' + location.host + '/ws');
-          setStatus('连接中…');
-          socket.addEventListener('open', () => {
-            setStatus('已连接', 'ready');
-            const frame = { v: 1, type: 'open' };
-            if (sessionId) frame.sessionId = sessionId;
-            if (cursor > 0) frame.after = cursor;
-            socket.send(JSON.stringify(frame));
-          });
-          socket.addEventListener('message', (event) => {
-            let frame;
-            try { frame = JSON.parse(event.data); } catch { return; }
-            if (frame.type === 'opened') {
-              sessionId = frame.sessionId;
-              cursor = Math.max(cursor, frame.cursor || 0);
-              localStorage.setItem(sessionKey, sessionId);
-              localStorage.setItem(cursorKey, String(cursor));
-              sessionLabel.textContent = sessionId;
-              // The Host is the owner: if it is still streaming after a reload,
-              // the shell must show that instead of pretending to be idle.
-              setStreaming(Boolean(frame.state && frame.state.isStreaming));
-              return;
-            }
-            if (frame.type === 'resync_required') {
-              addMessage('system', '本地游标已过期（Host 保留 ' + frame.oldestCursor + '…' + frame.newestCursor + '）；此前的输出不再补放，新消息将继续显示。');
-              cursor = frame.newestCursor;
-              localStorage.setItem(cursorKey, String(cursor));
-              return;
-            }
-            if (frame.type === 'event') {
-              cursor = Math.max(cursor, frame.cursor || 0);
-              localStorage.setItem(cursorKey, String(cursor));
-              const event = frame.event || {};
-              if (event.type === 'agent_start') { assistant = addMessage('assistant', ''); setStreaming(true); }
-              const delta = event.assistantMessageEvent;
-              if (delta && delta.type === 'text_delta') {
-                if (!assistant) assistant = addMessage('assistant', '');
-                assistant.textContent += delta.delta || '';
-                transcript.scrollTop = transcript.scrollHeight;
-              }
-              if (event.type === 'tool_execution_start') {
-                addMessage('tool', '▶ ' + event.toolName + ' ' + summarizeArgs(event.args));
-                assistant = undefined;
-              }
-              if (event.type === 'tool_execution_end') {
-                const node = addMessage('tool', (event.isError ? '✗ ' : '✓ ') + event.toolName + '\n' + summarizeResult(event.result));
-                if (event.isError) node.classList.add('error');
-              }
-              if (event.type === 'message_end' && event.message && event.message.stopReason === 'error') {
-                addMessage('failure', '模型调用失败：' + (event.message.errorMessage || '未知错误'));
-              }
-              if (event.type === 'auto_retry_start') {
-                addMessage('system', '上游暂时不可用，Pi 正在重试（' + event.attempt + '/' + event.maxAttempts + '）…');
-              }
-              if (event.type === 'agent_settled') { assistant = undefined; setStreaming(false); }
-              return;
-            }
-            if (frame.type === 'error') {
-              addMessage('failure', '错误（' + frame.code + '）：' + frame.message);
-              // A rejected prompt must not leave the composer locked forever.
-              setStreaming(frame.code === 'busy');
-              if (frame.fatal) socket.close();
-            }
-          });
-          socket.addEventListener('close', () => {
-            setStatus('连接断开，重连中…（Host 上的任务不会被打断）', 'error');
-            send.disabled = true;
-            reconnectTimer = setTimeout(connect, 1200);
-          });
-          socket.addEventListener('error', () => setStatus('连接错误', 'error'));
-        }
-
-        document.querySelector('#composer').addEventListener('submit', (event) => {
-          event.preventDefault();
-          const text = prompt.value.trim();
-          if (!text || !socket || socket.readyState !== WebSocket.OPEN || streaming) return;
-          const requestId = 'web-' + Date.now() + '-' + (++requestNumber);
-          addMessage('user', text);
-          setStreaming(true);
-          socket.send(JSON.stringify({ v: 1, type: 'prompt', requestId, text }));
-          prompt.value = '';
-          prompt.focus();
-        });
-        prompt.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            document.querySelector('#composer').requestSubmit();
-          }
-        });
-        connect();
-      })();
-    </script>
+        <div class="composer-wrap">
+          <form class="composer" id="composer">
+            <textarea id="prompt" rows="1" placeholder="给 Pi 一个任务…" aria-label="输入"></textarea>
+            <div class="composer-bar">
+              <span class="hint">Enter 发送 · Shift+Enter 换行</span>
+              <div>
+                <button class="stop hidden" id="stop" type="button" aria-label="停止" title="停止">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                </button>
+                <button class="send" id="send" type="submit" disabled aria-label="发送" title="发送">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <div class="footnote">对话由 User VM 中的原版 Pi agent 执行；关闭页面不会中断正在运行的任务。</div>
+        </div>
+      </main>
+    </div>
+    <script src="/app.js"></script>
   </body>
 </html>

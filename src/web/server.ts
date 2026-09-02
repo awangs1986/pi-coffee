@@ -99,19 +99,20 @@ export class WebServer {
       response.end(JSON.stringify({ ok: true, role: "web" }));
       return;
     }
-    if (path === "/" || path === "/index.html") {
-      try {
-        const html = await readFile(resolve(this.publicDir, "index.html"));
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-        response.end(html);
-      } catch {
-        response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-        response.end("PI Coffee shell is not installed");
-      }
+    const asset = resolveAsset(path);
+    if (asset === undefined) {
+      response.writeHead(404);
+      response.end();
       return;
     }
-    response.writeHead(404);
-    response.end();
+    try {
+      const body = await readFile(resolve(this.publicDir, asset.file));
+      response.writeHead(200, { "content-type": asset.contentType, "cache-control": "no-store" });
+      response.end(body);
+    } catch {
+      response.writeHead(asset.file === "index.html" ? 500 : 404, { "content-type": "text/plain; charset=utf-8" });
+      response.end(asset.file === "index.html" ? "PI Coffee shell is not installed" : "Not found");
+    }
   }
 
   private handleUpgrade(request: IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): void {
@@ -225,6 +226,30 @@ class BrowserBridge {
       });
     }
   }
+}
+
+const ASSET_TYPES: Record<string, string> = {
+  html: "text/html; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  svg: "image/svg+xml",
+  png: "image/png",
+  ico: "image/x-icon",
+  woff2: "font/woff2",
+};
+
+/**
+ * The shell is a flat set of files directly under `public/`. Only a single
+ * safe path segment with a known extension is served, so `..`, nested paths,
+ * and anything else never reach the filesystem.
+ */
+function resolveAsset(path: string): { file: string; contentType: string } | undefined {
+  if (path === "/" || path === "/index.html") return { file: "index.html", contentType: ASSET_TYPES.html };
+  const match = /^\/([A-Za-z0-9_-]+)\.([a-z0-9]+)$/.exec(path);
+  if (match === null) return undefined;
+  const contentType = ASSET_TYPES[match[2]];
+  if (contentType === undefined) return undefined;
+  return { file: `${match[1]}.${match[2]}`, contentType };
 }
 
 function rawDataToBytes(data: RawData): Uint8Array {

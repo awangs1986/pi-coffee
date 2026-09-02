@@ -20,7 +20,7 @@ The MVP is a transport and ownership proof, not a feature port from V5.
 - Browser disconnect without calling `PiSession.stop()`.
 - Bounded cursor replay after reconnect.
 - Native Pi session ID propagation with `--session-id`.
-- A plain browser shell and local health endpoints.
+- A Codex-style light-theme browser shell (see below) and local health endpoints.
 
 ## Not included
 
@@ -57,9 +57,28 @@ strictly increasing cursors, exact bounded replay after a browser disconnect,
 zero replay when caught up, and a second turn on the same Session. Its JSON
 output is the acceptance evidence for [#5](http://testpc:3000/awangs/pi-coffee/issues/5).
 
-The browser shell renders `text_delta`, tool execution start/end, model errors
-(`message_end` with `stopReason: "error"`), auto-retry notices,
-`resync_required`, and a busy state derived from the Host's `isStreaming`.
+## Browser shell
+
+`public/` is a dependency-free static shell (`index.html`, `app.css`, `app.js`)
+served by the Web Server from an allow-list of flat file names. It follows the
+familiar Codex layout in a white theme:
+
+- Left sidebar: "新对话", the list of conversations known to this browser, and
+  the connection state. Selecting a conversation reopens that Host Session.
+- Main column: user messages as light bubbles, assistant text rendered with a
+  minimal escaped Markdown subset (fenced code, inline code, bold), tool
+  executions as collapsible cards (`tool name`, argument summary, running /
+  完成 / 失败, result), and notes for model errors, auto-retry and
+  `resync_required`.
+- Composer: rounded card, Enter sends, Shift+Enter inserts a newline. While the
+  Host reports `isStreaming` the send button becomes a stop button that sends
+  `abort`.
+
+The shell keeps a bounded per-conversation display cache in `localStorage`
+(last 120 entries, 30 conversations). This is a rendering convenience only:
+the Host owns Session state, reconnects use `sessionId` + `after=cursor`, and
+removing a conversation from the sidebar does not touch the Host. Durable
+history that survives a new browser belongs to 0.1 `SHELL-001` (#10).
 
 ## Known gaps before calling it deployed
 
