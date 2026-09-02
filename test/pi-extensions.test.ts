@@ -6,6 +6,7 @@ import {
   resolveContextFoldExtension,
   resolvePiLensExtension,
   resolveRpivTodoExtension,
+  resolvePiMcpAdapterExtension,
   resolvePiSubagentsExtension,
   resolvePiSubagentsResourceExtension,
 } from "../src/pi-extensions.js";
@@ -72,6 +73,20 @@ describe("PI Coffee native extension selection", () => {
       enabled.indexOf(resolveContextFoldExtension(agentEnv)),
     );
     expect(todo).toMatch(/node_modules[\\/]@juicesharp[\\/]rpiv-todo[\\/]index\.ts$/);
+  });
+
+  it("keeps pi-mcp-adapter non-visible until explicitly opted in", () => {
+    const defaults = resolvePiExtensions({});
+    expect(defaults.some((path) => /[\\/]pi-mcp-adapter[\\/]/.test(path))).toBe(false);
+
+    const agentEnv = { PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" };
+    const enabled = resolvePiExtensions({ ...agentEnv, PI_COFFEE_PI_MCP_ADAPTER: "on" });
+    const adapter = resolvePiMcpAdapterExtension(agentEnv);
+    expect(enabled).toContain(adapter);
+    expect(enabled.indexOf(adapter)).toBeLessThan(
+      enabled.indexOf(resolveContextFoldExtension(agentEnv)),
+    );
+    expect(adapter).toMatch(/node_modules[\\/]pi-mcp-adapter[\\/]index\.ts$/);
   });
 
   it("loads the pinned context-fold entry through Pi's native loader", async () => {

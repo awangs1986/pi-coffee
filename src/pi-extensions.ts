@@ -23,6 +23,8 @@ const resolvePackage = createRequire(import.meta.url).resolve;
  * expose any tools unless `PI_COFFEE_PI_LENS=on` is explicitly set.
  * rpiv-todo is likewise opt-in: its todo tool, `/todos` command, and overlay
  * are not initialized unless `PI_COFFEE_RPIV_TODO=on` is explicitly set.
+ * pi-mcp-adapter is also opt-in: its MCP proxy tool and server runtime stay
+ * unloaded unless `PI_COFFEE_PI_MCP_ADAPTER=on` is explicitly set.
  */
 export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): string[] {
   const configured = env.PI_COFFEE_EXTENSIONS?.trim();
@@ -38,6 +40,7 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
   }
   if (isEnabled(env.PI_COFFEE_PI_LENS)) extensions.push(resolvePiLensExtension(env));
   if (isEnabled(env.PI_COFFEE_RPIV_TODO)) extensions.push(resolveRpivTodoExtension(env));
+  if (isEnabled(env.PI_COFFEE_PI_MCP_ADAPTER)) extensions.push(resolvePiMcpAdapterExtension(env));
   if (!isDisabled(env.PI_COFFEE_CONTEXT_FOLD)) extensions.push(resolveContextFoldExtension(env));
   return extensions;
 }
@@ -83,6 +86,14 @@ export function resolveRpivTodoExtension(env: NodeJS.ProcessEnv = process.env): 
   const managedEntry = join(agentDir, "npm", "node_modules", "@juicesharp", "rpiv-todo", "index.ts");
   if (existsSync(managedEntry)) return managedEntry;
   return resolvePackage("@juicesharp/rpiv-todo/index.ts");
+}
+
+/** Resolve the optional pi-mcp-adapter native Pi extension without loading it by default. */
+export function resolvePiMcpAdapterExtension(env: NodeJS.ProcessEnv = process.env): string {
+  const agentDir = env.PI_COFFEE_AGENT_DIR ?? env.PI_CODING_AGENT_DIR ?? getAgentDir();
+  const managedEntry = join(agentDir, "npm", "node_modules", "pi-mcp-adapter", "index.ts");
+  if (existsSync(managedEntry)) return managedEntry;
+  return resolvePackage("pi-mcp-adapter");
 }
 
 function isDisabled(value: string | undefined): boolean {
