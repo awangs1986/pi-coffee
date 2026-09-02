@@ -103,3 +103,73 @@ V5 中的 `verificationProfile` 可以先作为未来兼容字段或不暴露给
 - 本文没有修改冻结的 `V5` 仓库，也没有修改 V3 工作树。
 - 本文是设计审查记录，不代表 `HARNESS-001` 已获准实施；范围确认后再创建/更新 Gitea Issue 和 Project 1 卡片。
 
+## 对 `claude-code-best/claude-code` 的追加审查（2026-09-02）
+
+### 仓库身份和来源边界
+
+用户指定的仓库确实包含一套完整的 Claude Code 风格 system-prompt 实现，核心文件是 [`src/constants/prompts.ts`](https://github.com/claude-code-best/claude-code/blob/77a7934e15d69da13879112ed7db695c9ee7a52a/src/constants/prompts.ts) 和 [`src/utils/systemPrompt.ts`](https://github.com/claude-code-best/claude-code/blob/77a7934e15d69da13879112ed7db695c9ee7a52a/src/utils/systemPrompt.ts)。本次审查固定在 `main` 当时的提交 `77a7934e15d69da13879112ed7db695c9ee7a52a`。但它不是 Anthropic 官方仓库：该项目的英文 README 自称是 **reverse-engineered / decompiled source restoration**，并声明仅用于教育和研究；GitHub 仓库元数据的顶层 `license` 为空，仓库内能找到的 MIT 文件只覆盖 `packages/workflow-engine` 子包。它可以作为参考实现，不能作为 Claude Code 官方 prompt 的权威来源，也不能默认把所有 prompt 正文当作 MIT 内容带入 PI Coffee。
+
+来源链接：
+
+- [`README_EN.md`](https://github.com/claude-code-best/claude-code/blob/main/README_EN.md)（项目自述的 reverse-engineered/decompiled 说明和教育研究用途声明）
+- [`src/constants/prompts.ts`](https://github.com/claude-code-best/claude-code/blob/main/src/constants/prompts.ts)（完整 prompt 组装实现）
+- [`src/constants/promptEngineeringAudit.runner.ts`](https://github.com/claude-code-best/claude-code/blob/main/src/constants/promptEngineeringAudit.runner.ts)（关键词/行为审计及未随仓库发布的 TXT 来源引用）
+- [`src/constants/systemPromptSections.ts`](https://github.com/claude-code-best/claude-code/blob/main/src/constants/systemPromptSections.ts)（静态/缓存/动态 section 注册）
+- [`docs/context/system-prompt.mdx`](https://github.com/claude-code-best/claude-code/blob/main/docs/context/system-prompt.mdx)（该仓库自己的架构说明，不是 Anthropic 官方规范）
+- [`docs/safety/permission-model.mdx`](https://github.com/claude-code-best/claude-code/blob/main/docs/safety/permission-model.mdx) 与 [`docs/safety/sandbox.mdx`](https://github.com/claude-code-best/claude-code/blob/main/docs/safety/sandbox.mdx)（该仓库的权限/沙箱假设）
+
+### 与 V3 的实际对比
+
+CCB 的 `getSystemPrompt()` 不是一段短文本，而是一个按静态区和动态区组装的 `string[]`。静态区包含 Intro、System、Doing tasks、Actions、Using your tools、Communication style；动态区包含 session guidance、memory、环境、语言、output style、MCP、scratchpad 等。当前源码约 849 行/52.7 KB，远大于 V3 的 `harness-core.md`（33 行）和 `tdd-core.md`（66 行）。
+
+CCB 自己的 `promptEngineeringAudit.runner.ts` 注释多次引用 `{request_evaluation_checklist}`、`{core_search_behaviors}`、`{past_chats_tools}` 等 TXT 来源，但这些原始 TXT 文件不在当前公开仓库树中；测试只检查最终 prompt 是否包含若干关键词，不提供可复现的逐字提取链。因此这些注释可以说明维护者声称参考过某些材料，不能作为官方来源或完整 provenance 证明。
+
+另外，仓库初始提交 [`f90eee85d801`](https://github.com/claude-code-best/claude-code/commit/f90eee85d80149d797a55eb50c8464c377d1a72b) 没有父提交，一次性加入约 51 万行代码；公开历史没有指向 Anthropic 内部源码或原始 prompt dump 的可验证上游链。
+
+两者存在明显的行为重合：
+
+| CCB 中可观察到的规则 | V3 对应内容 | 判断 |
+|---|---|---|
+| 优先专用文件/搜索工具，避免用 shell 替代 | `harness-core` 的原生工具优先规则 | 行为一致 |
+| 在声称未知前先搜索 | CCB 的 `Search before saying unknown`；V3 的能力发现规则 | 行为一致，但 V3 更薄 |
+| 修改前先读目标、避免无必要新文件 | CCB 的 FileRead/FileEdit prompt；V3 的 Changes 规则 | 行为一致 |
+| 评估可逆性、共享影响并在高风险动作前确认 | CCB 的 `Executing actions with care`；V3 的 Care and honesty | 行为一致 |
+| 真实报告测试结果，不伪造完成 | CCB 的 `Report outcomes faithfully`；V3 的报告规则/TDD Gate 规则 | 行为一致 |
+| 工具拒绝、权限模式、沙箱、CLI 命令和 Claude 身份 | CCB 多处实现 | V3 有，PI Coffee 必须删改 |
+| TDD RED、验证预算、Completion Label、Guard authority | V3 `tdd-core` | CCB 不是同一套 Picode 运行时契约 |
+
+所以结论不是“V3 与 CCB 完全相同”，而是：**V3 是与 CCB/Claude Code 行为风格相容的薄增量，且只覆盖其中一部分；没有字节级相同，也没有官方来源证明。**
+
+### 不能直接复制的 CCB 内容
+
+CCB 的 system prompt 明确假设：
+
+- 存在 `allow/ask/deny` 权限模式和用户审批对话框；
+- 存在 `@anthropic-ai/sandbox-runtime`、工作区沙箱和 `dangerouslyDisableSandbox`；
+- 存在 Claude Code 专用工具名、`/help`、`/issue`、`/share`、`ExecuteExtraTool`、MCP/Skills 发现协议；
+- 输出面是 Claude Code CLI/终端，并包含 Claude 身份、模型、平台和 CLI 环境信息；
+- 动态 prompt section 和 Anthropic cache scope 可以控制 API 缓存。
+
+这些假设与 PI Coffee 的“原版 Pi + Web UI + User VM 执行边界 + 无进程内沙箱/权限执行器”不同。原样移植会造成虚假的能力声明、错误的工具名和错误的安全边界。
+
+### 修订后的判定
+
+| 判定对象 | 结果 |
+|---|---|
+| V3 核心行为是否值得保留 | **是** |
+| V3 是否已经等于 CCB 的完整 Claude Code prompt | **否** |
+| CCB 是否能证明 V3 来自 Anthropic 官方原文 | **否**；它本身也自称逆向/反编译恢复项目 |
+| V3 的静态/动态分层与 V5 state/profile 思路是否正确 | **是，适合继续采用** |
+| 是否应把 CCB 全量 prompt 直接放进 PI Coffee | **否** |
+
+### 现在应锁定的 prompt 方案
+
+采用 **CCB/Claude Code 行为模式参考 + V3 语义基线 + PI Coffee 执行模型适配** 的第三种方案：
+
+1. 保留 Pi 原生 Base Prompt，不替换它。
+2. 以 V3 `harness-core` 为核心行为增量，吸收 CCB 中已验证的“先读/先搜、最小修改、风险确认、诚实报告、提示注入防护、沟通简洁”等规则。
+3. 删除权限审批、sandbox、VM manager、Claude CLI 专用命令和不存在的工具；所有工具名从当前 Pi runtime 的真实注册表生成。
+4. 保留稳定 prompt prefix 与动态 context 分层，但不照搬 CCB 的 Anthropic 专属 cache scope；PI Coffee 只实现自身 adapter 能证明的缓存/重建语义。
+5. TDD 内容先作为指导性 profile，直到 Verify/Gate 功能另有工单和执行证据。
+
+该方案可以称为 **PI Coffee Harness Prompt v1（V3-derived, CCB-aligned, VM-native）**，不能称为“Claude Code 官方 prompt 原文”。
