@@ -4,6 +4,7 @@ import {
   resolveHarnessExtension,
   resolvePiExtensions,
   resolveContextFoldExtension,
+  resolvePiLensExtension,
   resolvePiSubagentsExtension,
   resolvePiSubagentsResourceExtension,
 } from "../src/pi-extensions.js";
@@ -42,6 +43,20 @@ describe("PI Coffee native extension selection", () => {
       resolvePiSubagentsExtension(),
       resolvePiSubagentsResourceExtension(),
     ]);
+  });
+
+  it("keeps pi-lens non-visible until explicitly opted in", () => {
+    const defaults = resolvePiExtensions({});
+    expect(defaults.some((path) => /[\\/]pi-lens[\\/]/.test(path))).toBe(false);
+
+    const enabled = resolvePiExtensions({
+      PI_COFFEE_PI_LENS: "on",
+      PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent",
+    });
+    expect(enabled).toContain(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" }));
+    expect(enabled.indexOf(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })))
+      .toBeLessThan(enabled.indexOf(resolveContextFoldExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })));
+    expect(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })).toMatch(/node_modules[\\/]pi-lens[\\/](dist[\\/]index\.js|index\.js)$/);
   });
 
   it("loads the pinned context-fold entry through Pi's native loader", async () => {

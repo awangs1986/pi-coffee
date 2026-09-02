@@ -64,12 +64,18 @@ Settings:
 | `PI_COFFEE_EXTENSIONS` | bundled Harness + pi-subagents + context-fold | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
 | `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
 | `PI_COFFEE_CONTEXT_FOLD` | enabled | host | set to `off`/`0`/`false`/`no` to disable context-fold; Pi's native compaction remains available |
+| `PI_COFFEE_PI_LENS` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to pi-lens; it is not loaded or made visible by default |
 
 context-fold keeps the raw session ledger and only rewrites the per-request copy. Its default
 `CONTEXTFOLD_COMPACT=det` mode emits a deterministic summary for hard compaction. The plugin's
 own error handling deliberately returns control to Pi when folding or deterministic compaction
 fails, making native Pi compaction the fallback rather than a competing default. Advanced
 context-fold tuning remains available through its `CONTEXTFOLD_*` variables and `/context-fold` command.
+
+`pi-lens@4.1.3` is packaged for a future opt-in path only. PI Coffee does not proactively load
+it, initialize its LSP/diagnostic runtime, or add its tools to the model's visible tool set.
+Set `PI_COFFEE_PI_LENS=on` for a Host session when that capability is explicitly requested;
+pi-lens then applies its own dynamic-tool policy (situational tools start inactive).
 
 The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the

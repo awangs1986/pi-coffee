@@ -17,6 +17,10 @@ const resolvePackage = createRequire(import.meta.url).resolve;
  * deterministic summary wins over any companion extension. If context-fold
  * cannot produce a result it returns void, which leaves Pi's native
  * compaction path as the fail-open fallback.
+ *
+ * pi-lens is installed as an opt-in, non-visible integration. It is not added
+ * to the default list and therefore does not initialize LSP/diagnostic work or
+ * expose any tools unless `PI_COFFEE_PI_LENS=on` is explicitly set.
  */
 export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): string[] {
   const configured = env.PI_COFFEE_EXTENSIONS?.trim();
@@ -30,6 +34,7 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
   if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) {
     extensions.push(resolvePiSubagentsExtension(), resolvePiSubagentsResourceExtension());
   }
+  if (isEnabled(env.PI_COFFEE_PI_LENS)) extensions.push(resolvePiLensExtension(env));
   if (!isDisabled(env.PI_COFFEE_CONTEXT_FOLD)) extensions.push(resolveContextFoldExtension(env));
   return extensions;
 }
@@ -61,7 +66,20 @@ export function resolveContextFoldExtension(env: NodeJS.ProcessEnv = process.env
   return resolvePackage("context-fold/index.ts");
 }
 
+/** Resolve the optional pi-lens native extension without loading it by default. */
+export function resolvePiLensExtension(env: NodeJS.ProcessEnv = process.env): string {
+  const agentDir = env.PI_COFFEE_AGENT_DIR ?? env.PI_CODING_AGENT_DIR ?? getAgentDir();
+  const managedEntry = join(agentDir, "npm", "node_modules", "pi-lens", "dist", "index.js");
+  if (existsSync(managedEntry)) return managedEntry;
+  return resolvePackage("pi-lens");
+}
+
 function isDisabled(value: string | undefined): boolean {
   if (value === undefined) return false;
   return ["0", "false", "no", "off"].includes(value.trim().toLowerCase());
+}
+
+function isEnabled(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
