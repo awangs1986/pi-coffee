@@ -29,31 +29,40 @@ npm run build
 npm start
 ```
 
-`npm start` starts both processes in one Node process for a local smoke run:
+`npm start` runs Host + Web (and the Relay, if `PI_COFFEE_UPSTREAM_KEY` is set) in one Node process for a local smoke run:
 
 - Web Server: `http://127.0.0.1:3000/`
 - Host: `ws://127.0.0.1:8788/host`
+- Relay: `http://127.0.0.1:8789/v1`
 
-For a split deployment, run `npm run start:host` in the User VM and `npm run start:web` on the Web VM. Set `PI_COFFEE_HOST_URL` on the Web Server to the Host address.
+The MVP deployment is split across two machines: `npm run start:host` in the
+User VM (original Pi runs there, as the VM owner), `npm run start:web` and
+`npm run start:relay` on the server. systemd units and env templates are in
+[`deploy/`](./deploy/README.md); the procedure is in
+[`docs/deployment/runbook.md`](./docs/deployment/runbook.md).
 
-Useful settings:
+Settings:
 
-| Variable | Default | Meaning |
-|---|---:|---|
-| `PI_COFFEE_WEB_BIND` | `127.0.0.1` | Web Server bind address |
-| `PI_COFFEE_WEB_PORT` | `3000` | Web Server port |
-| `PI_COFFEE_HOST_BIND` | `127.0.0.1` | Host bind address |
-| `PI_COFFEE_HOST_PORT` | `8788` | Host port |
-| `PI_COFFEE_HOST_URL` | local Host URL | Web→Host WebSocket URL |
-| `PI_COFFEE_HOST_TOKEN` | unset | Optional shared Host bearer token |
-| `PI_COFFEE_WORKDIR` | current directory | Pi working directory |
-| `PI_COFFEE_AGENT_DIR` | Pi default | Pi config directory (`models.json`, `auth.json`) |
-| `PI_COFFEE_SESSION_DIR` | Pi default | Native Pi session directory |
-| `PI_COFFEE_PROVIDER` | Pi default | Optional Pi provider |
-| `PI_COFFEE_MODEL` | Pi default | Optional Pi model |
-| `PI_COFFEE_EXTENSIONS` | bundled Harness extension | Colon-separated Pi extension paths; set to `off` to disable automatic Harness loading |
+| Variable | Default | Process | Meaning |
+|---|---:|---|---|
+| `PI_COFFEE_WEB_BIND` / `PI_COFFEE_WEB_PORT` | `127.0.0.1` / `3000` | web | browser-facing bind |
+| `PI_COFFEE_HOST_URL` | local Host URL | web | Web→Host WebSocket URL |
+| `PI_COFFEE_HOST_BIND` / `PI_COFFEE_HOST_PORT` | `127.0.0.1` / `8788` | host | private Host transport bind |
+| `PI_COFFEE_HOST_TOKEN` | unset | web, host | shared Host bearer token; **required** when the Host is not on loopback |
+| `PI_COFFEE_WORKDIR` | current directory | host | Pi working directory |
+| `PI_COFFEE_AGENT_DIR` | Pi default | host | Pi config directory (`models.json`) |
+| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory |
+| `PI_COFFEE_PROVIDER` / `PI_COFFEE_MODEL` | Pi default | host | provider/model from `models.json` |
+| `PI_COFFEE_RELAY_TOKEN` | unset | host | this VM's Relay token, interpolated by Pi from `models.json` |
+| `PI_COFFEE_RELAY_BIND` / `PI_COFFEE_RELAY_PORT` | `127.0.0.1` / `8789` | relay | Relay bind |
+| `PI_COFFEE_UPSTREAM_URL` | `https://b.awangsawangs.xyz/v1` | relay | upstream OpenAI-compatible base URL |
+| `PI_COFFEE_UPSTREAM_KEY` | unset | relay | the sole upstream key; **only** the Relay has it |
+| `PI_COFFEE_RELAY_TOKENS` | unset | relay | comma-separated Host tokens; **required** when not on loopback |
+| `PI_COFFEE_EXTENSIONS` | bundled Harness extension | host | colon-separated Pi extension paths; set to `off` to disable automatic Harness loading |
 
-The first MVP uses Pi's normal credential resolution on the Host VM so the conversation path can be tested without putting a credential in this repository. Moving the upstream credential behind the central Relay is a subsequent PI Coffee ticket, not part of this first vertical slice.
+The upstream credential lives only in the Relay process on the server. Hosts
+in User VMs authenticate to the Relay with their own token and never see the
+upstream key. Nothing in this repository contains a credential.
 
 The frame contract is recorded in [`docs/protocol.md`](./docs/protocol.md).
 
