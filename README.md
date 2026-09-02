@@ -62,7 +62,7 @@ explicit non-goals behind the MVP → 0.1 plan.
 
 ## Repository tickets
 
-- [PI Coffee consolidated backlog](./BACKLOG.md) · [Gitea backlog Issue #13](http://testpc:3000/awangs/pi-coffee/issues/13)
+- [PI Coffee consolidated backlog](./BACKLOG.md) · [Gitea backlog Issue #13](http://testpc:3000/awangs/pi-coffee/issues/13) · [Project 1 看板](http://192.168.100.232:3000/awangs/pi-coffee/projects/1)
 - [PI Coffee map and MVP outcome](http://testpc:3000/awangs/pi-coffee/issues/1)
 - [Host/Web Server protocol and continuity](http://testpc:3000/awangs/pi-coffee/issues/2)
 - [Original Pi Host adapter](http://testpc:3000/awangs/pi-coffee/issues/3)

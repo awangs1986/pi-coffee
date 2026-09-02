@@ -13,7 +13,7 @@
 2. 作为 MVP → 0.1 → 后续版本的交付顺序和依赖表。
 3. 作为新增 Gitea ticket 的拆分基线；Issue 的状态和验收评论仍然是执行权威。
 
-Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:3000/awangs/pi-coffee/issues/13)。完整条目以本文件的当前 `main` 版本为准，Issue 用于讨论、认领和验收链接。
+Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:3000/awangs/pi-coffee/issues/13)。它已放入 [项目 1 的 `Backlog` 列](http://192.168.100.232:3000/awangs/pi-coffee/projects/1)。完整条目以本文件的当前 `main` 版本为准，Issue 用于讨论、认领和验收链接。
 
 ## 权威顺序与范围
 
@@ -269,3 +269,4 @@ MVP-001..005 (已完成)
 | 日期 | 变更 |
 |---|---|
 | 2026-09-02 | 根据今天的多轮讨论建立本 Backlog；MVP 标记为当前 main 已实现，0.1 六个切片映射到 Gitea Issues #7–#12。 |
+| 2026-09-02 | 在项目 1 建立 `Backlog` 列并加入 Issue #13，作为后续功能 ticket 的默认入口。 |
