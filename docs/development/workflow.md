@@ -26,6 +26,8 @@ Read the relevant Gitea Issue first. The current MVP Issues are [#1–#5](http:/
 
 Tests should cross these public seams. Prefer a fake adapter or local stub over a real credential in CI.
 
+Use TypeScript/Node for the first implementation. Consider a Rust module only after a measured performance bottleneck is recorded in a ticket; language changes must not widen the Pi or transport seams.
+
 ## Change loop
 
 1. Write one failing behavior test at the seam.

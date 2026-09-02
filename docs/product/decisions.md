@@ -28,6 +28,7 @@ This document records the resolved decisions from the design conversation. It di
 
 - Gitea is the sole human identity source for 0.1. The user signs in through Gitea OAuth; the Control Plane maps that identity to a fixed User VM.
 - Gitea is an internal collaboration/relay repository, not the final code archive and not internet-facing. Account permissions are managed by the owner.
+- No repository branch-protection policy is required; the owner protects privileged actions through account access.
 - The unique upstream LLM credential belongs on the Control Plane. The User VM must not receive it once the central Relay is enabled.
 
 ## LLM Relay
