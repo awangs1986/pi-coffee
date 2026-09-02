@@ -1,29 +1,57 @@
 import { describe, expect, it } from "vitest";
+import { discoverAndLoadExtensions } from "@earendil-works/pi-coding-agent";
 import {
   resolveHarnessExtension,
   resolvePiExtensions,
+  resolveContextFoldExtension,
   resolvePiSubagentsExtension,
   resolvePiSubagentsResourceExtension,
 } from "../src/pi-extensions.js";
 import subagentsResourceExtension from "../src/subagents/extension.js";
 
 describe("PI Coffee native extension selection", () => {
-  it("loads Harness, the pinned pi-subagents entry, and its resource adapter by default", () => {
+  it("loads context-fold last so deterministic compaction replaces Pi's native summary", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
       resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiSubagentsResourceExtension(),
+      resolveContextFoldExtension(),
     ]);
     expect(extensions.every((path) => path.startsWith("/"))).toBe(true);
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
     expect(resolvePiSubagentsExtension()).toMatch(/node_modules[\\/]pi-subagents[\\/]index\.ts$/);
+    expect(resolveContextFoldExtension()).toMatch(/node_modules[\\/]context-fold[\\/]index\.ts$/);
   });
 
   it("can disable only pi-subagents while retaining Harness", () => {
-    expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([resolveHarnessExtension()]);
-    expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([resolveHarnessExtension()]);
+    expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([
+      resolveHarnessExtension(),
+      resolveContextFoldExtension(),
+    ]);
+    expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([
+      resolveHarnessExtension(),
+      resolveContextFoldExtension(),
+    ]);
+  });
+
+  it("can disable context-fold independently, leaving Pi native compaction available", () => {
+    expect(resolvePiExtensions({ PI_COFFEE_CONTEXT_FOLD: "off" })).toEqual([
+      resolveHarnessExtension(),
+      resolvePiSubagentsExtension(),
+      resolvePiSubagentsResourceExtension(),
+    ]);
+  });
+
+  it("loads the pinned context-fold entry through Pi's native loader", async () => {
+    const result = await discoverAndLoadExtensions(
+      [resolveContextFoldExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })],
+      process.cwd(),
+      "/tmp/pi-coffee-no-agent",
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.extensions).toHaveLength(1);
   });
 
   it("keeps an explicit extension replacement list authoritative", () => {

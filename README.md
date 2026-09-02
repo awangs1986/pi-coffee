@@ -16,7 +16,7 @@ Browser  ── WebSocket ──>  Web Server  ── WebSocket ──>  Host  �
 - Closing or refreshing the browser detaches the connection; it does not stop the Session.
 - Reconnecting with the Session ID and Cursor replays buffered Events.
 - The Web Server has no Pi implementation knowledge; the Pi-specific code is one adapter.
-- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is now loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
+- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. The pinned `context-fold@0.4.0` extension is loaded last so its deterministic compaction replaces Pi's model-based compaction by default. context-fold is fail-open: if its compaction hook cannot produce a result, it returns no override and Pi's native compaction runs. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
 
 The Pi adapter uses the upstream package's documented RPC client and is pinned to `@earendil-works/pi-coding-agent@0.84.4` for this first slice. See the upstream [RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) for the underlying command/event semantics.
 
@@ -61,8 +61,15 @@ Settings:
 | `PI_COFFEE_UPSTREAM_URL` | `https://b.awangsawangs.xyz/v1` | relay | upstream OpenAI-compatible base URL |
 | `PI_COFFEE_UPSTREAM_KEY` | unset | relay | the sole upstream key; **only** the Relay has it |
 | `PI_COFFEE_RELAY_TOKENS` | unset | relay | comma-separated Host tokens; **required** when not on loopback |
-| `PI_COFFEE_EXTENSIONS` | bundled Harness + pi-subagents | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
+| `PI_COFFEE_EXTENSIONS` | bundled Harness + pi-subagents + context-fold | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
 | `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
+| `PI_COFFEE_CONTEXT_FOLD` | enabled | host | set to `off`/`0`/`false`/`no` to disable context-fold; Pi's native compaction remains available |
+
+context-fold keeps the raw session ledger and only rewrites the per-request copy. Its default
+`CONTEXTFOLD_COMPACT=det` mode emits a deterministic summary for hard compaction. The plugin's
+own error handling deliberately returns control to Pi when folding or deterministic compaction
+fails, making native Pi compaction the fallback rather than a competing default. Advanced
+context-fold tuning remains available through its `CONTEXTFOLD_*` variables and `/context-fold` command.
 
 The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the
