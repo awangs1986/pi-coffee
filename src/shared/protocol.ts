@@ -66,6 +66,20 @@ export interface CommandInfo {
   source: "extension" | "prompt" | "skill";
 }
 
+/**
+ * What the User VM's Pi has loaded for this Session, grouped by source file:
+ * extensions (may register slash commands), skills and prompt templates.
+ */
+export interface ExtensionInfo {
+  name: string;
+  kind: "extension" | "skill" | "prompt";
+  path?: string;
+  /** How Pi got it: `configured` (PI Coffee passed --extension), `cli`, `auto` (discovery dirs), `inline` (built into Pi), `package`, or Pi's raw source string. */
+  origin: string;
+  scope?: string;
+  commands: Array<{ name: string; description?: string }>;
+}
+
 export interface SessionStats {
   userMessages: number;
   assistantMessages: number;
@@ -144,6 +158,7 @@ export type ClientFrame =
   | { v: typeof PROTOCOL_VERSION; type: "set_model"; requestId?: string; provider: string; id: string }
   | { v: typeof PROTOCOL_VERSION; type: "set_thinking"; requestId?: string; level: string }
   | { v: typeof PROTOCOL_VERSION; type: "get_commands" }
+  | { v: typeof PROTOCOL_VERSION; type: "get_extensions" }
   | { v: typeof PROTOCOL_VERSION; type: "get_stats" }
   | { v: typeof PROTOCOL_VERSION; type: "compact"; requestId?: string }
   | ({ v: typeof PROTOCOL_VERSION; type: "ui_response"; requestId?: string } & UiResponse)
@@ -196,6 +211,12 @@ export type ServerFrame =
       v: typeof PROTOCOL_VERSION;
       type: "commands";
       commands: CommandInfo[];
+    }
+  | {
+      v: typeof PROTOCOL_VERSION;
+      type: "extensions";
+      sessionId: string;
+      extensions: ExtensionInfo[];
     }
   | {
       v: typeof PROTOCOL_VERSION;
@@ -289,6 +310,8 @@ export function decodeClientFrame(input: string | Uint8Array): ClientFrame {
       return { v: PROTOCOL_VERSION, type: "get_models" };
     case "get_commands":
       return { v: PROTOCOL_VERSION, type: "get_commands" };
+    case "get_extensions":
+      return { v: PROTOCOL_VERSION, type: "get_extensions" };
     case "get_stats":
       return { v: PROTOCOL_VERSION, type: "get_stats" };
     case "compact":

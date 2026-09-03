@@ -36,6 +36,7 @@ class FakePiSession implements PiSession {
   async setModel(): Promise<void> {}
   async setThinkingLevel(): Promise<void> {}
   async getCommands() { return []; }
+  async getExtensions() { return []; }
   async getStats() { return { userMessages: 0, assistantMessages: 0, toolCalls: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }; }
   async compact(): Promise<void> {}
   async respondUi(): Promise<void> {}

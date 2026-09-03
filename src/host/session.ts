@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   CommandInfo,
+  ExtensionInfo,
   ImageInput,
   JsonValue,
   ServerFrame,
@@ -205,6 +206,7 @@ export class HostSession {
   setModel(provider: string, id: string): Promise<void> { return this.ready().setModel(provider, id); }
   setThinkingLevel(level: string): Promise<void> { return this.ready().setThinkingLevel(level); }
   getCommands(): Promise<CommandInfo[]> { return this.ready().getCommands(); }
+  getExtensions(): Promise<ExtensionInfo[]> { return this.ready().getExtensions(); }
   getStats(): Promise<SessionStats> { return this.ready().getStats(); }
   compact(): Promise<void> { return this.ready().compact(); }
 

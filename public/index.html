@@ -27,7 +27,13 @@
         <div class="session-scroll">
           <ul class="session-list" id="session-list"></ul>
         </div>
-        <div class="sidebar-foot"><span id="dot" class="dot"></span><span id="status">连接中…</span></div>
+        <div class="sidebar-foot">
+          <span id="dot" class="dot"></span><span id="status" class="status-text">连接中…</span>
+          <button class="foot-btn" id="plugins-btn" type="button" title="User VM 里 Pi 已加载的扩展、技能和提示模板">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/><circle cx="12" cy="12" r="3.5"/></svg>
+            插件
+          </button>
+        </div>
       </aside>
 
       <main class="main">
@@ -113,6 +119,21 @@
           <button type="button" class="btn" id="modal-cancel">取消</button>
           <button type="button" class="btn primary" id="modal-ok">确定</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Plugins panel: what the User VM's Pi has loaded -->
+    <div class="modal-backdrop hidden" id="plugins-modal">
+      <div class="modal plugins" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
+        <div class="plugins-head">
+          <h2 id="plugins-title">插件</h2>
+          <span class="plugins-sub" id="plugins-sub"></span>
+          <button type="button" class="icon-btn" id="plugins-close" aria-label="关闭">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="plugins-body" id="plugins-body"></div>
+        <div class="stats-note">列表来自当前对话的 Pi 进程（User VM 内）实际加载的内容；扩展按注册命令的源文件分组，PI Coffee 通过 <code>--extension</code> 传入的扩展即使没有命令也会显示。</div>
       </div>
     </div>
 
