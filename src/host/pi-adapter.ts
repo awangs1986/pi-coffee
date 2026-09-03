@@ -78,6 +78,31 @@ export interface RpcPiSessionFactoryOptions {
   env?: Record<string, string>;
 }
 
+/**
+ * Environment entries that belong to the Control Plane Relay. They must not
+ * cross the Host boundary into a child Pi process, especially when the local
+ * `all` mode co-locates Relay and Host for smoke testing.
+ */
+export const HOST_STRIPPED_ENV_KEYS = [
+  "PI_COFFEE_UPSTREAM_KEY",
+  "PI_COFFEE_SERPER_KEY",
+  "PI_COFFEE_RELAY_TOKENS",
+  "SERPER_API_KEY",
+] as const;
+
+/**
+ * Build the RpcClient env overlay. RpcClient merges this object over its own
+ * process.env; explicit undefined values therefore remove Relay credentials
+ * from the spawned child without mutating the parent process environment.
+ */
+export function buildHostChildEnv(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
+  const env: Record<string, string | undefined> = { ...overrides };
+  for (const key of HOST_STRIPPED_ENV_KEYS) env[key] = undefined;
+  return env as Record<string, string>;
+}
+
 /** Adapter around the original Pi agent's documented RPC client. */
 export class RpcPiSessionFactory implements PiSessionFactory {
   private readonly options: RpcPiSessionFactoryOptions;
@@ -105,7 +130,7 @@ export class RpcPiSessionFactory implements PiSessionFactory {
       model: this.options.model,
       env: {
         ...(this.options.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: this.options.agentDir }),
-        ...this.options.env,
+        ...buildHostChildEnv(this.options.env),
       },
       args,
     });

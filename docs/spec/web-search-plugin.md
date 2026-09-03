@@ -50,7 +50,8 @@ agent run 的未封盘搜索写入 User VM：
 ```
 
 artifact 包含查询、provider、来源 URL、bounded snippets、结论、session ID
-和 SHA-256。Relay、Serper 和上游 key 会在写入前脱敏。完整搜索结果只在
+和 SHA-256。Relay、Serper 和上游 key 会在写入前脱敏；同一份脱敏后的结论
+才会写入 Pi session 或发送到浏览器，避免凭据从模型回显路径泄露。完整搜索结果只在
 当前工具返回中可见；`context` handler 在下一次 provider request 前替换
 为 pointer + conclusion。关闭浏览器不会影响 User VM 文件或 Pi session。
 
