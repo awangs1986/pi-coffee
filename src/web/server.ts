@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
@@ -11,12 +12,19 @@ import {
 } from "../shared/protocol.js";
 import { HostClient } from "./host-client.js";
 
+/** PEM material for the optional HTTPS route (internal CA); HTTP when omitted. */
+export interface TlsMaterial {
+  cert: string | Buffer;
+  key: string | Buffer;
+}
+
 export interface WebServerOptions {
   host?: string;
   port?: number;
   hostUrl: string;
   hostToken?: string;
   publicDir?: string;
+  tls?: TlsMaterial;
 }
 
 export interface WebAddress {
@@ -34,6 +42,7 @@ export class WebServer {
   private readonly http: HttpServer;
   private readonly wsServer: WebSocketServer;
   private readonly bridges = new Set<BrowserBridge>();
+  private readonly secure: boolean;
   private started = false;
 
   constructor(options: WebServerOptions) {
@@ -42,7 +51,9 @@ export class WebServer {
     this.hostUrl = options.hostUrl;
     this.hostToken = options.hostToken;
     this.publicDir = options.publicDir ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../public");
-    this.http = createServer((request, response) => void this.handleHttp(request, response));
+    this.secure = options.tls !== undefined;
+    const handler = (request: IncomingMessage, response: ServerResponse) => void this.handleHttp(request, response);
+    this.http = options.tls ? createHttpsServer({ cert: options.tls.cert, key: options.tls.key }, handler) : createServer(handler);
     this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
     this.http.on("upgrade", (request, socket, head) => this.handleUpgrade(request, socket, head));
     this.wsServer.on("connection", (socket) => {
@@ -77,6 +88,11 @@ export class WebServer {
     const address = this.http.address();
     if (address === null || typeof address === "string") throw new Error("WebServer is not listening");
     return { host: this.host, port: address.port };
+  }
+
+  /** `https` when started with TLS material, otherwise `http`. */
+  get scheme(): "http" | "https" {
+    return this.secure ? "https" : "http";
   }
 
   async close(): Promise<void> {

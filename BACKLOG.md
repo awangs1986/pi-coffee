@@ -311,6 +311,7 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 完成 `ARCH-001` pi-web 评估（`docs/research/pi-web-evaluation-20260903.md`），建议路线 B；`OPEN-009` 有了候选答案，待 owner 确认。 |
 | 2026-09-03 | 建立 `WEB-001/002`：官方 `pi-web-access` 通过 native adapter 接入，Serper key 保持在 Control Plane，研究结果按 User VM Markdown artifact + pointer context 封盘。 |
 | 2026-09-03 | owner 选定路线 B 并重申约束：计算全在 Host、聊天记录永久存 VM、每次打开 Web 可见历史。落地 `SHELL-001b` + ADR-0008：浏览器零缓存，会话列表/历史由 Host 从 Pi 会话存储提供，空闲 Pi 进程自动停止并可恢复。`ARCH-001` 关闭，`OPEN-009` 已回答。 |
+| 2026-09-03 | owner 决策：HTTPS 作为**备选路线**先做出来，0.1 仍用 HTTP。Web Server 与传输端口均支持证书文件（内网 CA），全有或全无；`npm start` 拒绝只加密一侧的配置。runbook 新增 "Optional route: HTTPS with an internal CA"。 |
 | 2026-09-03 | owner 决策 ADR-0009：文件传输采用 LocalSend v2，浏览器与 User VM 点对点，B 不经手字节；局域网、明文 HTTP、不考虑手机场景。交付 `FILE-001a`（Host TransferServer + 网页附件直传/进度/引用/下载），发版 `v0.1.0-mvp.3`。 |
 | 2026-09-03 | 交付 D（`SHELL-001a`）：Extension UI 对话框与即发即忘方法接到浏览器，挂起对话跨刷新重发；空会话不再进入共享列表，空闲回收时删除。发版 `v0.1.0-mvp.2`。 |
 | 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |

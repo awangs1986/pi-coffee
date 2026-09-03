@@ -60,6 +60,8 @@ Settings:
 | `PI_COFFEE_TRANSFER_BIND` / `PI_COFFEE_TRANSFER_PORT` | `0.0.0.0` / `53317` | host | LocalSend v2 file transfer served on the User VM's LAN interface; `off` disables |
 | `PI_COFFEE_TRANSFER_ADVERTISE` | first LAN IPv4 | host | address browsers use to reach the transfer port |
 | `PI_COFFEE_MAX_FILE_BYTES` / `PI_COFFEE_MAX_BATCH_BYTES` | 256 MiB / 1 GiB | host | upload limits |
+| `PI_COFFEE_WEB_TLS_CERT` / `PI_COFFEE_WEB_TLS_KEY` | unset | web | optional HTTPS (internal CA); pair with the transfer TLS below |
+| `PI_COFFEE_TRANSFER_TLS_CERT` / `PI_COFFEE_TRANSFER_TLS_KEY` | unset | host | optional HTTPS for the transfer port; LocalSend fingerprint becomes the cert SHA-256 |
 | `PI_COFFEE_PROVIDER` / `PI_COFFEE_MODEL` | Pi default | host | provider/model from `models.json` |
 | `PI_COFFEE_RELAY_TOKEN` | unset | host | this VM's Relay token, interpolated by Pi from `models.json` |
 | `PI_COFFEE_RELAY_BIND` / `PI_COFFEE_RELAY_PORT` | `127.0.0.1` / `8789` | relay | Relay bind |
