@@ -118,4 +118,28 @@ describe("PI Coffee web extension", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("scrubs credentials from the session entry and browser message as well as the artifact", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-coffee-web-extension-"));
+    const previous = process.env.PI_COFFEE_SERPER_KEY;
+    process.env.PI_COFFEE_SERPER_KEY = "serper-conclusion-secret";
+    try {
+      const pi = new FakePi();
+      createWebExtension({
+        transport: new MemorySearchTransport([{ title: "Source", url: "https://example.com", snippet: "fact" }]),
+        artifactStore: new ResearchArtifactStore(root),
+        delegateByDefault: false,
+      })(pi.asExtensionApi());
+      await pi.runTool("web_search", { query: "fact" });
+      await pi.runTool("research_seal", { responseId: "memory-1", conclusion: "serper-conclusion-secret must be hidden" });
+      const sealed = pi.entries.find((entry) => entry.customType === "pi-coffee-research-sealed");
+      expect(sealed.data.conclusion).not.toContain("serper-conclusion-secret");
+      expect(JSON.stringify(pi.messages)).not.toContain("serper-conclusion-secret");
+      expect(await readFile(sealed.data.ref.path, "utf8")).not.toContain("serper-conclusion-secret");
+    } finally {
+      if (previous === undefined) delete process.env.PI_COFFEE_SERPER_KEY;
+      else process.env.PI_COFFEE_SERPER_KEY = previous;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -2,7 +2,7 @@ import type { ContextEvent, ExtensionAPI, ExtensionContext, ToolDefinition } fro
 import { Type } from "typebox";
 import { registerCapabilityManifest } from "../capabilities/registry.js";
 import { invokeNativeSubagent } from "../subagents/delegation.js";
-import { ResearchArtifactStore, pointerContext, type ResearchArtifactRef } from "./research-artifact.js";
+import { ResearchArtifactStore, pointerContext, redactSecrets, type ResearchArtifactRef } from "./research-artifact.js";
 import {
   MemorySearchTransport,
   RelaySearchTransport,
@@ -255,15 +255,20 @@ function sealResearch(
   ctx: ExtensionContext,
 ): SealedResearch {
   if (research.sealed !== undefined) return research.sealed;
+  // The artifact renderer scrubs independently, but the bounded conclusion is
+  // also persisted in Pi's append-only session and sent to the browser. Scrub
+  // before either write so a model cannot accidentally echo a credential into
+  // the transcript or context projection.
+  const safeConclusion = redactSecrets(conclusion).trim().slice(0, 32_000) || "(no conclusion recorded)";
   const ref = artifactStore.seal({
     responseId: research.batch.responseId,
     sessionId: sessionId(ctx),
     queries: research.batch.queries,
     provider: research.batch.provider,
     results: research.batch.results,
-    conclusion,
+    conclusion: safeConclusion,
   });
-  const sealed: SealedResearch = { version: 1, responseId: research.batch.responseId, toolCallId: research.toolCallId, conclusion: conclusion.slice(0, 32_000), ref };
+  const sealed: SealedResearch = { version: 1, responseId: research.batch.responseId, toolCallId: research.toolCallId, conclusion: safeConclusion, ref };
   research.sealed = sealed;
   sealedByToolCall.set(research.toolCallId, sealed);
   pi.appendEntry(SEALED_ENTRY, sealed);
@@ -271,7 +276,7 @@ function sealResearch(
   if (typeof sendMessage === "function") {
     sendMessage.call(pi, {
       customType: "research-sealed",
-      content: [{ type: "text", text: `${ref.pointer}\nConclusion: ${conclusion.slice(0, 8_000)}` }],
+      content: [{ type: "text", text: `${ref.pointer}\nConclusion: ${safeConclusion.slice(0, 8_000)}` }],
       display: true,
       details: { artifactId: ref.artifactId, sha256: ref.sha256 },
     }, { triggerTurn: false });
