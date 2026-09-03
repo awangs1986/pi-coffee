@@ -51,11 +51,12 @@ Issue 验收；在这些证据产生前，不应把 0.1 或 Web Search 称为生
 | `npm run smoke:subagents` | 通过 | `subagent`/`bg_wait` 可发现；Harness Simple=8、Full 基线不被改变 |
 | `git diff --check` | 通过 | 当前工作树无空白错误 |
 | `npm audit --omit=dev --audit-level=high` | 通过 | 生产依赖报告 0 vulnerabilities |
-| `scripts/smoke-real-model.mjs` | 未在本次审计运行 | 需要真实 Relay/模型配置；凭据不进入仓库 |
+| `scripts/smoke-real-model.mjs` | 通过 | 已在 `server-test` → `client-test` 两 VM 真实模型链路运行；证据见 [`vm-smoke-evidence-20260903.md`](./vm-smoke-evidence-20260903.md) |
 | `scripts/smoke-podman.mjs` | 未运行 | 当前审计环境没有 `podman` 命令；不是通过/失败证据 |
 
-离线验证证明的是代码路径和边界，不替代真实 VM 验收。真实部署证据应追加到
-Issue #5、#18、#24 和 #12，且不包含密钥或完整正文。
+离线验证和本次 VM 模拟证明了代码路径、网络和授权边界，但仍不替代完整生产部署
+验收。systemd、Serper、OAuth、上传/图片和故障恢复证据仍应追加到 Issue #5、#18、
+#24 和 #12，且不包含密钥或完整正文。
 
 ## 凭据与数据边界审计
 
