@@ -164,6 +164,9 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `ID-001` | `READY` | P0 | 内部 Gitea OAuth、logout/cookie 生命周期、固定 User VM/Host 路由、身份撤销和 fail-closed。 | `MVP-005` | [#8](http://testpc:3000/awangs/pi-coffee/issues/8) |
 | `DEP-001` | `READY` | P0 | Linux Mint Xfce User VM 的 Deployment Skill、固定 Pi 版本、systemd、一次性 enrollment、report/health/stop。 | `MVP-003`, `MVP-005` | [#9](http://testpc:3000/awangs/pi-coffee/issues/9) |
 | `SHELL-001` | `READY` | P0 | 单 Browser Shell 多 Task/Session、持久 ID/cursor、同 Task 串行、跨 Task 并行、refresh/close 后继续。 | `MVP-002`–`MVP-004`, `ID-001` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
+| `SHELL-001b` | `DONE` | P0 | **会话列表与历史来自 User VM 的 Pi 会话存储**（ADR-0008）：Host `list_sessions` / `history` 帧，按 id 用 `--session <file>` 恢复，浏览器零本地缓存，空闲 Pi 进程自动停止并可恢复。owner 决策：计算全在 Host、记录永久存 VM、每次打开可见历史。 | `MVP-006` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
+| `SHELL-001a` | `DONE` | P0 | **Extension UI 走通到浏览器**：`ui_response` 帧、confirm/select/input/editor 对话框（排队、`Esc` 取消、刷新/换设备后重发挂起对话）、notify/setStatus/setWidget/set_editor_text 呈现；Host 经 RPC 子协议回写 Pi。真实 Pi 扩展验证通过。V5 插件在网页上可"问"可"答"的前提已就位。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
+| `SHELL-001c` | `DONE` | P0 | **Codex 式体验 A/B/C**：完整 Markdown + 高亮 + 复制、工具卡（edit 用 Pi 记录的 patch）、工作过程折叠、重命名/删除/搜索/分组/列表推送、运行中排队与插话、模型/thinking 选择、斜杠命令面板、图片粘贴、用量与压缩、快捷键。缺口与排期见 [`docs/spec/web-shell-roadmap.md`](./docs/spec/web-shell-roadmap.md)。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `FILE-001` | `READY` | P0 | Task inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Task 限定下载引用。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
 | `OPS-001` | `READY` | P0 | Web/Relay/Host/Gitea/VM 故障语义、健康检查、浏览器断线连续性、手动快照恢复和发布验收。 | `CP-001`, `ID-001`, `DEP-001`, `FILE-001` | [#12](http://testpc:3000/awangs/pi-coffee/issues/12) |
 
@@ -177,7 +180,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `PERF-001` | `DISCOVERY` | `CP-001` | 测量 CPA 多级转发的首 token、持续吞吐、内存占用、断流和 backpressure。 | 有可重复 benchmark；只有在数据表明有收益时才减少 hop 或引入 Rust。 |
 | `MODEL-001` | `OPEN` | `FILE-001` | 定义模型 capability 检测、image block 格式和 path/reference fallback。 | 至少一个支持图片和一个不支持图片的 stub 测试，用户能看到明确状态。 |
 | `TASK-001` | `OPEN` | `SHELL-001` | 定义 Task 创建/归档/删除、worktree 命名、并发锁、冲突和取消语义。 | 同 Task 不发生并发写坏；不同 Task 的并行行为有测试。 |
-| `REC-001` | `READY` | `OPS-001` | Host 重启后用 native Pi session/transcript 恢复；Web 重启不杀 Host。 | 故障演练有命令、预期状态、恢复后 cursor/事件不重复不丢失。 |
+| `REC-001` | `READY` | `OPS-001` | Host 重启后用 native Pi session/transcript 恢复；Web 重启不杀 Host。**已完成一半**：已完成消息随 `SHELL-001b` 从会话存储恢复（Host 重启后 12 个会话与历史全部可见）；剩余为重启瞬间进行中的那一轮。 | 故障演练有命令、预期状态、恢复后 cursor/事件不重复不丢失。 |
 | `OBS-001` | `READY` | `CP-001`, `OPS-001` | 健康、路由、usage metadata、事件延迟和错误码的最小可观测性。 | metadata 有界且不含正文；每种故障有 user-visible 状态。 |
 | `QA-001` | `READY` | `OPS-001` | Debian Web/Control Plane + Linux Mint User VM 的 clean install/restart/upgrade 验收矩阵。 | fresh VM/快照恢复记录和发布清单附在 Issue。 |
 | `DOC-001` | `OPEN` | `OPS-001` | 将 `BACKLOG.md`、决策、MVP、0.1、拓扑、部署和开发入口镜像到 Gitea Wiki。 | Wiki 页面与 Git commit 对齐；不放敏感数据；Git 仍为版本化源。 |
@@ -210,7 +213,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 方向 | 启动门槛 | 第一项工作 |
 |---|---|---|---|---|
-| `ARCH-001` | `DISCOVERY` | 评估 `pi-web` fork、大量删改或重写的边界。**评估已完成**（[`docs/research/pi-web-evaluation-20260903.md`](./docs/research/pi-web-evaluation-20260903.md)）：pi-web 依赖同机进程内 SDK，与 MVP 形态和 ADR-0001 冲突，不可直接采用；建议路线 B——保持 seam，借其 Extension UI、原生会话历史、重连对齐规则与输入控件设计。待 owner 拍板。 | MVP/0.1 seam 稳定；确认许可证、协议、维护成本。 | 若采纳路线 B：拆 `SHELL-001a`（Extension UI 帧 + 对话框）与 `SHELL-001b`（Host 侧会话列表 + `get_session_entries` 持久游标，与 `REC-001` 共享）。 |
+| `ARCH-001` | `DONE` | 评估 `pi-web` fork、大量删改或重写的边界。评估见 [`docs/research/pi-web-evaluation-20260903.md`](./docs/research/pi-web-evaluation-20260903.md)：pi-web 依赖同机进程内 SDK，与 MVP 形态和 ADR-0001 冲突，不可直接采用。**owner 选定路线 B**——保持 seam，借其设计。 | — | 已拆 `SHELL-001b`（完成）与 `SHELL-001a`（READY）。 |
 | `ARCH-002` | `LATER` | Pi 原生插件/Skill 的扩展目录、版本锁定、安装和回滚。 | `DEP-001` 完成。 | 列出现有 Pi 原生扩展点，标出可复用模块。 |
 | `V5-001` | `LATER` | 从冻结 V5 参考中逐项提取有价值的领域能力。 | 0.1 release gate 通过；每个能力单独 ADR。 | 只做只读差异/依赖审计，不修改 V5。 |
 | `WORK-001` | `LATER` | Worktree 增强、Task 与仓库分支/补丁的生命周期。 | `TASK-001` 的 0.1 语义稳定。 | 定义组织模型和迁移策略；不得声称它提供安全隔离。 |
@@ -249,7 +252,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `OPEN-006` | Host 重启时 native transcript、cursor 和未完成事件如何恢复？ | 以 Pi 原生 session/transcript 为源；用 `REC-001` 故障演练定稿。 | `REC-001` |
 | `OPEN-007` | 图片模型 capability 如何发现，路径引用如何安全地展示/下载？ | `MODEL-001` 用两个 stub 模型覆盖。 | `FILE-001` |
 | `OPEN-008` | Deployment Skill 的具体 Skill 包格式、执行用户、systemd 单元和升级回滚策略是什么？ | 先写 idempotent dry-run/report，再做真实 VM 演练。 | `DEP-001` |
-| `OPEN-009` | `pi-web` fork 与自研 UI 的取舍是否改变？ | 评估结论见 `docs/research/pi-web-evaluation-20260903.md`：不 fork、不整机采用；保持 seam，借设计与协议用法，按需移植组件。等待 owner 确认后关闭。 | `ARCH-001` |
+| `OPEN-009` | `pi-web` fork 与自研 UI 的取舍是否改变？ | **已回答（owner 2026-09-03）**：不 fork、不整机采用；保持 seam，借设计与协议用法，按需移植组件。 | `ARCH-001` |
 | `OPEN-010` | Wiki 由谁发布、多久同步一次、是否自动化？ | Git 保持唯一版本源；`DOC-001` 记录发布流程。 | `DOC-001` |
 | `OPEN-011` | 是否需要把更多 Pi 原生插件装进 User VM？ | 先完成 `ARCH-002` 清单；没有具体收益不扩 scope。 | `PLUGIN-001` |
 
@@ -307,3 +310,6 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 接入锁定的 `pi-subagents@0.63.0`（Issue #17）：保留 Harness 8/10 基础表，增加可选 `subagent`/`bg_wait` 和资源 Adapter；真实 User VM 验收拆为 `SUBAGENT-002`。 |
 | 2026-09-03 | 完成 `ARCH-001` pi-web 评估（`docs/research/pi-web-evaluation-20260903.md`），建议路线 B；`OPEN-009` 有了候选答案，待 owner 确认。 |
 | 2026-09-03 | 建立 `WEB-001/002`：官方 `pi-web-access` 通过 native adapter 接入，Serper key 保持在 Control Plane，研究结果按 User VM Markdown artifact + pointer context 封盘。 |
+| 2026-09-03 | owner 选定路线 B 并重申约束：计算全在 Host、聊天记录永久存 VM、每次打开 Web 可见历史。落地 `SHELL-001b` + ADR-0008：浏览器零缓存，会话列表/历史由 Host 从 Pi 会话存储提供，空闲 Pi 进程自动停止并可恢复。`ARCH-001` 关闭，`OPEN-009` 已回答。 |
+| 2026-09-03 | 交付 D（`SHELL-001a`）：Extension UI 对话框与即发即忘方法接到浏览器，挂起对话跨刷新重发；空会话不再进入共享列表，空闲回收时删除。发版 `v0.1.0-mvp.2`。 |
+| 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |

@@ -4,9 +4,10 @@
 // Drives the browser-facing WebSocket exactly like the shell does:
 //   1. open  -> new Session
 //   2. prompt -> wait for streamed text_delta and agent_settled
-//   3. disconnect, reconnect with sessionId + after=<older cursor>
-//      -> assert bounded replay: only events with cursor > after, no duplicates
-//   4. reconnect with after=<latest cursor> -> assert zero replay
+//   3. disconnect; a browser with no local state lists sessions from the Host,
+//      opens the same one and receives the completed conversation as `history`
+//      (from Pi's session store in the User VM) with no replayed deltas
+//   4. reconnect with after=<latest cursor> -> still history, zero replay
 //
 // Needs a running Web Server (`npm start` or `npm run start:web` + Host) whose
 // Host has a real provider configured (see docs/deployment/runbook.md).
@@ -100,35 +101,44 @@ async function main() {
   step("cursors strictly increasing without gaps", { ok: monotonic, detail: `${cursors[0]}..${cursors.at(-1)}` });
   if (!monotonic) throw new Error("cursor sequence broken");
 
-  // ---- 3. disconnect (NOT a stop), reconnect with an older cursor ----
+  // ---- 3. a browser with NO local state: history comes from the Host, not from replay ----
   a.socket.close();
   await new Promise((r) => setTimeout(r, 300));
-  const after = Math.max(0, lastCursor - Math.min(5, lastCursor));
   const b = await connect();
-  send(b.socket, { type: "open", sessionId, after });
+  send(b.socket, { type: "list_sessions" });
+  const listed = await b.waitFor((f) => f.type === "sessions", "sessions", 15_000);
+  const listedOk = listed.sessions.some((s) => s.id === sessionId);
+  step("Host lists the conversation from its durable store", {
+    ok: listedOk,
+    detail: `${listed.sessions.length} sessions listed, includes ${sessionId.slice(0, 8)}=${listedOk}`,
+  });
+  if (!listedOk) throw new Error("session missing from list");
+  send(b.socket, { type: "open", sessionId });
   const reopened = await b.waitFor((f) => f.type === "opened", "reopened", 15_000);
-  // replay arrives synchronously after `opened`; give the socket a moment to flush
+  const history = await b.waitFor((f) => f.type === "history", "history", 15_000);
   await new Promise((r) => setTimeout(r, 500));
   const replay = b.frames.filter((f) => f.type === "event");
-  const replayCursors = replay.map((f) => f.cursor);
-  const expected = cursors.filter((c) => c > after);
-  const replayOk =
+  const historyText = history.entries.map((e) => e.text ?? "").join("\n");
+  const historyOk =
     reopened.sessionId === sessionId &&
     reopened.cursor === lastCursor &&
-    JSON.stringify(replayCursors) === JSON.stringify(expected) &&
-    !reopened.state.isStreaming;
-  step("reconnect replays exactly cursor>after, session survived disconnect", {
-    ok: replayOk,
-    detail: `after=${after} replayed=[${replayCursors.join(",")}] expected=[${expected.join(",")}] hostCursor=${reopened.cursor} isStreaming=${reopened.state.isStreaming}`,
+    !reopened.state.isStreaming &&
+    history.entries.some((e) => e.kind === "user" && e.text === PROMPT) &&
+    historyText.includes(text.trim()) &&
+    replay.length === 0;
+  step("fresh browser gets the completed conversation as history and no replayed deltas", {
+    ok: historyOk,
+    detail: `history=${history.entries.length} entries (${history.entries.map((e) => e.kind).join(",")}) truncated=${history.truncated} replayed=${replay.length} hostCursor=${reopened.cursor} isStreaming=${reopened.state.isStreaming}`,
   });
-  if (!replayOk) throw new Error("replay mismatch");
+  if (!historyOk) throw new Error("history mismatch");
   b.socket.close();
   await new Promise((r) => setTimeout(r, 300));
 
-  // ---- 4. reconnect fully caught up -> zero replay ----
+  // ---- 4. returning browser with a cursor: still history + nothing in flight ----
   const c = await connect();
   send(c.socket, { type: "open", sessionId, after: lastCursor });
   await c.waitFor((f) => f.type === "opened", "reopened caught-up", 15_000);
+  await c.waitFor((f) => f.type === "history", "history again", 15_000);
   await new Promise((r) => setTimeout(r, 500));
   const none = c.frames.filter((f) => f.type === "event").length;
   step("caught-up reconnect replays nothing", { ok: none === 0, detail: `${none} events replayed` });

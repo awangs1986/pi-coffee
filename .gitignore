@@ -7,3 +7,5 @@ sessions/
 *.log
 .scratch/
 .DS_Store
+
+public/vendor-*.js

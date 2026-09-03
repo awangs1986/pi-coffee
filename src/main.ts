@@ -47,6 +47,7 @@ async function run(selectedRole: Role): Promise<void> {
     port: envNumber("PI_COFFEE_HOST_PORT", 8788),
     token: process.env.PI_COFFEE_HOST_TOKEN,
     eventBufferSize: envNumber("PI_COFFEE_EVENT_BUFFER", 256),
+    idleTimeoutMs: envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000),
     factory: new RpcPiSessionFactory({
       cwd: process.env.PI_COFFEE_WORKDIR ?? process.cwd(),
       agentDir: process.env.PI_COFFEE_AGENT_DIR,

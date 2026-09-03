@@ -86,26 +86,47 @@ output is the acceptance evidence for [#5](http://testpc:3000/awangs/pi-coffee/i
 
 ## Browser shell
 
-`public/` is a dependency-free static shell (`index.html`, `app.css`, `app.js`)
-served by the Web Server from an allow-list of flat file names. It follows the
-familiar Codex layout in a white theme:
+`public/` is a build-free static shell served by the Web Server from an
+allow-list of flat file names: `index.html`, `app.css`, ES modules `app.js`
+(controller), `render.js` (Markdown, tool cards, diff), `highlight.js`,
+`diff.js`, plus two vendored MIT libraries copied from `node_modules` at build
+time (`vendor-marked.js`, `vendor-purify.js`). It follows the familiar Codex
+layout in a white theme; the gap list and roadmap are in
+[`web-shell-roadmap.md`](./web-shell-roadmap.md).
 
-- Left sidebar: "新对话", the list of conversations known to this browser, and
-  the connection state. Selecting a conversation reopens that Host Session.
-- Main column: user messages as light bubbles, assistant text rendered with a
-  minimal escaped Markdown subset (fenced code, inline code, bold), tool
-  executions as collapsible cards (`tool name`, argument summary, running /
-  完成 / 失败, result), and notes for model errors, auto-retry and
-  `resync_required`.
-- Composer: rounded card, Enter sends, Shift+Enter inserts a newline. While the
-  Host reports `isStreaming` the send button becomes a stop button that sends
-  `abort`.
+- Left sidebar: "新对话", the list of conversations **from the User VM's session
+  store** (served by the Host on `list_sessions`), and the connection state.
+  Selecting a conversation opens that Session on the Host, which resumes it
+  from the store if no Pi process is live for it.
+- Main column: user messages as light bubbles (with image thumbnails),
+  assistant text rendered as sanitized GFM Markdown with highlighted code
+  blocks and copy buttons, one run's tool calls grouped under a collapsible
+  "工作过程" with per-tool views (edit → the patch Pi recorded, write → added
+  lines, read → code, bash → command and output), and notes for model errors,
+  auto-retry, extension notifications and `resync_required`. Assistant
+  messages offer copy and regenerate.
+- Sidebar: search, time groups, rename/delete menu (delete removes the file
+  from the User VM store after confirmation); the Host pushes list changes.
+- Composer: rounded card, Enter sends, Shift+Enter inserts a newline; model and
+  thinking selectors (`get_models`), `/` command palette (`get_commands`),
+  image paste/drop, a context-usage chip that compacts on click
+  (`get_stats`/`compact`). While the Host reports `isStreaming` the composer
+  stays usable: messages are queued (`follow_up`) or interjected (`steer`),
+  and a stop button sends `abort`. `Ctrl/⌘+K` starts a new conversation.
+- Extension UI: Pi extensions' `ctx.ui.confirm/select/input/editor` become
+  modal dialogs answered over `ui_response` (re-delivered after a reload while
+  the extension is still waiting); `notify`, `setStatus`, `setWidget` and
+  `set_editor_text` render as notes, status chips, a widget strip and composer
+  prefill.
 
-The shell keeps a bounded per-conversation display cache in `localStorage`
-(last 120 entries, 30 conversations). This is a rendering convenience only:
-the Host owns Session state, reconnects use `sessionId` + `after=cursor`, and
-removing a conversation from the sidebar does not touch the Host. Durable
-history that survives a new browser belongs to 0.1 `SHELL-001` (#10).
+The shell is stateless (ADR-0008): on every `open` it renders the `history`
+frame the Host projects from Pi's durable session file, then applies only the
+in-flight tail of live events. A browser with empty storage on another
+machine sees exactly the same conversations and history; a Host restart or an
+idle shutdown of the Pi process loses nothing. The only thing kept in
+`localStorage` is the id of the conversation last displayed, so a reload lands
+on the same one. All computation, including history projection and session
+listing, happens on the Host in the User VM.
 
 ## Relay evidence
 
@@ -123,5 +144,7 @@ evidence is on [#7](http://testpc:3000/awangs/pi-coffee/issues/7).
 ## Known gaps before calling it deployed
 
 One Web Server bridges to exactly one User VM Host; per-user routing arrives
-with Gitea OAuth (`ID-001`). Host-process restart recovery (`REC-001`), the
-Deployment Skill (`DEP-001`), and upload/image handling belong to 0.1.
+with Gitea OAuth (`ID-001`). Completed conversations already survive a Host
+restart (they live in Pi's session store); recovering a run that was
+mid-stream when the Host died is `REC-001`. The Deployment Skill (`DEP-001`)
+and upload/image handling belong to 0.1.

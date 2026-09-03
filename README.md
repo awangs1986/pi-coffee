@@ -55,7 +55,8 @@ Settings:
 | `PI_COFFEE_HOST_TOKEN` | unset | web, host | shared Host bearer token; **required** when the Host is not on loopback |
 | `PI_COFFEE_WORKDIR` | current directory | host | Pi working directory |
 | `PI_COFFEE_AGENT_DIR` | Pi default | host | Pi config directory (`models.json`) |
-| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory |
+| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory — the durable conversation store the sidebar and history are served from |
+| `PI_COFFEE_IDLE_TIMEOUT_MS` | `600000` | host | stop a Pi process with no browser attached and nothing running; conversations resume from the store |
 | `PI_COFFEE_PROVIDER` / `PI_COFFEE_MODEL` | Pi default | host | provider/model from `models.json` |
 | `PI_COFFEE_RELAY_TOKEN` | unset | host | this VM's Relay token, interpolated by Pi from `models.json` |
 | `PI_COFFEE_RELAY_BIND` / `PI_COFFEE_RELAY_PORT` | `127.0.0.1` / `8789` | relay | Relay bind |
@@ -95,6 +96,10 @@ not proactively initialize its todo tool, `/todos` command, or live overlay. Set
 `pi-mcp-adapter@2.32.1` is packaged for an explicit opt-in path only. PI Coffee does not
 proactively initialize its MCP proxy tool, discover MCP servers, or start server runtimes.
 Set `PI_COFFEE_PI_MCP_ADAPTER=on` for a Host session when MCP access is explicitly requested.
+
+The browser shell in `public/` is build-free ES modules. `npm run build` copies
+two MIT libraries (`marked`, `dompurify`) from `node_modules` into
+`public/vendor-*.js` (git-ignored) and `dist/public/`; nothing else is bundled.
 
 The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the
