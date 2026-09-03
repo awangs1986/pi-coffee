@@ -27,4 +27,3 @@ export function createSubagentsManifest(
     supportsProxyCall: false,
   };
 }
-
