@@ -11,8 +11,9 @@ const resolvePackage = createRequire(import.meta.url).resolve;
  * Resolve the native extension entries loaded by every Agent Host session.
  *
  * `PI_COFFEE_EXTENSIONS` is an explicit replacement list. With no override,
- * PI Coffee loads its Harness, the pinned upstream pi-subagents entry, its
- * resource Adapter, and context-fold. context-fold is deliberately last:
+ * PI Coffee loads its local Web adapter, Harness, the pinned upstream
+ * pi-subagents entry, official pi-web-access, its resource Adapter, and
+ * context-fold. context-fold is deliberately last:
  * Pi keeps the last non-empty `session_before_compact` result, so its
  * deterministic summary wins over any companion extension. If context-fold
  * cannot produce a result it returns void, which leaves Pi's native
@@ -34,10 +35,14 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
   }
 
   const harness = resolveHarnessExtension();
-  const extensions = [harness];
+  const extensions = isDisabled(env.PI_COFFEE_WEB)
+    ? [harness]
+    : [resolveWebExtension(), harness];
   if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) {
-    extensions.push(resolvePiSubagentsExtension(), resolvePiSubagentsResourceExtension());
+    extensions.push(resolvePiSubagentsExtension());
   }
+  if (!isDisabled(env.PI_COFFEE_WEB_ACCESS)) extensions.push(resolvePiWebAccessExtension());
+  if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) extensions.push(resolvePiSubagentsResourceExtension());
   if (isEnabled(env.PI_COFFEE_PI_LENS)) extensions.push(resolvePiLensExtension(env));
   if (isEnabled(env.PI_COFFEE_RPIV_TODO)) extensions.push(resolveRpivTodoExtension(env));
   if (isEnabled(env.PI_COFFEE_PI_MCP_ADAPTER)) extensions.push(resolvePiMcpAdapterExtension(env));
@@ -49,9 +54,22 @@ export function resolveHarnessExtension(): string {
   return join(moduleDirectory, "harness", "extension.js");
 }
 
+export function resolveWebExtension(): string {
+  return join(moduleDirectory, "web", "extension.js");
+}
+
 /** Resolve the official package entry; Pi's loader handles its TypeScript source. */
 export function resolvePiSubagentsExtension(): string {
   return resolvePackage("pi-subagents");
+}
+
+/** Resolve the official pi-web-access package entry. */
+export function resolvePiWebAccessExtension(): string {
+  return join(moduleDirectory, "web", "pi-web-access-adapter.js");
+}
+
+export function resolvePiWebAccessPackage(): string {
+  return resolvePackage("pi-web-access/index.ts");
 }
 
 export function resolvePiSubagentsResourceExtension(): string {

@@ -117,6 +117,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-041` | `LATER` | 除已明确登记的 Harness 基础表外，V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 每个后续迁移必须单独评审、单独验收；不得借 Harness ticket 偷渡其他模块。 |
 | `D-042` | `DECIDED` | 当前 V3 提示词（含三次演化后的结果）是 PI Coffee Harness 的内容基线；PI Coffee 只做面向原版 Pi 的语义修补，交付 `lean` 与 `full` 两个 profile。 | Prompt 必须保持语义准确、只描述实际可用能力，不产生不存在的执行副作用。以 V3-derived、Pi-native 的 fixture 为唯一正文来源；CCB 只作为行为参考。见 `HARNESS-001`。 |
 | `D-043` | `DECIDED` | 第一项 V5 Harness 迁移以 Gitea `awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f` 为冻结基线；Simple 固定 8 个工具，Full 固定 10 个工具，并通过原版 Pi extension seam 接入。 | 只移植工具表/接口和可在 User VM 诚实执行的行为；不恢复 V5 Guard、权限、managed snapshot、Devloop 或 Completion Label。见 `HARNESS-002`。 |
+| `D-044` | `DECIDED` | Web 搜索使用 PI Coffee 本地 `web_search` + Control Plane Serper Relay；官方 `pi-web-access` 只保留非冲突内容工具；搜索结论写入 User VM Markdown，后续 context 只保留指针和结论。 | Serper key 不得进入 User VM；子 Agent 通过官方 delegation event 调用；Web capability 不改变 Harness 8/10 基础表。见 `WEB-001`。 |
 
 ### 1.1 被替换的早期方案
 
@@ -193,6 +194,13 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 |---|---|---:|---|---|---|
 | `SUBAGENT-001` | `DONE` | P1 | 锁定并加载官方 `pi-subagents@0.63.0`；通过本地资源 Adapter 暴露其 skills/prompts；让 `search_tools` 可发现/按需激活 `subagent` 与 `bg_wait`，且 Harness Simple/Full 仍为 8/10。 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
 | `SUBAGENT-002` | `READY` | P1 | 在真实 Linux Mint User VM + Web Shell 验证 foreground/background child、完成通知、停止/取消、浏览器断开后继续、Host 重启恢复和资源清理；未通过前不宣称生产可靠。 | `SUBAGENT-001`, `HARNESS-003` | [#18](http://testpc:3000/awangs/pi-coffee/issues/18) |
+
+### 2.6 Web Search 扩展切片
+
+| ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
+|---|---|---:|---|---|---|
+| `WEB-001` | `READY` | P1 | 接入官方 `pi-web-access@0.27.0` 的 Pi-native adapter；提供 Relay-backed Serper `web_search`、原生 `pi-subagents` research brief、User VM Markdown 封盘和 pointer-only context。 | `HARNESS-002`, `SUBAGENT-001`, `CP-001` | 待创建 |
+| `WEB-002` | `READY` | P1 | 在真实 User VM/Control Plane 验证 Serper key 隔离、官方内容工具、子 Agent 超时/取消、浏览器断开后继续和 Host 重启恢复。 | `WEB-001`, `SUBAGENT-002`, `OPS-001` | 待创建 |
 
 ---
 
@@ -284,6 +292,7 @@ MVP-001..005 (已完成)
 | V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001`, `HARNESS-003` |
 | V3 提示词修补为 Pi Lean/Full，并接入 V5 Harness 工具表 | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042..D-043`, `HARNESS-001..002` |
 | `pi-subagents` 上游扩展接入 Agent Host | [`docs/spec/subagents-plugin.md`](./docs/spec/subagents-plugin.md)、[`docs/research/pi-subagents-audit-20260903.md`](./docs/research/pi-subagents-audit-20260903.md) | `SUBAGENT-001..002`, `HARNESS-003` |
+| Web 搜索、Serper Relay、原生子 Agent 研究和 Markdown 封盘 | [`docs/spec/web-search-plugin.md`](./docs/spec/web-search-plugin.md)、[`docs/research/pi-web-access-audit-20260903.md`](./docs/research/pi-web-access-audit-20260903.md) | `D-044`, `WEB-001..002` |
 
 ## 8. 维护记录
 
@@ -297,3 +306,4 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 建立 `HARNESS-003`（Issue #16）：先验证 10 个基础工具可靠性，再逐个接入扩展工具。 |
 | 2026-09-03 | 接入锁定的 `pi-subagents@0.63.0`（Issue #17）：保留 Harness 8/10 基础表，增加可选 `subagent`/`bg_wait` 和资源 Adapter；真实 User VM 验收拆为 `SUBAGENT-002`。 |
 | 2026-09-03 | 完成 `ARCH-001` pi-web 评估（`docs/research/pi-web-evaluation-20260903.md`），建议路线 B；`OPEN-009` 有了候选答案，待 owner 确认。 |
+| 2026-09-03 | 建立 `WEB-001/002`：官方 `pi-web-access` 通过 native adapter 接入，Serper key 保持在 Control Plane，研究结果按 User VM Markdown artifact + pointer context 封盘。 |

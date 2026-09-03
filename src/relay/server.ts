@@ -10,6 +10,11 @@ export interface RelayServerOptions {
   upstreamBaseUrl: string;
   /** The sole upstream credential. Lives only in the Control Plane process. */
   upstreamKey: string;
+  /** Optional Serper credential; like upstreamKey it is held only here. */
+  serperApiKey?: string;
+  /** Injectable endpoint for tests; production defaults to Serper's API. */
+  serperEndpoint?: string;
+  serperTimeoutMs?: number;
   /** Bearer tokens Hosts present. Required unless bound to loopback. */
   clientTokens?: string[];
   /** Fail the request if upstream response headers do not arrive in time. */
@@ -60,6 +65,7 @@ const ROUTES: Record<string, ReadonlySet<string>> = {
   "/v1/chat/completions": new Set(["POST"]),
   "/v1/responses": new Set(["POST"]),
   "/v1/responses/compact": new Set(["POST"]),
+  "/v1/search/serper": new Set(["POST"]),
 };
 
 /** Never forwarded in either direction: hop-by-hop, framing, and credentials. */
@@ -104,6 +110,9 @@ export class RelayServer {
   private readonly port: number;
   private readonly upstreamBaseUrl: string;
   private readonly upstreamKey: string;
+  private readonly serperApiKey?: string;
+  private readonly serperEndpoint: string;
+  private readonly serperTimeoutMs: number;
   private readonly clientTokens: Set<string>;
   private readonly upstreamHeadersTimeoutMs: number;
   private readonly maxRequestBytes: number;
@@ -115,13 +124,16 @@ export class RelayServer {
   private started = false;
 
   constructor(options: RelayServerOptions) {
-    if (options.upstreamKey.length === 0) {
-      throw new Error("Relay needs the upstream credential: set PI_COFFEE_UPSTREAM_KEY");
+    if (options.upstreamKey.length === 0 && !(options.serperApiKey?.trim())) {
+      throw new Error("Relay needs an upstream or Serper credential: set PI_COFFEE_UPSTREAM_KEY or PI_COFFEE_SERPER_KEY");
     }
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 8789;
     this.upstreamBaseUrl = options.upstreamBaseUrl.replace(/\/+$/, "");
     this.upstreamKey = options.upstreamKey;
+    this.serperApiKey = options.serperApiKey?.trim() || undefined;
+    this.serperEndpoint = options.serperEndpoint ?? "https://google.serper.dev/search";
+    this.serperTimeoutMs = options.serperTimeoutMs ?? 60_000;
     this.clientTokens = new Set((options.clientTokens ?? []).filter((token) => token.length > 0));
     this.upstreamHeadersTimeoutMs = options.upstreamHeadersTimeoutMs ?? 60_000;
     this.maxRequestBytes = options.maxRequestBytes ?? 32 * 1024 * 1024;
@@ -245,6 +257,16 @@ export class RelayServer {
       record.stream = meta.stream;
     }
 
+    if (url.pathname === "/v1/search/serper") {
+      await this.handleSerperSearch(request, response, record, body ?? Buffer.alloc(0));
+      return;
+    }
+
+    if (this.upstreamKey.length === 0) {
+      reject(503, "relay_upstream_unconfigured", "OpenAI-compatible upstream is not configured on the Control Plane");
+      return;
+    }
+
     const controller = new AbortController();
     this.inflight.add(controller);
     let clientLeft = false;
@@ -324,6 +346,87 @@ export class RelayServer {
     } finally {
       this.inflight.delete(controller);
     }
+  }
+
+  private async handleSerperSearch(
+    request: IncomingMessage,
+    response: ServerResponse,
+    record: RelayRecord,
+    body: Buffer,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    if (this.serperApiKey === undefined) {
+      sendJson(response, 503, { error: { message: "Serper search is not configured on the Control Plane", type: "relay_search_unconfigured" } });
+      this.emit({ ...record, outcome: "rejected", status: 503, durationMs: Date.now() - startedAt });
+      return;
+    }
+    let input: SerperSearchRequest;
+    try {
+      input = parseSerperSearchRequest(body);
+    } catch (error) {
+      sendJson(response, 400, { error: { message: errorMessage(error), type: "relay_search_invalid_request" } });
+      this.emit({ ...record, outcome: "rejected", status: 400, durationMs: Date.now() - startedAt });
+      return;
+    }
+
+    const controller = new AbortController();
+    this.inflight.add(controller);
+    let clientLeft = false;
+    const onClose = () => {
+      if (response.writableFinished) return;
+      clientLeft = true;
+      controller.abort();
+    };
+    response.once("close", onClose);
+    const timer = setTimeout(() => controller.abort(), this.serperTimeoutMs);
+    try {
+      const responses = await Promise.all(input.queries.map((query) => this.fetchSerper(query, input, controller.signal)));
+      const results = responses.flatMap((entries) => entries).slice(0, input.queries.length * input.numResults);
+      const payload = {
+        responseId: randomUUID(),
+        provider: "serper",
+        queries: input.queries,
+        results,
+      };
+      const serialized = JSON.stringify(payload);
+      record.responseBytes = Buffer.byteLength(serialized, "utf8");
+      record.firstByteMs = Date.now() - startedAt;
+      sendJson(response, 200, payload);
+      this.emit({ ...record, outcome: "completed", status: 200, durationMs: Date.now() - startedAt });
+    } catch (error) {
+      if (clientLeft) {
+        this.emit({ ...record, outcome: "client_aborted", durationMs: Date.now() - startedAt });
+      } else if (controller.signal.aborted) {
+        sendJson(response, 504, { error: { message: `Serper search timed out after ${this.serperTimeoutMs} ms`, type: "relay_search_timeout" } });
+        this.emit({ ...record, outcome: "upstream_timeout", status: 504, durationMs: Date.now() - startedAt });
+      } else {
+        sendJson(response, 502, { error: { message: `Serper search failed: ${redactSearchError(error, this.serperApiKey)}`, type: "relay_search_error" } });
+        this.emit({ ...record, outcome: "upstream_error", status: 502, durationMs: Date.now() - startedAt });
+      }
+    } finally {
+      clearTimeout(timer);
+      response.off("close", onClose);
+      this.inflight.delete(controller);
+    }
+  }
+
+  private async fetchSerper(query: string, input: SerperSearchRequest, signal: AbortSignal): Promise<SearchResult[]> {
+    const response = await fetch(this.serperEndpoint, {
+      method: "POST",
+      headers: { "x-api-key": this.serperApiKey!, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        q: buildSerperQuery(query, input.domainFilter),
+        num: input.numResults,
+        ...(input.recencyFilter === undefined ? {} : { tbs: RECENCY_TBS[input.recencyFilter] }),
+      }),
+      signal,
+    });
+    const raw = await response.text();
+    if (!response.ok) throw new Error(`Serper upstream ${response.status}: ${raw.slice(0, 300)}`);
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { throw new Error("Serper upstream returned invalid JSON"); }
+    if (!isRecord(parsed) || !Array.isArray(parsed.organic)) throw new Error("Serper upstream response has no organic results");
+    return parsed.organic.map((entry) => normalizeSearchResult(entry, input.domainFilter)).filter((entry): entry is SearchResult => entry !== undefined).slice(0, input.numResults);
   }
 
   private isAuthorized(request: IncomingMessage): boolean {
@@ -429,4 +532,103 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
 function isLoopback(host: string): boolean {
   const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
   return h === "localhost" || h === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+}
+
+type SerperRecency = "day" | "week" | "month" | "year";
+
+interface SerperSearchRequest {
+  queries: string[];
+  numResults: number;
+  recencyFilter?: SerperRecency;
+  domainFilter: string[];
+}
+
+interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+const RECENCY_TBS: Record<SerperRecency, string> = {
+  day: "qdr:d",
+  week: "qdr:w",
+  month: "qdr:m",
+  year: "qdr:y",
+};
+
+function parseSerperSearchRequest(body: Buffer): SerperSearchRequest {
+  let value: unknown;
+  try { value = JSON.parse(body.toString("utf8")); } catch { throw new Error("request body must be JSON"); }
+  if (!isRecord(value)) throw new Error("request body must be an object");
+  const rawQueries = [
+    ...(typeof value.query === "string" ? [value.query] : []),
+    ...(Array.isArray(value.queries) ? value.queries : []),
+  ];
+  if (rawQueries.some((query) => typeof query !== "string")) throw new Error("query values must be strings");
+  const queries = [...new Set(rawQueries.map((query) => query.trim()).filter(Boolean))];
+  if (queries.length === 0 || queries.length > 4) throw new Error("provide 1 to 4 non-empty queries");
+  if (queries.some((query) => query.length > 512)) throw new Error("query exceeds 512 characters");
+  const numResults = value.numResults === undefined ? 5 : value.numResults;
+  if (typeof numResults !== "number" || !Number.isSafeInteger(numResults) || numResults < 1 || numResults > 20) throw new Error("numResults must be an integer from 1 to 20");
+  const recencyFilter = value.recencyFilter;
+  if (recencyFilter !== undefined && recencyFilter !== "day" && recencyFilter !== "week" && recencyFilter !== "month" && recencyFilter !== "year") throw new Error("invalid recencyFilter");
+  const domainFilter = Array.isArray(value.domainFilter)
+    ? value.domainFilter.filter((domain): domain is string => typeof domain === "string").map((domain) => domain.trim()).filter(Boolean).slice(0, 20)
+    : [];
+  return { queries, numResults, ...(recencyFilter === undefined ? {} : { recencyFilter }), domainFilter };
+}
+
+function buildSerperQuery(query: string, domains: string[]): string {
+  const clauses = [query];
+  for (const raw of domains) {
+    const excluded = raw.startsWith("-");
+    const domain = raw.replace(/^[-+]/, "").replace(/^https?:\/\//i, "").split("/")[0]?.trim();
+    if (!domain || !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(domain)) continue;
+    clauses.push(`${excluded ? "-" : ""}site:${domain}`);
+  }
+  return clauses.join(" ");
+}
+
+function normalizeSearchResult(value: unknown, domains: string[]): SearchResult | undefined {
+  if (!isRecord(value) || typeof value.link !== "string" || !/^https?:\/\//i.test(value.link)) return undefined;
+  if (!passesDomains(value.link, domains)) return undefined;
+  return {
+    title: typeof value.title === "string" && value.title.trim() ? value.title.trim().slice(0, 512) : "Untitled source",
+    url: value.link.slice(0, 2048),
+    snippet: typeof value.snippet === "string" ? value.snippet.slice(0, 1_000) : "",
+  };
+}
+
+function passesDomains(rawUrl: string, domains: string[]): boolean {
+  const include = domains.filter((domain) => !domain.startsWith("-")).map(normalizeDomain).filter((domain): domain is string => domain !== undefined);
+  const exclude = domains.filter((domain) => domain.startsWith("-")).map((domain) => normalizeDomain(domain.slice(1))).filter((domain): domain is string => domain !== undefined);
+  let hostname: string;
+  try { hostname = new URL(rawUrl).hostname.toLowerCase(); } catch { return false; }
+  const matches = (domain: string) => hostname === domain || hostname.endsWith(`.${domain}`);
+  if (exclude.some(matches)) return false;
+  return include.length === 0 || include.some(matches);
+}
+
+function normalizeDomain(value: string): string | undefined {
+  const input = value.trim().toLowerCase();
+  if (!input) return undefined;
+  try {
+    const hostname = new URL(input.includes("://") ? input : `https://${input}`).hostname.replace(/^\.+|\.+$/g, "");
+    return /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(hostname) ? hostname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function redactSearchError(error: unknown, secret: string): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split(secret).join("[REDACTED]").slice(0, 500);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
