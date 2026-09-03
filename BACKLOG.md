@@ -167,7 +167,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `SHELL-001b` | `DONE` | P0 | **会话列表与历史来自 User VM 的 Pi 会话存储**（ADR-0008）：Host `list_sessions` / `history` 帧，按 id 用 `--session <file>` 恢复，浏览器零本地缓存，空闲 Pi 进程自动停止并可恢复。owner 决策：计算全在 Host、记录永久存 VM、每次打开可见历史。 | `MVP-006` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001a` | `DONE` | P0 | **Extension UI 走通到浏览器**：`ui_response` 帧、confirm/select/input/editor 对话框（排队、`Esc` 取消、刷新/换设备后重发挂起对话）、notify/setStatus/setWidget/set_editor_text 呈现；Host 经 RPC 子协议回写 Pi。真实 Pi 扩展验证通过。V5 插件在网页上可"问"可"答"的前提已就位。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001c` | `DONE` | P0 | **Codex 式体验 A/B/C**：完整 Markdown + 高亮 + 复制、工具卡（edit 用 Pi 记录的 patch）、工作过程折叠、重命名/删除/搜索/分组/列表推送、运行中排队与插话、模型/thinking 选择、斜杠命令面板、图片粘贴、用量与压缩、快捷键。缺口与排期见 [`docs/spec/web-shell-roadmap.md`](./docs/spec/web-shell-roadmap.md)。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
-| `FILE-001` | `READY` | P0 | Task inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Task 限定下载引用。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
+| `FILE-001` | `READY` | P0 | Task inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Task 限定下载引用。**第一切片已交付（`FILE-001a`）**：ADR-0009，Host 提供 LocalSend v2 传输 API（53317，明文 HTTP，CORS），浏览器直传 User VM，B 不经手字节；限额、文件名安全化、SHA-256、进度事件、inbox 引用随 prompt 发送、Download API 下载。剩余：按 Gitea 身份的作用域（`ID-001`）、inbox 浏览面板、大图 path fallback 的模型侧策略。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
 | `OPS-001` | `READY` | P0 | Web/Relay/Host/Gitea/VM 故障语义、健康检查、浏览器断线连续性、手动快照恢复和发布验收。 | `CP-001`, `ID-001`, `DEP-001`, `FILE-001` | [#12](http://testpc:3000/awangs/pi-coffee/issues/12) |
 
 ### 2.3 0.1 横切子任务
@@ -311,5 +311,6 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 完成 `ARCH-001` pi-web 评估（`docs/research/pi-web-evaluation-20260903.md`），建议路线 B；`OPEN-009` 有了候选答案，待 owner 确认。 |
 | 2026-09-03 | 建立 `WEB-001/002`：官方 `pi-web-access` 通过 native adapter 接入，Serper key 保持在 Control Plane，研究结果按 User VM Markdown artifact + pointer context 封盘。 |
 | 2026-09-03 | owner 选定路线 B 并重申约束：计算全在 Host、聊天记录永久存 VM、每次打开 Web 可见历史。落地 `SHELL-001b` + ADR-0008：浏览器零缓存，会话列表/历史由 Host 从 Pi 会话存储提供，空闲 Pi 进程自动停止并可恢复。`ARCH-001` 关闭，`OPEN-009` 已回答。 |
+| 2026-09-03 | owner 决策 ADR-0009：文件传输采用 LocalSend v2，浏览器与 User VM 点对点，B 不经手字节；局域网、明文 HTTP、不考虑手机场景。交付 `FILE-001a`（Host TransferServer + 网页附件直传/进度/引用/下载），发版 `v0.1.0-mvp.3`。 |
 | 2026-09-03 | 交付 D（`SHELL-001a`）：Extension UI 对话框与即发即忘方法接到浏览器，挂起对话跨刷新重发；空会话不再进入共享列表，空闲回收时删除。发版 `v0.1.0-mvp.2`。 |
 | 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |

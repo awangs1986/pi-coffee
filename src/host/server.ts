@@ -7,10 +7,12 @@ import {
   MAX_FRAME_BYTES,
   type ClientFrame,
   type HistoryEntry,
+  type JsonValue,
   type ServerFrame,
 } from "../shared/protocol.js";
 import type { PiSessionFactory } from "./pi-adapter.js";
 import { HostSession, HostSessionRegistry, SessionBusyError, type SessionSink } from "./session.js";
+import type { TransferServer } from "./transfer.js";
 
 export interface HostServerOptions {
   host?: string;
@@ -20,6 +22,8 @@ export interface HostServerOptions {
   eventBufferSize?: number;
   /** Stop idle Pi processes after this long; the conversation stays in Pi's session store. */
   idleTimeoutMs?: number;
+  /** LocalSend v2 transfer endpoint on the User VM; browsers are told about it after `opened`. */
+  transfer?: TransferServer;
 }
 
 export interface HostAddress {
@@ -36,6 +40,7 @@ export class HostServer {
   private readonly port: number;
   private readonly token?: string;
   private readonly registry: HostSessionRegistry;
+  private readonly transfer?: TransferServer;
   private readonly http: HttpServer;
   private readonly sockets = new Set<HostSocket>();
   private readonly wsServer: WebSocketServer;
@@ -45,6 +50,7 @@ export class HostServer {
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 8788;
     this.token = options.token;
+    this.transfer = options.transfer;
     this.registry = new HostSessionRegistry({
       factory: options.factory,
       eventBufferSize: options.eventBufferSize,
@@ -62,7 +68,7 @@ export class HostServer {
     this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
     this.http.on("upgrade", (request, socket, head) => this.handleUpgrade(request, socket, head));
     this.wsServer.on("connection", (socket, request) => {
-      const hostSocket = new HostSocket(socket, request, this.registry, this.token);
+      const hostSocket = new HostSocket(socket, request, this.registry, this.transfer);
       this.sockets.add(hostSocket);
       hostSocket.onClose = () => this.sockets.delete(hostSocket);
     });
@@ -121,6 +127,11 @@ export class HostServer {
     return { host: this.host, port: address.port };
   }
 
+  /** Publish a Host-originated event (transfer progress, …) to a live Session's browsers. */
+  announce(sessionId: string, event: JsonValue): void {
+    this.registry.get(sessionId)?.announce(event);
+  }
+
   async close(): Promise<void> {
     if (!this.started) return;
     for (const socket of this.sockets) socket.close();
@@ -153,15 +164,17 @@ export class HostServer {
 class HostSocket implements SessionSink {
   private readonly socket: WebSocket;
   private readonly registry: HostSessionRegistry;
+  private readonly transfer?: TransferServer;
   private session?: HostSession;
   private opened = false;
   private closed = false;
   private messageQueue: Promise<void> = Promise.resolve();
   onClose: () => void = () => undefined;
 
-  constructor(socket: WebSocket, _request: IncomingMessage, registry: HostSessionRegistry, _token?: string) {
+  constructor(socket: WebSocket, _request: IncomingMessage, registry: HostSessionRegistry, transfer?: TransferServer) {
     this.socket = socket;
     this.registry = registry;
+    this.transfer = transfer;
     socket.on("message", (data) => {
       this.messageQueue = this.messageQueue.then(() => this.handleMessage(data)).catch(() => undefined);
     });
@@ -324,6 +337,19 @@ class HostSocket implements SessionSink {
       state,
     });
     this.send(boundedHistoryFrame(result.session.id, result.history.entries, result.history.leafId));
+    if (this.transfer) {
+      this.send({
+        v: 1,
+        type: "transfer",
+        sessionId: result.session.id,
+        url: this.transfer.publicUrl(),
+        scope: result.session.id,
+        token: this.transfer.issueToken(result.session.id),
+        inbox: this.transfer.inboxFor(result.session.id).split("\\").join("/"),
+        maxFileBytes: this.transfer.limits.maxFileBytes,
+        maxBatchBytes: this.transfer.limits.maxBatchBytes,
+      });
+    }
     if (result.resync) {
       this.send({
         v: 1,

@@ -296,6 +296,26 @@ button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline
 .attachment img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
 .attachment-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--bg); cursor: pointer; font-size: 13px; line-height: 1; }
 .app.dragging .composer { border-color: var(--busy); box-shadow: 0 0 0 3px rgb(37 99 235 / .15); }
+.upload-chip { position: relative; display: flex; align-items: center; gap: 8px; min-width: 220px; max-width: 320px; padding: 8px 28px 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-side); font-size: 12.5px; }
+.upload-chip .file-ico { font-size: 18px; }
+.upload-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.upload-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-meta { color: var(--text-3); font-size: 11.5px; }
+.upload-bar { display: block; height: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.upload-fill { display: block; height: 100%; width: 0; background: var(--busy); transition: width .15s; }
+.upload-chip.done .upload-fill { background: var(--ok); }
+.upload-chip.done .upload-bar { opacity: .5; }
+.upload-chip.failed { border-color: var(--danger-border); background: var(--danger-bg); }
+.upload-chip.failed .upload-fill { background: var(--danger); }
+.upload-chip.failed .upload-meta { color: var(--danger); }
+.upload-chip.cancelled { opacity: .6; }
+.upload-chip .attachment-remove { top: 6px; right: 6px; }
+.file-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); font-size: 12.5px; color: var(--text); text-decoration: none; }
+a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-subtle); }
+.file-chip .file-size { color: var(--text-3); }
+.tool-dl { font-size: 11.5px; color: var(--busy); text-decoration: none; border: 1px solid #bfdbfe; border-radius: 999px; padding: 0 8px; margin-left: 6px; }
+.tool-dl:hover { background: #eff6ff; }
 .queue { width: min(760px, 100%); margin: 0 auto 6px; display: flex; flex-direction: column; gap: 4px; }
 .queue-item { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; color: var(--text-2); padding: 5px 10px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--bg); }
 .queue-kind { font-size: 11px; color: var(--busy); border: 1px solid #bfdbfe; border-radius: 999px; padding: 0 6px; flex: none; }

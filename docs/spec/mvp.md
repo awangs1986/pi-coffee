@@ -113,6 +113,10 @@ layout in a white theme; the gap list and roadmap are in
   (`get_stats`/`compact`). While the Host reports `isStreaming` the composer
   stays usable: messages are queued (`follow_up`) or interjected (`steer`),
   and a stop button sends `abort`. `Ctrl/⌘+K` starts a new conversation.
+- Files: dropped, pasted or picked files travel **straight from the browser to
+  the User VM** over LocalSend v2 (ADR-0009) with real progress, land in the
+  conversation's inbox and are referenced by path in the prompt; attachments
+  and `read/write/edit` tool cards offer downloads over the same API.
 - Extension UI: Pi extensions' `ctx.ui.confirm/select/input/editor` become
   modal dialogs answered over `ui_response` (re-delivered after a reload while
   the extension is still waiting); `notify`, `setStatus`, `setWidget` and

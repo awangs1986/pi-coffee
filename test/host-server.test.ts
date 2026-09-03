@@ -1,5 +1,9 @@
 import { once } from "node:events";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WebSocket } from "ws";
+import { TransferServer } from "../src/host/transfer.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HistoryEntry, ImageInput } from "../src/shared/protocol.js";
 import { decodeServerFrame, encodeFrame, type ServerFrame } from "../src/shared/protocol.js";
@@ -533,6 +537,45 @@ describe("Host WebSocket seam", () => {
     second.send(encodeFrame({ v: 1, type: "ui_response", id: "ui-1", cancelled: true }));
     expect(await secondFrames.next()).toMatchObject({ type: "error", code: "unknown_ui_request" });
     second.close();
+  });
+
+  it("tells the browser where to transfer files and relays transfer events on the session stream", async () => {
+    const factory = new FakeFactory();
+    const workdir = mkdtempSync(join(tmpdir(), "pi-coffee-host-transfer-"));
+    const transfer = new TransferServer({ host: "127.0.0.1", port: 0, workdir, advertiseHost: "127.0.0.1", onEvent: (scope, event) => server?.announce(scope, event) });
+    await transfer.start();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory, transfer });
+    await server.start();
+    try {
+      const socket = await connect(server.address().port);
+      const frames = new FrameQueue(socket);
+      socket.send(encodeFrame({ v: 1, type: "open" }));
+      const opened = await frames.next();
+      if (opened.type !== "opened") throw new Error("expected opened");
+      await frames.next(); // history
+      const info = await frames.next();
+      expect(info).toMatchObject({ type: "transfer", sessionId: opened.sessionId, scope: opened.sessionId, url: `http://127.0.0.1:${transfer.address().port}`, inbox: `.pi-coffee/inbox/${opened.sessionId}` });
+      if (info.type !== "transfer") throw new Error("expected transfer");
+
+      // Upload with the advertised token: the browser talks to the transfer
+      // endpoint directly; the Host reports completion on the Session stream.
+      const prepared = await fetch(`${info.url}/api/localsend/v2/prepare-upload?scope=${info.scope}&token=${info.token}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ files: { a: { id: "a", fileName: "brief.md", size: 5 } } }),
+      });
+      const { sessionId, files } = await prepared.json() as { sessionId: string; files: Record<string, string> };
+      const up = await fetch(`${info.url}/api/localsend/v2/upload?sessionId=${sessionId}&fileId=a&token=${files.a}`, { method: "POST", body: "hello" });
+      expect(up.status).toBe(200);
+      // Progress events may precede completion; both ride the Session stream.
+      let event = await frames.next();
+      while (event.type === "event" && (event.event as { type?: string }).type === "transfer_progress") event = await frames.next();
+      expect(event).toMatchObject({ type: "event", sessionId: opened.sessionId, event: { type: "transfer_complete", fileName: "brief.md", path: `.pi-coffee/inbox/${opened.sessionId}/brief.md`, size: 5 } });
+      expect(existsSync(join(workdir, ".pi-coffee", "inbox", opened.sessionId, "brief.md"))).toBe(true);
+      socket.close();
+    } finally {
+      await transfer.close();
+      rmSync(workdir, { recursive: true, force: true });
+    }
   });
 
   it("refuses to listen on a non-loopback address without a transport token", async () => {

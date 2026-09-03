@@ -93,6 +93,35 @@ Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`
 
 Pi event payloads are opaque JSON values at this seam. The browser renders `message_update` → `text_delta`, tool execution start/end, `message_end` errors, `extension_ui_request` notifications and visible custom messages.
 
+### File transfer (ADR-0009)
+
+Files never cross this protocol or the Web Server. After `opened`/`history`
+the Host sends
+
+```json
+{"v":1,"type":"transfer","sessionId":"…","url":"http://<user-vm-lan-ip>:53317","scope":"<sessionId>","token":"…","inbox":".pi-coffee/inbox/<sessionId>","maxFileBytes":268435456,"maxBatchBytes":1073741824}
+```
+
+and the browser talks LocalSend v2 directly to that URL: `POST
+/api/localsend/v2/prepare-upload?scope&token` with the file list (optionally
+`sha256`), then one `POST /api/localsend/v2/upload?sessionId&fileId&token` per
+file with the raw bytes; `POST /cancel?sessionId` aborts. Files land in the
+inbox under Pi's working directory, so the prompt only needs to mention their
+paths. The Host reports progress on the ordinary event stream:
+
+```json
+{"type":"transfer_progress","sessionId":"<upload session>","fileId":"…","fileName":"…","received":123,"size":456}
+{"type":"transfer_complete","sessionId":"…","fileId":"…","fileName":"…","path":".pi-coffee/inbox/<sessionId>/name.pdf","size":456,"sha256":"…","fileType":"application/pdf"}
+{"type":"transfer_failed","sessionId":"…","fileId":"…","fileName":"…","message":"Checksum mismatch (sha256)"}
+```
+
+Downloads use the LocalSend download API against the same URL: `POST
+/prepare-download?scope&token` lists the inbox; `GET
+/download?scope&token&fileId=<workdir-relative path>` streams any file under
+the working directory (agent output included). A LocalSend app that sends
+without scope/token lands in the `shared` inbox. These are Host-originated
+events; unlike Pi events they are not part of the durable history.
+
 ## Lifetime rule
 
 Closing a Browser WebSocket detaches that Browser from the Session. It is not a stop command and must not interrupt Pi. The Host stops a Pi process only during Host shutdown or after the idle timeout above, and in both cases the conversation remains in Pi's session store.
