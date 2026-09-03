@@ -12,6 +12,7 @@ type Handler = (event: any, context: any) => unknown;
 class FakePi {
   readonly handlers = new Map<string, Handler[]>();
   readonly tools = new Map<string, ToolDefinition>();
+  readonly commands = new Map<string, { description: string; handler: (args: string, context: unknown) => unknown }>();
   readonly entries: any[] = [];
   readonly messages: any[] = [];
 
@@ -24,6 +25,10 @@ class FakePi {
   }
 
   registerTool(tool: ToolDefinition): void { this.tools.set(tool.name, tool); }
+
+  registerCommand(name: string, command: { description: string; handler: (args: string, context: unknown) => unknown }): void {
+    this.commands.set(name, command);
+  }
 
   appendEntry(customType: string, data: unknown): void {
     this.entries.push({ type: "custom", customType, data });

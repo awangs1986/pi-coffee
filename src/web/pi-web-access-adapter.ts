@@ -24,6 +24,16 @@ export default async function piWebAccessAdapter(pi: ExtensionAPI): Promise<void
           return target.registerTool(tool);
         };
       }
+      if (property === "registerCommand") {
+        return (name: string, command: Parameters<ExtensionAPI["registerCommand"]>[1]) => {
+          // The official curator/search command can call Serper or another
+          // provider directly. PI Coffee's local `/websearch` command is the
+          // only search entry point so the Control Plane key boundary cannot
+          // be bypassed by a later extension registration.
+          if (name === "websearch" || name === "curator") return;
+          return target.registerCommand(name, command);
+        };
+      }
       return Reflect.get(target, property, receiver);
     },
   });
