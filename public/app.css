@@ -193,6 +193,31 @@ button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline
 .chip-btn:hover { border-color: var(--border-strong); }
 .chip-btn.warn { color: var(--warn); border-color: #fcd34d; background: #fffbeb; }
 
+/* ---------- context usage popover ---------- */
+.stats-wrap { position: relative; display: flex; align-items: center; }
+.stats-pop { position: absolute; top: calc(100% + 8px); right: 0; width: 340px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgb(0 0 0 / .12); padding: 14px 16px; z-index: 60; font-size: 13px; }
+.stats-pop::before { content: ""; position: absolute; top: -8px; left: 0; right: 0; height: 8px; }
+.stats-head { display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; font-size: 14px; }
+.stats-num { color: var(--text-2); font-weight: 500; }
+.stats-sub { display: flex; justify-content: space-between; color: var(--text-3); font-size: 12px; margin: 4px 0 8px; }
+.stats-sub2 { color: var(--text-3); font-size: 12px; margin: 12px 0 6px; }
+.stats-bar { display: flex; height: 8px; border-radius: 999px; background: var(--bg-subtle); overflow: hidden; }
+.stats-bar .seg { display: block; height: 100%; }
+.stats-bar .seg.used { background: var(--busy); transition: width .3s; }
+.stats-bar .seg.used.warn { background: var(--warn); }
+.stats-bar .seg.used.danger { background: var(--danger); }
+.stats-bar.usage .seg + .seg { border-left: 1px solid var(--bg); }
+.c-in { background: #6366f1; } .c-out { background: #f97316; } .c-cr { background: #10b981; } .c-cw { background: #a855f7; }
+.stats-legend { margin-top: 2px; }
+.legend-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; color: var(--text-2); }
+.legend-row.muted { color: var(--text-3); font-size: 12px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 8px; }
+.legend-label { flex: 1; }
+.legend-val { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+.dot-sq { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.stats-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--text-2); }
+.btn.small { padding: 5px 10px; font-size: 12.5px; }
+.stats-note { margin-top: 10px; font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+
 /* ---------- markdown body ---------- */
 .msg.assistant .body { font-size: 15px; }
 .msg.assistant .body > *:first-child { margin-top: 0; }

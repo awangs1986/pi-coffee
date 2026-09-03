@@ -19,4 +19,8 @@ Rules baked into these files:
   extension by default. Set `PI_COFFEE_SUBAGENTS=off` to keep only Harness, or
   use `PI_COFFEE_EXTENSIONS=off` for a transport-only diagnostic.
 
+`podman/Containerfile` plus `scripts/smoke-podman.mjs` rehearse this exact
+three-process shape as containers on one machine (see the runbook's "Two-machine
+smoke with Podman"); it is a pre-flight check, not a deployment target.
+
 These are the MVP hand-installed units. The idempotent Deployment Skill with enrollment (`DEP-001`, #9) replaces the manual copy steps in 0.1.

@@ -18,6 +18,8 @@ const ui = {
   modal: $('#modal'), modalTitle: $('#modal-title'), modalText: $('#modal-text'), modalInput: $('#modal-input'),
   modalOk: $('#modal-ok'), modalCancel: $('#modal-cancel'), toast: $('#toast'),
   extStatus: $('#ext-status'), widgets: $('#widgets'),
+  statsWrap: $('#stats-wrap'), statsPop: $('#stats-pop'), spPct: $('#sp-pct'), spFill: $('#sp-fill'), spWindow: $('#sp-window'),
+  spBar: $('#sp-bar'), spLegend: $('#sp-legend'), spCost: $('#sp-cost'), spCompact: $('#sp-compact'),
   uiModal: $('#ui-modal'), uiTitle: $('#ui-title'), uiText: $('#ui-text'), uiOptions: $('#ui-options'), uiInput: $('#ui-input'),
   uiEditor: $('#ui-editor'), uiMeta: $('#ui-meta'), uiOk: $('#ui-ok'), uiNo: $('#ui-no'), uiCancel: $('#ui-cancel'),
 };
@@ -286,19 +288,80 @@ function renderHeader() {
   ui.topbarState.innerHTML = streaming ? '<span class="dot busy"></span>Pi 正在工作…' : '';
   renderStats();
 }
+function fmtTokens(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(n >= 100_000 ? 0 : 1) + 'K';
+  return String(n);
+}
 function renderStats() {
-  if (!statsCache || !activeId) { ui.stats.classList.add('hidden'); return; }
+  if (!statsCache || !activeId) { ui.stats.classList.add('hidden'); hideStatsPop(); return; }
   const usage = statsCache.contextUsage;
-  const pct = usage && typeof usage.percent === 'number' ? Math.round(usage.percent) + '%' : null;
+  const pct = usage && typeof usage.percent === 'number' ? usage.percent : null;
   const cost = statsCache.cost ? '$' + statsCache.cost.toFixed(3) : null;
-  const parts = [pct ? '上下文 ' + pct : null, cost].filter(Boolean);
-  if (parts.length === 0) { ui.stats.classList.add('hidden'); return; }
+  const parts = [pct !== null ? '上下文 ' + Math.round(pct) + '%' : null, cost].filter(Boolean);
+  if (parts.length === 0) { ui.stats.classList.add('hidden'); hideStatsPop(); return; }
   ui.stats.textContent = parts.join(' · ');
   ui.stats.classList.remove('hidden');
-  ui.stats.classList.toggle('warn', usage && typeof usage.percent === 'number' && usage.percent >= 75);
+  ui.stats.classList.toggle('warn', pct !== null && pct >= 75);
+
+  // Popover: what Pi actually reports. Context = what the model sees now;
+  // cumulative usage = everything this conversation has spent so far.
+  const t = statsCache.tokens || {};
+  ui.spPct.textContent = pct !== null ? Math.round(pct) + '% 已用' : '暂无估计';
+  ui.spFill.textContent = usage && typeof usage.tokens === 'number' ? '约 ' + fmtTokens(usage.tokens) + ' tokens' : '（压缩后等待下一次回复）';
+  ui.spWindow.textContent = usage ? '窗口 ' + fmtTokens(usage.contextWindow) : '';
+  const seg = ui.spBar.querySelector('.seg.used');
+  seg.style.width = Math.max(0, Math.min(100, pct ?? 0)) + '%';
+  seg.classList.toggle('warn', pct !== null && pct >= 75);
+  seg.classList.toggle('danger', pct !== null && pct >= 90);
+  const rows = [
+    ['累计输入', t.input, 'c-in'], ['累计输出', t.output, 'c-out'],
+    ['缓存读取', t.cacheRead, 'c-cr'], ['缓存写入', t.cacheWrite, 'c-cw'],
+  ];
+  const total = Math.max(1, t.total || rows.reduce((s, r) => s + (r[1] || 0), 0));
+  ui.spLegend.innerHTML = '';
+  const usageBar = el('div', 'stats-bar usage');
+  for (const [, value, cls] of rows) {
+    const s = el('span', 'seg ' + cls);
+    s.style.width = ((value || 0) / total * 100) + '%';
+    usageBar.appendChild(s);
+  }
+  ui.spLegend.appendChild(el('div', 'stats-sub2', '本次对话累计用量 · ' + fmtTokens(t.total) + ' tokens'));
+  ui.spLegend.appendChild(usageBar);
+  for (const [label, value, cls] of rows) {
+    const row = el('div', 'legend-row');
+    row.innerHTML = '<span class="dot-sq ' + cls + '"></span><span class="legend-label"></span><span class="legend-val"></span>';
+    row.querySelector('.legend-label').textContent = label;
+    row.querySelector('.legend-val').textContent = fmtTokens(value);
+    ui.spLegend.appendChild(row);
+  }
+  const msgs = el('div', 'legend-row muted');
+  msgs.textContent = `消息 ${statsCache.userMessages ?? 0} 用户 · ${statsCache.assistantMessages ?? 0} 助手 · ${statsCache.toolCalls ?? 0} 次工具调用`;
+  ui.spLegend.appendChild(msgs);
+  ui.spCost.textContent = cost ? '累计成本 ' + cost : '';
+  ui.spCompact.disabled = !opened || streaming || pct === null;
 }
-ui.stats.addEventListener('click', async () => {
+let statsHideTimer;
+function showStatsPop() {
+  if (ui.stats.classList.contains('hidden')) return;
+  clearTimeout(statsHideTimer);
+  ui.statsPop.classList.remove('hidden');
+  ui.stats.setAttribute('aria-expanded', 'true');
+  send({ v: 1, type: 'get_stats' });
+}
+function hideStatsPop(delay = 0) {
+  clearTimeout(statsHideTimer);
+  statsHideTimer = setTimeout(() => { ui.statsPop.classList.add('hidden'); ui.stats.setAttribute('aria-expanded', 'false'); }, delay);
+}
+ui.statsWrap.addEventListener('mouseenter', () => showStatsPop());
+ui.statsWrap.addEventListener('mouseleave', () => hideStatsPop(180));
+ui.stats.addEventListener('focus', () => showStatsPop());
+ui.stats.addEventListener('click', () => (ui.statsPop.classList.contains('hidden') ? showStatsPop() : hideStatsPop()));
+ui.statsWrap.addEventListener('focusout', (e) => { if (!ui.statsWrap.contains(e.relatedTarget)) hideStatsPop(120); });
+ui.spCompact.addEventListener('click', async () => {
   if (!opened || streaming) return;
+  hideStatsPop();
   const ok = await askModal({ title: '压缩上下文？', text: 'Pi 会把较早的对话总结为摘要以释放上下文窗口。记录本身不会丢失。', okLabel: '压缩' });
   if (!ok) return;
   send({ v: 1, type: 'compact', requestId: requestId('compact') });

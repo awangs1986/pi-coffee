@@ -65,7 +65,7 @@ async function main() {
   // ---- 1. open a fresh session ----
   const a = await connect();
   send(a.socket, { type: "open" });
-  const opened = await a.waitFor((f) => f.type === "opened", "opened", 15_000);
+  const opened = await a.waitFor((f) => f.type === "opened", "opened", Math.max(15_000, timeoutMs));
   const sessionId = opened.sessionId;
   step("open new session", { ok: true, detail: `sessionId=${sessionId} cursor=${opened.cursor}` });
 
@@ -114,7 +114,7 @@ async function main() {
   });
   if (!listedOk) throw new Error("session missing from list");
   send(b.socket, { type: "open", sessionId });
-  const reopened = await b.waitFor((f) => f.type === "opened", "reopened", 15_000);
+  const reopened = await b.waitFor((f) => f.type === "opened", "reopened", Math.max(15_000, timeoutMs));
   const history = await b.waitFor((f) => f.type === "history", "history", 15_000);
   await new Promise((r) => setTimeout(r, 500));
   const replay = b.frames.filter((f) => f.type === "event");
@@ -137,7 +137,7 @@ async function main() {
   // ---- 4. returning browser with a cursor: still history + nothing in flight ----
   const c = await connect();
   send(c.socket, { type: "open", sessionId, after: lastCursor });
-  await c.waitFor((f) => f.type === "opened", "reopened caught-up", 15_000);
+  await c.waitFor((f) => f.type === "opened", "reopened caught-up", Math.max(15_000, timeoutMs));
   await c.waitFor((f) => f.type === "history", "history again", 15_000);
   await new Promise((r) => setTimeout(r, 500));
   const none = c.frames.filter((f) => f.type === "event").length;

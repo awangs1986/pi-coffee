@@ -38,7 +38,20 @@
           <button class="topbar-title" id="title" type="button" title="点击重命名">新对话</button>
           <div class="ext-status" id="ext-status"></div>
           <div class="topbar-state" id="topbar-state"></div>
-          <button class="chip-btn hidden" id="stats" type="button" title="上下文用量 · 点击压缩上下文"></button>
+          <div class="stats-wrap" id="stats-wrap">
+            <button class="chip-btn hidden" id="stats" type="button" aria-haspopup="dialog" aria-expanded="false" title="上下文用量"></button>
+            <div class="stats-pop hidden" id="stats-pop" role="dialog" aria-label="上下文用量">
+              <div class="stats-head"><span>上下文用量</span><span class="stats-num" id="sp-pct"></span></div>
+              <div class="stats-sub"><span id="sp-fill"></span><span id="sp-window"></span></div>
+              <div class="stats-bar" id="sp-bar"><span class="seg used"></span></div>
+              <div class="stats-legend" id="sp-legend"></div>
+              <div class="stats-foot">
+                <span id="sp-cost"></span>
+                <button type="button" class="btn small" id="sp-compact">压缩上下文</button>
+              </div>
+              <div class="stats-note">占用与用量由 User VM 中的 Pi 统计；Pi 不区分系统提示 / 工具定义 / 对话三段。</div>
+            </div>
+          </div>
           <div class="topbar-meta" id="session-meta"></div>
         </header>
 

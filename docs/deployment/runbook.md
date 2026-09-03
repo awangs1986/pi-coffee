@@ -139,6 +139,39 @@ Then open `http://SERVER:3000/` in a browser and use the shell.
 | Idle Pi process stopped (`PI_COFFEE_IDLE_TIMEOUT_MS`, default 10 min) | nothing visible; the next open resumes the conversation from the store | none needed |
 | Host restarted | browser reconnects; every completed conversation is listed and readable; a message that was mid-stream at the crash is cut at its last completed message | resend the last prompt; mid-run recovery is `REC-001` (0.1) |
 
+## Two-machine smoke with Podman (no VMs)
+
+`scripts/smoke-podman.mjs` reproduces the deployment shape on one machine:
+three containers on a private network — `pi-coffee-relay` (sole upstream key),
+`pi-coffee-web` (Host token), `pi-coffee-uservm` (Host running as an
+unprivileged user with only its Relay token) — with just the Web port
+published.
+
+```bash
+export PI_COFFEE_UPSTREAM_KEY=…        # passed only to the relay container
+node scripts/smoke-podman.mjs          # builds deploy/podman/Containerfile, runs, tears down
+node scripts/smoke-podman.mjs --keep --publish 0.0.0.0:3300   # leave it up for others on the LAN
+```
+
+Options: `--image <name> --mount-source --no-build` runs from a locally
+imported base image with the checkout bind-mounted (for hosts that cannot
+reach a registry; run `npm ci && npm run build` for Linux inside the checkout
+first). Host proxies are not forwarded into the containers
+(`--http-proxy=false`). `PI_COFFEE_SMOKE_TIMEOUT_MS` raises the real-model
+waits when Pi starts slowly (a bind mount from Windows adds ~15 s to the first
+open). On Windows/WSL, publishing to the LAN additionally needs
+`netsh interface portproxy add v4tov4 listenport=3300 listenaddress=0.0.0.0 connectport=3300 connectaddress=127.0.0.1`
+and a firewall rule for the port.
+
+The script waits for the three `/healthz`, then asserts: the upstream key is
+absent from the uservm and web containers, the Relay answers 401 without a
+token, the Host refuses a tokenless upgrade, the real-model smoke passes
+through the whole path, a `hostname; whoami` tool call reports the uservm
+container and the unprivileged user, Relay metadata carries no content, and
+stopping the uservm container surfaces `host_unavailable` to the browser. It
+is a pre-flight rehearsal, not the deployment: systemd units, firewalling and
+the owner's VM remain the sections above.
+
 ## Developer smoke on one machine (no VMs)
 
 ```bash
