@@ -18,6 +18,7 @@ const ui = {
   modal: $('#modal'), modalTitle: $('#modal-title'), modalText: $('#modal-text'), modalInput: $('#modal-input'),
   modalOk: $('#modal-ok'), modalCancel: $('#modal-cancel'), toast: $('#toast'),
   extStatus: $('#ext-status'), widgets: $('#widgets'),
+  pluginsBtn: $('#plugins-btn'), pluginsModal: $('#plugins-modal'), pluginsBody: $('#plugins-body'), pluginsSub: $('#plugins-sub'), pluginsClose: $('#plugins-close'),
   statsWrap: $('#stats-wrap'), statsPop: $('#stats-pop'), spPct: $('#sp-pct'), spFill: $('#sp-fill'), spWindow: $('#sp-window'),
   spBar: $('#sp-bar'), spLegend: $('#sp-legend'), spCost: $('#sp-cost'), spCompact: $('#sp-compact'),
   uiModal: $('#ui-modal'), uiTitle: $('#ui-title'), uiText: $('#ui-text'), uiOptions: $('#ui-options'), uiInput: $('#ui-input'),
@@ -455,6 +456,7 @@ function afterOpened() {
   send({ v: 1, type: 'get_models' });
   send({ v: 1, type: 'get_commands' });
   send({ v: 1, type: 'get_stats' });
+  if (pluginsWaiting) send({ v: 1, type: 'get_extensions' });
 }
 
 function handleFrame(frame, ws) {
@@ -494,6 +496,10 @@ function handleFrame(frame, ws) {
       return;
     case 'stats':
       if (frame.sessionId === activeId) { statsCache = frame.stats; renderStats(); }
+      return;
+    case 'extensions':
+      if (frame.sessionId !== activeId) return;
+      renderPlugins(Array.isArray(frame.extensions) ? frame.extensions : []);
       return;
     case 'transfer':
       if (frame.sessionId !== activeId) return;
@@ -710,6 +716,63 @@ ui.uiOk.addEventListener('click', () => {
 ui.uiNo.addEventListener('click', () => answerUi({ confirmed: false }));
 ui.uiCancel.addEventListener('click', () => answerUi({ cancelled: true }));
 ui.uiInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ui.uiOk.click(); } });
+
+// ---------- plugins panel (what the User VM's Pi has loaded) ----------
+let pluginsWaiting = false;
+function openPlugins() {
+  ui.pluginsModal.classList.remove('hidden');
+  ui.pluginsSub.textContent = '';
+  ui.pluginsBody.innerHTML = '<div class="plugins-empty">正在向 User VM 查询…</div>';
+  pluginsWaiting = true;
+  if (opened) send({ v: 1, type: 'get_extensions' });
+  else if (!pendingOpenId && connected) { openSession(null); }
+  else if (!connected) ui.pluginsBody.innerHTML = '<div class="plugins-empty">未连接到 Host</div>';
+}
+function closePlugins() { ui.pluginsModal.classList.add('hidden'); pluginsWaiting = false; }
+const ORIGIN_LABEL = { configured: 'PI Coffee 加载', cli: '命令行加载', auto: '自动发现', inline: 'Pi 内置', package: '安装包', settings: '设置' };
+const SCOPE_LABEL = { user: '用户级', project: '项目级', temporary: '本次进程' };
+function renderPlugins(list) {
+  if (!pluginsWaiting && ui.pluginsModal.classList.contains('hidden')) return;
+  pluginsWaiting = false;
+  const groups = [['extension', '扩展'], ['skill', '技能'], ['prompt', '提示模板']];
+  const counts = groups.map(([kind, label]) => `${list.filter((e) => e.kind === kind).length} ${label}`);
+  ui.pluginsSub.textContent = counts.join(' · ');
+  ui.pluginsBody.innerHTML = '';
+  if (list.length === 0) { ui.pluginsBody.appendChild(el('div', 'plugins-empty', '这个 Pi 进程没有加载任何扩展、技能或提示模板。')); return; }
+  for (const [kind, label] of groups) {
+    const items = list.filter((e) => e.kind === kind);
+    if (items.length === 0) continue;
+    ui.pluginsBody.appendChild(el('div', 'side-label', label));
+    for (const item of items) {
+      const row = el('div', 'plugin');
+      const head = el('div', 'plugin-head');
+      head.appendChild(el('span', 'plugin-name', item.name));
+      const badge = el('span', 'plugin-badge ' + (item.origin || ''), ORIGIN_LABEL[item.origin] || item.origin || '');
+      head.appendChild(badge);
+      if (item.scope && SCOPE_LABEL[item.scope]) head.appendChild(el('span', 'plugin-scope', SCOPE_LABEL[item.scope]));
+      row.appendChild(head);
+      if (item.path) { const p = el('div', 'plugin-path', item.path); p.title = item.path; row.appendChild(p); }
+      if (item.commands && item.commands.length) {
+        const cmds = el('div', 'plugin-cmds');
+        for (const c of item.commands) {
+          const chip = el('button', 'plugin-cmd', '/' + c.name);
+          chip.type = 'button';
+          chip.title = (c.description || '') + '\n点击填入输入框';
+          chip.addEventListener('click', () => { closePlugins(); ui.prompt.value = '/' + c.name + ' '; ui.prompt.focus(); autoGrow(); refreshComposer(); });
+          cmds.appendChild(chip);
+          if (c.description) cmds.appendChild(el('span', 'plugin-cmd-desc', c.description));
+        }
+        row.appendChild(cmds);
+      } else if (kind === 'extension') {
+        row.appendChild(el('div', 'plugin-cmd-desc', '未注册斜杠命令（通过事件 / 工具生效）'));
+      }
+      ui.pluginsBody.appendChild(row);
+    }
+  }
+}
+ui.pluginsBtn.addEventListener('click', openPlugins);
+ui.pluginsClose.addEventListener('click', closePlugins);
+ui.pluginsModal.addEventListener('click', (e) => { if (e.target === ui.pluginsModal) closePlugins(); });
 
 // ---------- queue strip ----------
 function renderQueue(event) {
@@ -1123,6 +1186,7 @@ document.addEventListener('keydown', (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); newSession(); return; }
   if (event.key === 'Escape') {
     if (!ui.uiModal.classList.contains('hidden')) { answerUi({ cancelled: true }); return; }
+    if (!ui.pluginsModal.classList.contains('hidden')) { closePlugins(); return; }
     if (!ui.modal.classList.contains('hidden')) { ui.modalCancel.click(); return; }
     if (menuNode) { closeMenu(); return; }
     if (!ui.slash.classList.contains('hidden')) { ui.slash.classList.add('hidden'); return; }

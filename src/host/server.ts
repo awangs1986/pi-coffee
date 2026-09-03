@@ -272,6 +272,10 @@ class HostSocket implements SessionSink {
           if (!this.session || !this.opened) throw new NotOpenError();
           this.send({ v: 1, type: "commands", commands: await this.session.getCommands() });
           break;
+        case "get_extensions":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "extensions", sessionId: this.session.id, extensions: await this.session.getExtensions() });
+          break;
         case "get_stats":
           if (!this.session || !this.opened) throw new NotOpenError();
           this.send({ v: 1, type: "stats", sessionId: this.session.id, stats: await this.session.getStats() });

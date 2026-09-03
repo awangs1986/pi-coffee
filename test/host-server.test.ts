@@ -59,6 +59,7 @@ class FakePiSession implements PiSession {
   async setModel(provider: string, id: string): Promise<void> { this.model = { provider, id }; }
   async setThinkingLevel(level: string): Promise<void> { this.thinking = level; }
   async getCommands() { return [{ name: "harness", description: "Switch harness mode", source: "extension" as const }]; }
+  async getExtensions() { return [{ name: "harness/extension.js", kind: "extension" as const, path: "/opt/x/harness/extension.js", origin: "configured", commands: [{ name: "harness", description: "Switch harness mode" }] }]; }
   async getStats() {
     return { userMessages: 1, assistantMessages: 1, toolCalls: 0, tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, total: 15 }, cost: 0.001, contextUsage: { tokens: 15, contextWindow: 1000, percent: 1.5 } };
   }
@@ -430,6 +431,8 @@ describe("Host WebSocket seam", () => {
     expect(pi.thinking).toBe("high");
     socket.send(encodeFrame({ v: 1, type: "get_commands" }));
     expect(await frames.next()).toMatchObject({ type: "commands", commands: [{ name: "harness", source: "extension" }] });
+    socket.send(encodeFrame({ v: 1, type: "get_extensions" }));
+    expect(await frames.next()).toMatchObject({ type: "extensions", sessionId: opened.sessionId, extensions: [{ name: "harness/extension.js", kind: "extension", origin: "configured" }] });
     socket.send(encodeFrame({ v: 1, type: "get_stats" }));
     expect(await frames.next()).toMatchObject({ type: "stats", sessionId: opened.sessionId, stats: { cost: 0.001, contextUsage: { percent: 1.5 } } });
     socket.send(encodeFrame({ v: 1, type: "compact", requestId: "c1" }));

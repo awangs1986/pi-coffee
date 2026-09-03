@@ -94,8 +94,11 @@ for await (const line of input) {
     case "get_commands":
       response("get_commands", command.id, {
         commands: [
-          { name: "harness", description: "Switch harness mode", source: "extension", sourceInfo: {} },
-          { name: "review", description: "Review the diff", source: "prompt", sourceInfo: {} },
+          { name: "harness", description: "Switch harness mode", source: "extension", sourceInfo: { path: "/opt/pi-coffee/dist/src/harness/extension.js", source: "cli", scope: "temporary", origin: "top-level" } },
+          { name: "verify", description: "Run verification", source: "extension", sourceInfo: { path: "/opt/pi-coffee/dist/src/harness/extension.js", source: "cli", scope: "temporary", origin: "top-level" } },
+          { name: "llama", description: "Manage llama.cpp", source: "extension", sourceInfo: { path: "<inline:llama.cpp>", source: "inline", scope: "temporary", origin: "top-level" } },
+          { name: "review", description: "Review the diff", source: "prompt", sourceInfo: { path: "/home/u/.pi/agent/prompts/review.md", source: "auto", scope: "user", origin: "top-level" } },
+          { name: "skill:tdd", description: "Test-driven development", source: "skill", sourceInfo: { path: "/home/u/.agents/skills/tdd/SKILL.md", source: "auto", scope: "user", origin: "top-level", baseDir: "/home/u/.agents" } },
         ],
       });
       break;

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { RpcClient, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
   CommandInfo,
+  ExtensionInfo,
   HistoryEntry,
   ImageInput,
   JsonValue,
@@ -48,6 +49,8 @@ export interface PiSession {
   setModel(provider: string, id: string): Promise<void>;
   setThinkingLevel(level: string): Promise<void>;
   getCommands(): Promise<CommandInfo[]>;
+  /** Extensions, skills and prompt templates this Pi process actually loaded. */
+  getExtensions(): Promise<ExtensionInfo[]>;
   getStats(): Promise<SessionStats>;
   compact(): Promise<void>;
   /** Answer a blocking extension dialog (select / confirm / input / editor). */
@@ -134,7 +137,7 @@ export class RpcPiSessionFactory implements PiSessionFactory {
       },
       args,
     });
-    const session = new RpcPiSession(client);
+    const session = new RpcPiSession(client, extensionPathsFromArgs(args));
     await session.start();
     return session;
   }
@@ -193,13 +196,26 @@ export function appendExtensionArgs(args: string[], extensions: readonly string[
   return args;
 }
 
+/** `--extension <path>` / `--extension=<path>` / `-e <path>` entries from a CLI arg list. */
+export function extensionPathsFromArgs(args: readonly string[]): string[] {
+  const paths: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if ((arg === "--extension" || arg === "-e") && args[i + 1]) paths.push(args[++i]);
+    else if (arg.startsWith("--extension=")) paths.push(arg.slice("--extension=".length));
+  }
+  return paths;
+}
+
 class RpcPiSession implements PiSession {
   private readonly client: RpcClient;
+  private readonly configuredExtensions: readonly string[];
   private readonly listeners = new Set<(event: unknown) => void>();
   private unsubscribe?: () => void;
 
-  constructor(client: RpcClient) {
+  constructor(client: RpcClient, configuredExtensions: readonly string[] = []) {
     this.client = client;
+    this.configuredExtensions = configuredExtensions;
     this.unsubscribe = client.onEvent((event) => {
       for (const listener of this.listeners) listener(event);
     });
@@ -288,6 +304,11 @@ class RpcPiSession implements PiSession {
       ...(command.description === undefined ? {} : { description: command.description }),
       source: command.source,
     }));
+  }
+
+  async getExtensions(): Promise<ExtensionInfo[]> {
+    const commands = await this.client.getCommands() as unknown as Array<Record<string, unknown>>;
+    return projectExtensions(commands, this.configuredExtensions);
   }
 
   async getStats(): Promise<SessionStats> {
@@ -431,6 +452,55 @@ export function projectHistory(rawEntries: unknown[], leafId: string | null): Pi
     }
   }
   return { entries: out, leafId };
+}
+
+/**
+ * Group Pi's slash commands by the file that registered them. Every extension
+ * PI Coffee passed with --extension is listed even when it registers no
+ * command, because it is loaded all the same.
+ */
+export function projectExtensions(commands: Array<Record<string, unknown>>, configured: readonly string[]): ExtensionInfo[] {
+  const byKey = new Map<string, ExtensionInfo>();
+  const norm = (p: string) => p.replace(/\\/g, "/");
+  for (const path of configured) {
+    const key = norm(path);
+    byKey.set(key, { name: displayName(path), kind: "extension", path, origin: "configured", commands: [] });
+  }
+  for (const command of commands) {
+    const kind = command.source === "skill" ? "skill" : command.source === "prompt" ? "prompt" : "extension";
+    const info = isRecord(command.sourceInfo) ? command.sourceInfo : {};
+    const rawPath = typeof info.path === "string" ? info.path : typeof command.path === "string" ? command.path : undefined;
+    const key = rawPath ? norm(rawPath) : `${kind}:${String(command.name)}`;
+    let entry = byKey.get(key);
+    if (!entry) {
+      const inline = rawPath?.startsWith("<inline:");
+      const rawOrigin = typeof info.source === "string" ? info.source : typeof command.location === "string" ? command.location : "unknown";
+      entry = {
+        name: rawPath ? (inline ? rawPath.slice("<inline:".length, -1) : displayName(rawPath)) : String(command.name),
+        kind,
+        ...(rawPath && !inline ? { path: rawPath } : {}),
+        origin: inline ? "inline" : info.origin === "package" ? "package" : rawOrigin,
+        ...(typeof info.scope === "string" ? { scope: info.scope } : {}),
+        commands: [],
+      };
+      byKey.set(key, entry);
+    }
+    entry.commands.push({
+      name: String(command.name),
+      ...(typeof command.description === "string" && command.description.length > 0 ? { description: command.description } : {}),
+    });
+  }
+  const order = { extension: 0, skill: 1, prompt: 2 };
+  return [...byKey.values()].sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
+}
+
+function displayName(path: string): string {
+  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  const file = parts[parts.length - 1] ?? path;
+  // Skills are SKILL.md inside a named directory; extensions are the file itself.
+  if (/^skill\.md$/i.test(file) && parts.length >= 2) return parts[parts.length - 2];
+  if (/^(index|extension)\.(js|ts|mjs|cjs)$/i.test(file) && parts.length >= 2) return parts[parts.length - 2] + "/" + file;
+  return file.replace(/\.(js|ts|mjs|cjs|md)$/i, "");
 }
 
 function blocksOf(content: unknown): Record<string, unknown>[] {

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { appendExtensionArgs, buildHostChildEnv, HOST_STRIPPED_ENV_KEYS, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
+import { appendExtensionArgs, buildHostChildEnv, extensionPathsFromArgs, HOST_STRIPPED_ENV_KEYS, projectExtensions, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
 
 describe("original Pi RPC adapter", () => {
   it("strips Relay credentials from the spawned Host Pi environment", () => {
@@ -57,9 +57,13 @@ describe("original Pi RPC adapter", () => {
       await session.setModel("fake", "fake-large");
       await session.setThinkingLevel("high");
       expect(await session.getModels()).toMatchObject({ current: { id: "fake-large" }, thinkingLevel: "high" });
-      expect(await session.getCommands()).toEqual([
-        { name: "harness", description: "Switch harness mode", source: "extension" },
-        { name: "review", description: "Review the diff", source: "prompt" },
+      expect((await session.getCommands()).map((c) => c.name)).toEqual(["harness", "verify", "llama", "review", "skill:tdd"]);
+      // Extensions are grouped by source file; inline/built-in and skills are labelled.
+      expect(await session.getExtensions()).toEqual([
+        { name: "harness/extension.js", kind: "extension", path: "/opt/pi-coffee/dist/src/harness/extension.js", origin: "cli", scope: "temporary", commands: [{ name: "harness", description: "Switch harness mode" }, { name: "verify", description: "Run verification" }] },
+        { name: "llama.cpp", kind: "extension", origin: "inline", scope: "temporary", commands: [{ name: "llama", description: "Manage llama.cpp" }] },
+        { name: "tdd", kind: "skill", path: "/home/u/.agents/skills/tdd/SKILL.md", origin: "auto", scope: "user", commands: [{ name: "skill:tdd", description: "Test-driven development" }] },
+        { name: "review", kind: "prompt", path: "/home/u/.pi/agent/prompts/review.md", origin: "auto", scope: "user", commands: [{ name: "review", description: "Review the diff" }] },
       ]);
       expect(await session.getStats()).toMatchObject({ userMessages: 1, assistantMessages: 1, tokens: { total: 1540 }, cost: 0.0042, contextUsage: { percent: 0.77 } });
       await session.steer("focus");
@@ -125,6 +129,21 @@ describe("original Pi RPC adapter", () => {
       rmSync(sessionDir, { recursive: true, force: true });
     }
   }, 10_000);
+});
+
+describe("extension projection", () => {
+  it("lists configured extensions even without commands and merges commands from the same file", () => {
+    const list = projectExtensions([
+      { name: "harness", description: "x", source: "extension", sourceInfo: { path: "C:\\opt\\pi-coffee\\dist\\src\\harness\\extension.js", source: "cli", scope: "temporary", origin: "top-level" } },
+      { name: "sub", source: "extension", sourceInfo: { path: "/opt/pi-coffee/node_modules/pi-subagents/index.ts", source: "cli", scope: "temporary", origin: "top-level" } },
+    ], ["C:/opt/pi-coffee/dist/src/harness/extension.js", "/opt/pi-coffee/dist/src/subagents/extension.js"]);
+    expect(list.map((e) => [e.name, e.origin, e.commands.length])).toEqual([
+      ["harness/extension.js", "configured", 1],
+      ["pi-subagents/index.ts", "cli", 1],
+      ["subagents/extension.js", "configured", 0],
+    ]);
+    expect(extensionPathsFromArgs(["--session-id", "x", "--extension", "a.js", "-e", "b.ts", "--extension=c.js"])).toEqual(["a.js", "b.ts", "c.js"]);
+  });
 });
 
 describe("history projection", () => {

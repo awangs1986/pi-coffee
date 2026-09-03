@@ -37,6 +37,7 @@ Host -> Web Server -> Browser: ack | event | error | sessions
 {"v":1,"type":"set_model","requestId":"m-1","provider":"cpa","id":"gpt-5.5"}
 {"v":1,"type":"set_thinking","requestId":"t-1","level":"high"}
 {"v":1,"type":"get_commands"}
+{"v":1,"type":"get_extensions"}
 {"v":1,"type":"get_stats"}
 {"v":1,"type":"compact","requestId":"c-1"}
 {"v":1,"type":"ui_response","requestId":"u-1","id":"<extension_ui_request id>","value":"Allow"}
@@ -82,10 +83,13 @@ Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`
 {"v":1,"type":"ack","operation":"prompt | steer | follow_up | abort | rename_session | delete_session | set_model | set_thinking | compact | ui_response","requestId":"r-1"}
 {"v":1,"type":"models","models":[{"provider":"cpa","id":"gpt-5.4-mini","contextWindow":200000,"reasoning":true}],"current":{"provider":"cpa","id":"gpt-5.4-mini"},"thinkingLevel":"medium","thinkingLevels":["off","low","medium","high"]}
 {"v":1,"type":"commands","commands":[{"name":"harness","description":"…","source":"extension"}]}
+{"v":1,"type":"extensions","sessionId":"…","extensions":[{"name":"harness/extension.js","kind":"extension","path":"…","origin":"configured","scope":"temporary","commands":[{"name":"harness","description":"…"}]}]}
 {"v":1,"type":"stats","sessionId":"…","stats":{"userMessages":3,"assistantMessages":3,"toolCalls":2,"tokens":{"input":1200,"output":340,"cacheRead":0,"cacheWrite":0,"total":1540},"cost":0.0042,"contextUsage":{"tokens":1540,"contextWindow":200000,"percent":0.77}}}
 {"v":1,"type":"event","sessionId":"…","cursor":1,"event":{"type":"message_update"}}
 {"v":1,"type":"error","code":"busy","message":"…","requestId":"r-2"}
 ```
+
+`extensions` describes what the Session's Pi process actually loaded, grouped by the file that registered each slash command (kind `extension` / `skill` / `prompt`, origin `configured` for paths PI Coffee passed with `--extension`, otherwise Pi's own source: `cli`, `auto`, `inline`, `package`). Extensions PI Coffee configured appear even when they register no command.
 
 `sessions` is also **pushed** by the Host to every connected browser whenever the list may have changed (a conversation was created, finished a run, was renamed, deleted, or its idle Pi process was stopped), so sidebars stay in sync without polling. `history.entries[kind=tool]` may carry `diff`: the patch Pi itself recorded for an `edit`, so a reloaded browser renders the same change view as the live one.
 
