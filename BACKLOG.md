@@ -202,8 +202,8 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
-| `WEB-001` | `READY` | P1 | 接入官方 `pi-web-access@0.27.0` 的 Pi-native adapter；提供 Relay-backed Serper `web_search`、原生 `pi-subagents` research brief、User VM Markdown 封盘和 pointer-only context。 | `HARNESS-002`, `SUBAGENT-001`, `CP-001` | 待创建 |
-| `WEB-002` | `READY` | P1 | 在真实 User VM/Control Plane 验证 Serper key 隔离、官方内容工具、子 Agent 超时/取消、浏览器断开后继续和 Host 重启恢复。 | `WEB-001`, `SUBAGENT-002`, `OPS-001` | 待创建 |
+| `WEB-001` | `DONE` | P1 | 接入官方 `pi-web-access@0.27.0` 的 Pi-native adapter；提供 Relay-backed Serper `web_search`、原生 `pi-subagents` research brief、User VM Markdown 封盘和 pointer-only context。 | `HARNESS-002`, `SUBAGENT-001`, `CP-001` | [#23](http://testpc:3000/awangs/pi-coffee/issues/23) |
+| `WEB-002` | `READY` | P1 | 在真实 User VM/Control Plane 验证 Serper key 隔离、官方内容工具、子 Agent 超时/取消、浏览器断开后继续和 Host 重启恢复。 | `WEB-001`, `SUBAGENT-002`, `OPS-001` | [#24](http://testpc:3000/awangs/pi-coffee/issues/24) |
 
 ---
 
