@@ -148,7 +148,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `MVP-002` | `DONE` | Host ↔ Web 窄 JSON WebSocket 协议：`open/prompt/abort/ping/close`、ack/event/error、cursor replay。 | [#2](http://testpc:3000/awangs/pi-coffee/issues/2) | `test/protocol.test.ts`、`test/host-server.test.ts`、`test/web-server.test.ts`。 |
 | `MVP-003` | `DONE` | User VM 侧原版 Pi RPC adapter、Session registry、native `--session-id` 传播。 | [#3](http://testpc:3000/awangs/pi-coffee/issues/3) | `test/pi-adapter.test.ts` 与 fake RPC fixture。 |
 | `MVP-004` | `DONE` | 独立 Web Server、静态浏览器 Shell、Host Bridge、流式 `text_delta`。 | [#4](http://testpc:3000/awangs/pi-coffee/issues/4) | `test/web-server.test.ts`、浏览器入口 `/`、`/healthz`。 |
-| `MVP-005` | `DONE` | 端到端测试、启动命令、分离进程配置、交接文档和远程 main。 | [#5](http://testpc:3000/awangs/pi-coffee/issues/5)、[#6](http://testpc:3000/awangs/pi-coffee/issues/6) | commit `eacb697`；fresh clone `npm ci && npm run check`，5 个测试文件/10 个测试通过。 |
+| `MVP-005` | `DONE` | 端到端测试、启动命令、分离进程配置、交接文档和远程 main。 | [#5](http://testpc:3000/awangs/pi-coffee/issues/5)、[#6](http://testpc:3000/awangs/pi-coffee/issues/6) | 当前 main `0ca71e7`；fresh clone `npm ci && npm run check`，15 个测试文件/90 个测试通过；真实 VM 验收仍见 #5。 |
 | `MVP-006` | `DONE` | Codex 式白色主题浏览器 Shell：侧栏对话列表、Markdown 子集、工具卡片、停止键、本地显示缓存；静态资源白名单。 | [#4](http://testpc:3000/awangs/pi-coffee/issues/4) | `5b6a6e43`；headless 浏览器驱动截图贴在 #4。 |
 | `MVP-007` | `DONE` | MVP 部署形态定为 **User VM 内 Pi + Host，服务器上 Web + Relay**；`CP-001` Relay 提前进入 MVP；两侧 systemd 单元与 env 模板（`deploy/`）；跨接口三进程分离验证。 | [#5](http://testpc:3000/awangs/pi-coffee/issues/5)、[#7](http://testpc:3000/awangs/pi-coffee/issues/7) | `test/relay-server.test.ts` 13 tests；工作站三进程经局域网 IP 的 smoke；服务器/User VM 实装由 owner 按 #5 任务书执行。 |
 

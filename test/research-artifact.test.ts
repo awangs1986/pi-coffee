@@ -27,7 +27,9 @@ describe("research Markdown closure", () => {
   it("redacts configured secrets from Markdown and rejects path traversal", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-coffee-research-"));
     const previous = process.env.PI_COFFEE_RELAY_TOKEN;
+    const previousSerper = process.env.PI_COFFEE_SERPER_KEY;
     process.env.PI_COFFEE_RELAY_TOKEN = "relay-secret-value";
+    process.env.PI_COFFEE_SERPER_KEY = "serper-secret-value";
     try {
       const store = new ResearchArtifactStore(root);
       const ref = store.seal({
@@ -35,13 +37,16 @@ describe("research Markdown closure", () => {
         queries: ["q"],
         provider: "serper",
         results: [],
-        conclusion: "relay-secret-value must not persist",
+        conclusion: "relay-secret-value and serper-secret-value must not persist",
       });
       expect(await readFile(ref.path, "utf8")).not.toContain("relay-secret-value");
+      expect(await readFile(ref.path, "utf8")).not.toContain("serper-secret-value");
       expect(() => store.read({ ...ref, path: join(root, "..", "other.md") })).toThrow(/outside/);
     } finally {
       if (previous === undefined) delete process.env.PI_COFFEE_RELAY_TOKEN;
       else process.env.PI_COFFEE_RELAY_TOKEN = previous;
+      if (previousSerper === undefined) delete process.env.PI_COFFEE_SERPER_KEY;
+      else process.env.PI_COFFEE_SERPER_KEY = previousSerper;
     }
   });
 

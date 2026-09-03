@@ -130,5 +130,6 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [pi-subagents User VM/Web 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/18)
 - [WEB-001 Relay-backed Web Search + native research closure](http://testpc:3000/awangs/pi-coffee/issues/23)
 - [WEB-002 真实 User VM / Control Plane Web Search 验收](http://testpc:3000/awangs/pi-coffee/issues/24)
+- [Gitea 全量代码与 PR 审计报告](./docs/reviews/gitea-full-audit-20260903.md)
 - [pi-subagents integration spec](./docs/spec/subagents-plugin.md)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)
