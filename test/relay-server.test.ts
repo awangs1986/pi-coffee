@@ -157,6 +157,52 @@ describe("RelayServer", () => {
     expect(upstream!.seen).toHaveLength(3);
   });
 
+  it("keeps the Serper credential on the Control Plane and returns bounded search results", async () => {
+    upstream = new StubUpstream();
+    const base = await upstream.start();
+    records = [];
+    relay = new RelayServer({
+      host: "127.0.0.1",
+      port: 0,
+      upstreamBaseUrl: base,
+      upstreamKey: UPSTREAM_KEY,
+      serperApiKey: "serper-secret",
+      serperEndpoint: `${base.replace(/\/v1$/, "")}/serper`,
+      clientTokens: [CLIENT_TOKEN],
+      onRecord: (record) => records.push(record),
+    });
+    await relay.start();
+    const r = relay;
+    upstream!.handler = (req, res, body) => {
+      expect(req.url).toBe("/serper");
+      expect(req.headers["x-api-key"]).toBe("serper-secret");
+      expect(body).toContain("site:example.com");
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ organic: [
+        { title: "A", link: "https://example.com/a", snippet: "one" },
+        { title: "private", link: "http://127.0.0.1/no", snippet: "drop" },
+      ] }));
+    };
+    const response = await call(r, "/v1/search/serper", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ queries: ["pi coffee"], numResults: 5, domainFilter: ["example.com"] }),
+    });
+    expect(response.status).toBe(200);
+    const payload = JSON.parse(response.body);
+    expect(payload.provider).toBe("serper");
+    expect(payload.results).toEqual([{ title: "A", url: "https://example.com/a", snippet: "one" }]);
+    expect(JSON.stringify(records)).not.toContain("serper-secret");
+    expect(JSON.stringify(records)).not.toContain("pi coffee");
+  });
+
+  it("reports a bounded error when Serper is not configured", async () => {
+    const r = await startRelay();
+    const response = await call(r, "/v1/search/serper", { method: "POST", headers: auth, body: JSON.stringify({ query: "x" }) });
+    expect(response.status).toBe(503);
+    expect(JSON.parse(response.body).error.type).toBe("relay_search_unconfigured");
+  });
+
   it("rejects missing or wrong client tokens before touching the upstream", async () => {
     const r = await startRelay();
     const missing = await call(r, "/v1/models");

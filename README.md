@@ -16,7 +16,7 @@ Browser  ── WebSocket ──>  Web Server  ── WebSocket ──>  Host  �
 - Closing or refreshing the browser detaches the connection; it does not stop the Session.
 - Reconnecting with the Session ID and Cursor replays buffered Events.
 - The Web Server has no Pi implementation knowledge; the Pi-specific code is one adapter.
-- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is now loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
+- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the frozen V5 8/10 tool tables; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. The native Web adapter uses the Control Plane Serper Relay and seals concluded research into User VM Markdown artifacts; official `pi-web-access@0.27.0` remains available for optional content/source tools. The pinned `context-fold@0.4.0` extension is loaded last so its deterministic compaction replaces Pi's model-based compaction by default. context-fold is fail-open: if its compaction hook cannot produce a result, it returns no override and Pi's native compaction runs. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
 
 The Pi adapter uses the upstream package's documented RPC client and is pinned to `@earendil-works/pi-coding-agent@0.84.4` for this first slice. See the upstream [RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) for the underlying command/event semantics.
 
@@ -32,7 +32,8 @@ npm start
 要只验证 `pi-subagents` 的加载（不调用模型），运行
 `npm run smoke:subagents`。
 
-`npm start` runs Host + Web (and the Relay, if `PI_COFFEE_UPSTREAM_KEY` is set) in one Node process for a local smoke run:
+`npm start` runs Host + Web (and the Relay, if `PI_COFFEE_UPSTREAM_KEY` or
+`PI_COFFEE_SERPER_KEY` is set) in one Node process for a local smoke run:
 
 - Web Server: `http://127.0.0.1:3000/`
 - Host: `ws://127.0.0.1:8788/host`
@@ -61,9 +62,40 @@ Settings:
 | `PI_COFFEE_RELAY_BIND` / `PI_COFFEE_RELAY_PORT` | `127.0.0.1` / `8789` | relay | Relay bind |
 | `PI_COFFEE_UPSTREAM_URL` | `https://b.awangsawangs.xyz/v1` | relay | upstream OpenAI-compatible base URL |
 | `PI_COFFEE_UPSTREAM_KEY` | unset | relay | the sole upstream key; **only** the Relay has it |
+| `PI_COFFEE_SERPER_KEY` | unset | relay | Serper API key; **only** the Relay has it |
+| `PI_COFFEE_SERPER_ENDPOINT` | Serper API | relay | optional compatible/test Serper endpoint |
 | `PI_COFFEE_RELAY_TOKENS` | unset | relay | comma-separated Host tokens; **required** when not on loopback |
-| `PI_COFFEE_EXTENSIONS` | bundled Harness + pi-subagents | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
+| `PI_COFFEE_SEARCH_URL` / `PI_COFFEE_RELAY_URL` | local Relay route | host | Web search Relay endpoint; Host sends only the Relay token |
+| `PI_COFFEE_RESEARCH_DIR` | User VM agent dir | host | Markdown research closure directory |
+| `PI_COFFEE_WEB_SUBAGENT` | enabled | host | set to `off`/`0`/`false`/`no` to disable native `pi-subagents` delegation for Web research |
+| `PI_COFFEE_WEB_MAX_RESULTS` | `8` | host | upper bound for Web search results returned to the model |
+| `PI_COFFEE_EXTENSIONS` | bundled Web + Harness + pi-subagents + pi-web-access + context-fold | host | colon-separated Pi extension paths replacing the defaults; set to `off` to disable all extensions |
+| `PI_COFFEE_WEB` | enabled | host | set to `off` to disable the PI Coffee Web adapter |
+| `PI_COFFEE_WEB_ACCESS` | enabled | host | set to `off` to disable the official pi-web-access adapter |
 | `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
+| `PI_COFFEE_CONTEXT_FOLD` | enabled | host | set to `off`/`0`/`false`/`no` to disable context-fold; Pi's native compaction remains available |
+| `PI_COFFEE_PI_LENS` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to pi-lens; it is not loaded or made visible by default |
+| `PI_COFFEE_RPIV_TODO` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to rpiv-todo; its todo tool, command, and overlay are not loaded by default |
+| `PI_COFFEE_PI_MCP_ADAPTER` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to pi-mcp-adapter; its MCP proxy and runtime are not loaded by default |
+
+context-fold keeps the raw session ledger and only rewrites the per-request copy. Its default
+`CONTEXTFOLD_COMPACT=det` mode emits a deterministic summary for hard compaction. The plugin's
+own error handling deliberately returns control to Pi when folding or deterministic compaction
+fails, making native Pi compaction the fallback rather than a competing default. Advanced
+context-fold tuning remains available through its `CONTEXTFOLD_*` variables and `/context-fold` command.
+
+`pi-lens@4.1.3` is packaged for a future opt-in path only. PI Coffee does not proactively load
+it, initialize its LSP/diagnostic runtime, or add its tools to the model's visible tool set.
+Set `PI_COFFEE_PI_LENS=on` for a Host session when that capability is explicitly requested;
+pi-lens then applies its own dynamic-tool policy (situational tools start inactive).
+
+`@juicesharp/rpiv-todo@2.9.0` is packaged for an explicit opt-in path only. PI Coffee does
+not proactively initialize its todo tool, `/todos` command, or live overlay. Set
+`PI_COFFEE_RPIV_TODO=on` for a Host session when task tracking is explicitly requested.
+
+`pi-mcp-adapter@2.32.1` is packaged for an explicit opt-in path only. PI Coffee does not
+proactively initialize its MCP proxy tool, discover MCP servers, or start server runtimes.
+Set `PI_COFFEE_PI_MCP_ADAPTER=on` for a Host session when MCP access is explicitly requested.
 
 The browser shell in `public/` is build-free ES modules. `npm run build` copies
 two MIT libraries (`marked`, `dompurify`) from `node_modules` into
@@ -93,5 +125,7 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
 - [pi-subagents 集成与 User VM 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/17)
 - [pi-subagents User VM/Web 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/18)
+- [WEB-001 Relay-backed Web Search + native research closure](http://testpc:3000/awangs/pi-coffee/issues/23)
+- [WEB-002 真实 User VM / Control Plane Web Search 验收](http://testpc:3000/awangs/pi-coffee/issues/24)
 - [pi-subagents integration spec](./docs/spec/subagents-plugin.md)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)
