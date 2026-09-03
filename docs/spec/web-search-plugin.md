@@ -11,7 +11,9 @@ Plane Relay 的 `/v1/search/serper`，Serper key 只存在 Relay 进程；User V
 PI Coffee 的本地 `web_search` 是唯一搜索入口。官方
 [`pi-web-access`](https://github.com/nicobailon/pi-web-access) 通过本地
 Adapter 加载，保留其 `fetch_content`、`source_check` 和
-`get_search_content` 工具，但屏蔽同名的 `web_search` 注册，避免绕过 Relay。
+`get_search_content` 工具，但屏蔽同名的 `web_search` 注册以及官方
+`/websearch`、`/curator` 命令，避免绕过 Relay。PI Coffee 自己的
+`/websearch` 命令仍然可用。
 
 ## 工具
 

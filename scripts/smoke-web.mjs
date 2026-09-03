@@ -41,7 +41,6 @@ try {
   await client.newSession();
   const inspection = await readJsonWhenReady(inspectionPath);
   const commands = await client.getCommands();
-  const commandNames = new Set(commands.map((command) => command.name));
   const requiredTools = ["web_search", "research_seal", "fetch_content", "source_check", "get_search_content"];
   const missingTools = requiredTools.filter((name) => !inspection.all.includes(name));
   if (missingTools.length > 0) throw new Error(`Missing Web tools: ${missingTools.join(", ")}`);
@@ -51,7 +50,11 @@ try {
   if (!inspection.all.includes("recall_folded") || !inspection.all.includes("unfold")) {
     throw new Error(`context-fold tools were not registered: ${JSON.stringify(inspection)}`);
   }
-  if (!commandNames.has("websearch")) throw new Error("Missing /websearch command");
+  const websearch = commands.find((command) => command.name === "websearch");
+  if (!websearch) throw new Error("Missing /websearch command");
+  if (!websearch.description.includes("PI Coffee Control Plane")) {
+    throw new Error(`Official curator command replaced PI Coffee /websearch: ${websearch.description}`);
+  }
   if (extensionErrors.length > 0) throw new Error(`Pi extension errors: ${JSON.stringify(extensionErrors)}`);
   console.log(JSON.stringify({
     ok: true,

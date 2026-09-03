@@ -17,8 +17,9 @@
 
 这与 PI Coffee 的凭据决策冲突：Serper key 必须只在 Control Plane Relay。
 因此 PI Coffee 的本地 `web_search` 先注册，官方扩展由
-`src/web/pi-web-access-adapter.ts` 加载，并忽略官方同名工具注册。官方
-内容工具仍保留，但必须经过 capability conformance 后才进入 agent search。
+`src/web/pi-web-access-adapter.ts` 加载，并忽略官方同名工具以及
+`websearch`/`curator` 命令注册。官方内容工具仍保留，但必须经过 capability
+conformance 后才进入 agent search。
 
 ## 运行边界
 
