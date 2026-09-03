@@ -28,6 +28,8 @@ This is the handoff index for the independent PI Coffee repository. It is delibe
 - [`pi-web-evaluation-20260903.md`](./research/pi-web-evaluation-20260903.md): `ARCH-001` evaluation of agegr/pi-web against the PI Coffee deployment shape and ADRs; recommends keeping the Host/Web seam and borrowing its extension-UI, native-session-history and reconnection designs.
 - [`pi-web-access-audit-20260903.md`](./research/pi-web-access-audit-20260903.md): official `pi-web-access@0.27.0` loading audit, tool conflict isolation, and Serper credential boundary.
 - [`handoff-completeness-audit-20260903.md`](./research/handoff-completeness-audit-20260903.md): coverage audit for today's design discussion and current implementation gaps.
+- [`gitea-full-audit-20260903.md`](./reviews/gitea-full-audit-20260903.md): current `main` code, Issues, PRs, validation evidence, risks, and release gates.
+- [`vm-smoke-evidence-20260903.md`](./reviews/vm-smoke-evidence-20260903.md): real Debian/Mint VM simulation evidence for Relay, Web, Host, Pi, streaming, reconnect, and credential boundaries.
 - Web delivery tickets: [WEB-001 / #23](http://testpc:3000/awangs/pi-coffee/issues/23) (code slice) and [WEB-002 / #24](http://testpc:3000/awangs/pi-coffee/issues/24) (real VM acceptance).
 
 ## Authority order

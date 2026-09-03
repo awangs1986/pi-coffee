@@ -2,9 +2,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { appendExtensionArgs, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
+import { appendExtensionArgs, buildHostChildEnv, HOST_STRIPPED_ENV_KEYS, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
 
 describe("original Pi RPC adapter", () => {
+  it("strips Relay credentials from the spawned Host Pi environment", () => {
+    const env = buildHostChildEnv({ PI_COFFEE_UPSTREAM_KEY: "override", SAFE_SETTING: "kept" });
+    expect(env.SAFE_SETTING).toBe("kept");
+    for (const key of HOST_STRIPPED_ENV_KEYS) expect(env[key]).toBeUndefined();
+  });
+
   it("adds configured Pi extensions once while preserving explicit CLI args", () => {
     expect(appendExtensionArgs(["--extension", "./existing.js"], ["./existing.js", "./harness.js", ""])).toEqual([
       "--extension",
