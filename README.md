@@ -125,5 +125,7 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
 - [pi-subagents 集成与 User VM 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/17)
 - [pi-subagents User VM/Web 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/18)
+- [WEB-001 Relay-backed Web Search + native research closure](http://testpc:3000/awangs/pi-coffee/issues/23)
+- [WEB-002 真实 User VM / Control Plane Web Search 验收](http://testpc:3000/awangs/pi-coffee/issues/24)
 - [pi-subagents integration spec](./docs/spec/subagents-plugin.md)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)
