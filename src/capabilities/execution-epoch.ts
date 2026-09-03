@@ -8,7 +8,6 @@ export interface ExecutionIdentity {
   model?: string;
   account?: string;
 }
-
 export interface EpochSnapshot {
   epochId: string;
   identity: ExecutionIdentity;
@@ -85,4 +84,3 @@ function unique(values: readonly string[]): string[] {
 function digest(values: readonly string[]): string {
   return createHash("sha256").update(JSON.stringify(values), "utf8").digest("hex");
 }
-

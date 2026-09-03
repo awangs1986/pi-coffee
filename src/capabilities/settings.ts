@@ -8,7 +8,6 @@ export interface CapabilitySettingsRecord {
   enabled: boolean;
   trustedDigest?: string;
 }
-
 export interface CapabilitySettingsStore {
   get(id: string): CapabilitySettingsRecord | undefined;
   set(id: string, value: CapabilitySettingsRecord): void;
@@ -134,4 +133,3 @@ function isMissingFile(error: unknown): boolean {
 export function settingsFileMode(path: string): number | undefined {
   try { return statSync(path).mode & 0o777; } catch { return undefined; }
 }
-
