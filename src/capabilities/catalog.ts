@@ -27,7 +27,6 @@ export interface CapabilityReadiness {
   nextSteps: string[];
   inspectedAt: string;
 }
-
 export interface CapabilityManifest {
   id: string;
   kind: CapabilityKind;
@@ -484,4 +483,3 @@ function cryptoRandomId(): string {
   // mocking global crypto.
   return createHash("sha256").update(`${Date.now()}-${Math.random()}`).digest("hex").slice(0, 20);
 }
-

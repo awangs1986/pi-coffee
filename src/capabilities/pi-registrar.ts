@@ -24,4 +24,3 @@ export function createPiToolRegistrar(pi: ExtensionAPI): ToolRegistrar {
     unregister: () => undefined,
   };
 }
-

@@ -13,7 +13,6 @@ export interface ResearchArtifactInput {
   conclusion: string;
   sealedAt?: string;
 }
-
 export interface ResearchArtifactRef {
   artifactId: string;
   path: string;
@@ -119,4 +118,3 @@ export function redactSecrets(value: string): string {
   ].filter((secret): secret is string => typeof secret === "string" && secret.length > 3);
   return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), value);
 }
-
