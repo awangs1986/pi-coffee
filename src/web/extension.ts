@@ -67,6 +67,17 @@ function installWebExtension(pi: ExtensionAPI, options: WebExtensionOptions): vo
   const sealTool = createSealTool(pending, sealedByToolCall, artifactStore, pi);
   pi.registerTool(webSearchTool);
   pi.registerTool(sealTool);
+  pi.registerCommand("websearch", {
+    description: "Search through the PI Coffee Control Plane Serper Relay",
+    handler: async (args) => {
+      const query = args.trim();
+      if (query.length === 0) {
+        pi.sendUserMessage("Use the web_search tool for the user's web research request.");
+        return;
+      }
+      pi.sendUserMessage(`Use the web_search tool to research this request through the Control Plane Relay. Do not use another search provider. Request: ${query}`);
+    },
+  });
 
   registerCapabilityManifest(pi, {
     manifest: {
