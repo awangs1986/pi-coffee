@@ -19,15 +19,19 @@ if (role !== "host" && role !== "web" && role !== "relay" && role !== "all") {
 }
 
 async function run(selectedRole: Role): Promise<void> {
-  // The Relay is the only process that may hold the upstream key. `all` starts
-  // it only when that key is present, so the MVP local smoke stays unchanged.
+  // The Relay is the only process that may hold upstream credentials. `all`
+  // starts it when either the LLM key or the Serper key is configured; the
+  // generic LLM routes remain unavailable when only search is enabled.
   const upstreamKey = process.env.PI_COFFEE_UPSTREAM_KEY ?? "";
-  const wantRelay = selectedRole === "relay" || (selectedRole === "all" && upstreamKey.length > 0);
+  const serperKey = process.env.PI_COFFEE_SERPER_KEY ?? "";
+  const wantRelay = selectedRole === "relay" || (selectedRole === "all" && (upstreamKey.length > 0 || serperKey.length > 0));
   const relay = !wantRelay ? undefined : new RelayServer({
     host: envString("PI_COFFEE_RELAY_BIND", "127.0.0.1"),
     port: envNumber("PI_COFFEE_RELAY_PORT", 8789),
     upstreamBaseUrl: envString("PI_COFFEE_UPSTREAM_URL", "https://b.awangsawangs.xyz/v1"),
     upstreamKey,
+    serperApiKey: serperKey,
+    serperEndpoint: process.env.PI_COFFEE_SERPER_ENDPOINT,
     clientTokens: envList("PI_COFFEE_RELAY_TOKENS"),
     upstreamHeadersTimeoutMs: envNumber("PI_COFFEE_RELAY_TIMEOUT_MS", 60_000),
     maxRequestBytes: envNumber("PI_COFFEE_RELAY_MAX_REQUEST_BYTES", 32 * 1024 * 1024),

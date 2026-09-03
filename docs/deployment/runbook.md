@@ -101,10 +101,17 @@ journalctl -u pi-coffee-host -n 20 --no-pager
 interpolation: the token comes from the Host's environment at request time and
 is never written to disk by PI Coffee.
 
-The Host automatically loads the bundled V5 Harness and `pi-subagents`
-extension. The `subagent` and `bg_wait` tools remain optional until activated
-through Harness `search_tools`, so the frozen Simple/Full base counts stay
-8/10. Set `PI_COFFEE_SUBAGENTS=off` to keep only Harness; set
+The Host automatically loads the PI Coffee Web adapter, bundled V5 Harness,
+`pi-subagents`, and the official `pi-web-access` adapter. The `web_search`
+tool calls the Control Plane's `/v1/search/serper` route; only the Relay has
+`PI_COFFEE_SERPER_KEY`. The `research_seal` tool writes Markdown under the
+User VM research directory and future model context keeps its pointer and
+conclusion. `fetch_content`, `source_check`, and `get_search_content` from
+`pi-web-access` remain optional until their runner conformance is recorded.
+The `subagent` and `bg_wait` tools remain optional until activated through
+Harness `search_tools`, so the frozen Simple/Full base counts stay 8/10. Set
+`PI_COFFEE_WEB=off` or `PI_COFFEE_WEB_ACCESS=off` to disable either Web layer;
+set `PI_COFFEE_SUBAGENTS=off` to keep only Harness; set
 `PI_COFFEE_EXTENSIONS=off` for a transport-only diagnostic, or provide a
 colon-separated list of explicit extension paths to replace the defaults.
 The package's built-in commands and prompt templates are visible in the Pi RPC
@@ -135,6 +142,7 @@ Then open `http://SERVER:3000/` in a browser and use the shell.
 | Host token mismatch | Web logs 401 from the Host; browser gets `host_unavailable` | make `PI_COFFEE_HOST_TOKEN` identical on both sides |
 | Relay down or Relay token wrong | `模型调用失败：…` note after the prompt | `systemctl status pi-coffee-relay`; check `PI_COFFEE_RELAY_TOKEN(S)` |
 | Upstream (CPA) error | `模型调用失败：…` or Pi's auto-retry note; Relay log line has `outcome: upstream_error` | upstream side |
+| Upstream/CPA rate limit (HTTP 429) | `exceeded retry limit, last status: 429 Too Many Requests` (often with a Cloudflare request id) | This is upstream quota/concurrency/rate limiting. Check the CPA dashboard/logs and `Retry-After`; wait or reduce concurrency. Pi retries transient 429s up to its configured limit (`retry.maxRetries`, default 3, with 2/4/8 s backoff). The Relay does not retry or hide the 429. Set `retry.enabled: false` temporarily when repeated retries are undesirable. |
 | Browser closed / refreshed / opened on another machine | nothing — the run continues on the Host; the browser reloads the conversation list and history from Pi's session store in the User VM | none needed |
 | Idle Pi process stopped (`PI_COFFEE_IDLE_TIMEOUT_MS`, default 10 min) | nothing visible; the next open resumes the conversation from the store | none needed |
 | Host restarted | browser reconnects; every completed conversation is listed and readable; a message that was mid-stream at the crash is cut at its last completed message | resend the last prompt; mid-run recovery is `REC-001` (0.1) |
@@ -181,7 +189,9 @@ npm ci && npm run check && npm start        # Host + Web on loopback, Pi with it
 安装或升级后可先运行 `npm run smoke:subagents`；它使用离线临时目录验证
 `pi-subagents` 扩展和命令注册，不需要模型凭据。
 
-`npm start` (`all`) also starts the Relay when `PI_COFFEE_UPSTREAM_KEY` is set.
+`npm start` (`all`) also starts the Relay when either `PI_COFFEE_UPSTREAM_KEY`
+or `PI_COFFEE_SERPER_KEY` is set. A Relay configured with only Serper serves
+the search route while LLM routes return a structured unavailable response.
 To test a Host that has **no** upstream key on one machine, run three shells:
 
 ```bash
@@ -193,6 +203,10 @@ PI_COFFEE_RELAY_TOKEN=t1 PI_COFFEE_AGENT_DIR=… PI_COFFEE_PROVIDER=cpa PI_COFFE
 npm run start:web
 node scripts/smoke-real-model.mjs ws://127.0.0.1:3000/ws
 ```
+
+For search-only testing, configure `PI_COFFEE_SERPER_KEY` and optionally
+`PI_COFFEE_SERPER_ENDPOINT` on the Relay, then use the Web Host with
+`PI_COFFEE_RELAY_TOKEN` and `PI_COFFEE_SEARCH_URL`.
 
 Both `https://awangsawangs.xyz/v1` and `https://b.awangsawangs.xyz/v1` serve the
 same model list; use the one your network resolves.
