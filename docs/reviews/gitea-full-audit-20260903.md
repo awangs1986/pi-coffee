@@ -1,8 +1,10 @@
 # PI Coffee Gitea 全量代码与合并申请审计报告
 
-审计日期：2026-09-03（Asia/Hong_Kong）  
-审计对象：`awangs/pi-coffee` 当前 `main`，以及 Gitea Issues/PRs 记录  
-审计基线：`c014faf`（Web/Host Shell 设计审计之后）→ `0ca71e7`（当前 `main`）  
+审计日期：2026-09-03（Asia/Hong_Kong）
+
+审计对象：`awangs/pi-coffee` 当前 `main`，以及 Gitea Issues/PRs 记录
+
+审计基线：`c014faf`（Web/Host Shell 设计审计之后）→ `0ca71e7`（代码审计提交；报告随后由 `12aa9ed` 合并）
 参考边界：Picode 的 V5 仓库是冻结参考，本次没有读取其工作树，也没有修改它。
 
 ## 结论摘要
