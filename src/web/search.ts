@@ -9,7 +9,6 @@ export interface WebSearchQuery {
   /** Explicitly request the native pi-subagents researcher path. */
   delegate?: boolean;
 }
-
 export interface WebSearchResult {
   title: string;
   url: string;
@@ -135,4 +134,3 @@ function boundedError(value: unknown): string {
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
