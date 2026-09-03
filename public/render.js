@@ -188,11 +188,33 @@ export function el(tag, className, text) {
   return node;
 }
 
+export function formatBytes(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return '';
+  if (n >= 1024 * 1024 * 1024) return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  if (n >= 1024) return Math.round(n / 1024) + ' KB';
+  return n + ' B';
+}
+
+export function fileChips(files) {
+  const strip = el('div', 'file-chips');
+  for (const file of files) {
+    const chip = el(file.href ? 'a' : 'span', 'file-chip');
+    if (file.href) { chip.href = file.href; chip.target = '_blank'; chip.rel = 'noopener'; chip.title = '下载 ' + file.name; }
+    chip.innerHTML = '<span class="file-ico">📄</span><span class="file-name"></span><span class="file-size"></span>';
+    chip.querySelector('.file-name').textContent = file.name;
+    chip.querySelector('.file-size').textContent = formatBytes(file.size);
+    strip.appendChild(chip);
+  }
+  return strip;
+}
+
 export function userBubble(entry) {
   const node = el('div', 'msg user');
   const bubble = el('div', 'bubble');
   const text = el('div', 'text', entry.text || '');
   bubble.appendChild(text);
+  if (entry.files && entry.files.length) bubble.appendChild(fileChips(entry.files));
   if (entry.images && entry.images.length) {
     const strip = el('div', 'thumbs');
     for (const image of entry.images) {

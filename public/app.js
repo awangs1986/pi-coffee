@@ -2,7 +2,7 @@
 // history, models and running state live on the Host in the User VM. The only
 // local value is which conversation this browser last displayed.
 import {
-  activityGroup, assistantNode, el, fillToolCard, installCopyHandlers,
+  activityGroup, assistantNode, el, fillToolCard, formatBytes, installCopyHandlers,
   noteNode, relativeTime, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
 } from './render.js';
 
@@ -36,7 +36,10 @@ let currentAssistant, currentActivity, activityCount = 0;
 const openTools = new Map();
 let lastTool, thinkingNode;
 let lastUserText = '';
-let attachments = [];
+let attachments = [];          // small inline images: { type, mimeType, data }
+let uploads = [];              // files transferred straight to the User VM (ADR-0009)
+let transfer = null;           // { url, scope, token, inbox, maxFileBytes, maxBatchBytes } from the Host
+let filesAwaitingTransfer = []; // picked before the Session/transfer endpoint was known
 let renderTimer = null;
 
 // ---------- helpers ----------
@@ -114,8 +117,8 @@ function appendNode(node) {
   if (stick) scrollToEnd();
 }
 
-function pushUser(text, images, imageCount) {
-  const entry = { k: 'user', text, images, imageCount };
+function pushUser(text, images, imageCount, files) {
+  const entry = { k: 'user', text, images, imageCount, files };
   entry.node = userBubble(entry);
   entries.push(entry);
   appendNode(entry.node);
@@ -150,6 +153,7 @@ function pushTool(tool) {
   activityCount += 1;
   currentActivity.querySelector('.activity-body').appendChild(entry.node);
   updateActivity(currentActivity, activityCount, !tool.done);
+  addToolDownloadLink(entry);
   if (nearBottom()) scrollToEnd();
   return entry;
 }
@@ -207,7 +211,10 @@ function addRegenerateButton() {
 
 // ---------- sidebar ----------
 function sessionTitle(session) {
-  return (session && (session.name || session.preview)) || '新对话';
+  const raw = (session && (session.name || session.preview)) || '';
+  // The preview is the first prompt as sent; drop the attachment listing we append.
+  const cut = raw.indexOf('[已上传到工作目录的文件]');
+  return (cut > 0 ? raw.slice(0, cut).trim() : raw) || '新对话';
 }
 function renderSessionList() {
   ui.sessionList.innerHTML = '';
@@ -396,8 +403,9 @@ function setStreaming(active) {
   renderSessionList();
 }
 function refreshComposer() {
-  const hasText = ui.prompt.value.trim().length > 0 || attachments.length > 0;
-  ui.send.disabled = !connected || !hasText;
+  const hasText = ui.prompt.value.trim().length > 0 || attachments.length > 0 || completedUploads().length > 0;
+  ui.send.disabled = !connected || !hasText || uploadsBusy();
+  if (uploadsBusy()) ui.send.title = '等待文件传输完成';
   ui.stop.classList.toggle('hidden', !(connected && streaming));
   ui.modeWrap.classList.toggle('hidden', !(connected && streaming));
   ui.send.title = streaming ? (ui.mode.value === 'steer' ? '插话：在当前工具调用后打断' : '排队：等这轮结束后发送') : '发送';
@@ -464,6 +472,7 @@ function handleFrame(frame, ws) {
       statsCache = null;
       resetThread();
       clearExtensionUi();
+      resetTransfers();
       streaming = false;
       setStreaming(Boolean(frame.state && frame.state.isStreaming));
       renderHeader();
@@ -485,6 +494,12 @@ function handleFrame(frame, ws) {
       return;
     case 'stats':
       if (frame.sessionId === activeId) { statsCache = frame.stats; renderStats(); }
+      return;
+    case 'transfer':
+      if (frame.sessionId !== activeId) return;
+      transfer = frame;
+      refreshToolDownloadLinks();
+      if (filesAwaitingTransfer.length) { const queued = filesAwaitingTransfer; filesAwaitingTransfer = []; void uploadFiles(queued); }
       return;
     case 'ack':
       if (frame.operation === 'steer' || frame.operation === 'follow_up') toast(frame.operation === 'steer' ? '已插话' : '已排队');
@@ -545,6 +560,7 @@ function handleEvent(event) {
   }
   if (type === 'queue_update') { renderQueue(event); return; }
   if (type === 'extension_ui_request') { handleExtensionUi(event); return; }
+  if (type === 'transfer_progress' || type === 'transfer_complete' || type === 'transfer_failed') { handleTransferEvent(event); return; }
   if (type === 'message_end' && event.message && event.message.stopReason === 'error') { pushNote('模型调用失败：' + (event.message.errorMessage || '未知错误'), true); return; }
   if (type === 'message_end' && event.message && event.message.role === 'custom' && event.message.display === true) {
     const text = customMessageText(event.message.content);
@@ -769,20 +785,137 @@ function applySlash(command) {
   refreshComposer();
 }
 
-// ---------- attachments ----------
+// ---------- attachments: inline images + direct file transfer ----------
 const MAX_IMAGE_BYTES = 600 * 1024;
+const INLINE_IMAGE_LIMIT = 4 * 1024 * 1024; // larger images travel as files
+const HASH_LIMIT = 32 * 1024 * 1024;         // sha256 in the browser only for files this small
+
 async function addFiles(files) {
+  const toUpload = [];
   for (const file of files) {
-    if (!file.type.startsWith('image/')) continue;
-    if (attachments.length >= 8) { toast('最多 8 张图片'); break; }
-    try {
-      attachments.push(await encodeImage(file));
-    } catch {
-      toast('无法读取图片');
+    const isSmallImage = file.type.startsWith('image/') && file.size <= INLINE_IMAGE_LIMIT;
+    if (isSmallImage) {
+      // Small images go inline with the prompt so the model can see them.
+      if (attachments.length >= 8) { toast('最多 8 张内联图片，其余作为文件上传'); toUpload.push(file); continue; }
+      try { attachments.push(await encodeImage(file)); } catch { toast('无法读取图片'); }
+    } else {
+      toUpload.push(file);
     }
   }
   renderAttachments();
   refreshComposer();
+  if (toUpload.length) await uploadFiles(toUpload);
+}
+
+// Files go straight from the browser to the User VM over the LocalSend v2 API
+// the Host advertises; the Web Server never sees a byte (ADR-0009).
+async function uploadFiles(files) {
+  if (!transfer) {
+    filesAwaitingTransfer.push(...files);
+    if (!opened && !pendingOpenId && connected) { openSession(null); toast('正在为文件建立对话…'); }
+    else if (opened) { toast('这个 Host 没有开启文件传输'); filesAwaitingTransfer = []; }
+    return;
+  }
+  const tooBig = files.filter((f) => f.size > transfer.maxFileBytes);
+  if (tooBig.length) toast(`已跳过 ${tooBig.length} 个超过 ${formatBytes(transfer.maxFileBytes)} 的文件`);
+  const batch = files.filter((f) => f.size <= transfer.maxFileBytes);
+  if (batch.length === 0) return;
+  const pending = uploads.filter((u) => u.state === 'uploading').reduce((s, u) => s + u.size, 0);
+  if (pending + batch.reduce((s, f) => s + f.size, 0) > transfer.maxBatchBytes) { toast(`一次最多传输 ${formatBytes(transfer.maxBatchBytes)}`); return; }
+
+  const entries = batch.map((file) => ({
+    id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    file, name: file.name, size: file.size, received: 0, state: 'uploading', path: null, error: null, xhr: null, sessionId: null, token: null,
+  }));
+  uploads.push(...entries);
+  renderAttachments();
+  refreshComposer();
+
+  const meta = {};
+  for (const u of entries) {
+    const sha256 = u.size <= HASH_LIMIT ? await sha256Hex(u.file).catch(() => undefined) : undefined;
+    meta[u.id] = { id: u.id, fileName: u.name, size: u.size, fileType: u.file.type || 'application/octet-stream', ...(sha256 ? { sha256 } : {}) };
+  }
+  let prepared;
+  try {
+    const response = await fetch(`${transfer.url}/api/localsend/v2/prepare-upload?scope=${encodeURIComponent(transfer.scope)}&token=${encodeURIComponent(transfer.token)}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ info: { alias: 'PI Coffee Web', version: '2.0', deviceModel: navigator.platform || 'browser', deviceType: 'web', fingerprint: 'web', port: 0, protocol: 'http', download: false }, files: meta }),
+    });
+    if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || ('HTTP ' + response.status));
+    prepared = await response.json();
+  } catch (error) {
+    for (const u of entries) { u.state = 'failed'; u.error = '无法连接 User VM 的传输端点：' + (error.message || error); }
+    renderAttachments(); refreshComposer();
+    toast('文件传输失败：浏览器无法直连 User VM（' + transfer.url + '）');
+    return;
+  }
+  for (const u of entries) {
+    u.sessionId = prepared.sessionId;
+    u.token = prepared.files[u.id];
+    if (!u.token) { u.state = 'failed'; u.error = '服务端未接受该文件'; continue; }
+    void sendFile(u);
+  }
+  renderAttachments();
+}
+
+function sendFile(u) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    u.xhr = xhr;
+    xhr.open('POST', `${transfer.url}/api/localsend/v2/upload?sessionId=${encodeURIComponent(u.sessionId)}&fileId=${encodeURIComponent(u.id)}&token=${encodeURIComponent(u.token)}`);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && u.state === 'uploading') { u.received = Math.max(u.received, e.loaded); renderAttachmentProgress(u); } };
+    xhr.onload = () => {
+      if (xhr.status === 200) { if (u.state === 'uploading') { u.received = u.size; u.state = u.path ? 'done' : 'finishing'; } }
+      else { u.state = 'failed'; u.error = xhr.status === 422 ? '校验失败（SHA-256 不匹配）' : xhr.status === 403 ? '令牌无效' : 'HTTP ' + xhr.status; }
+      renderAttachments(); refreshComposer(); resolve();
+    };
+    xhr.onerror = () => { if (u.state !== 'cancelled') { u.state = 'failed'; u.error = '网络错误'; } renderAttachments(); refreshComposer(); resolve(); };
+    xhr.onabort = () => { u.state = 'cancelled'; renderAttachments(); refreshComposer(); resolve(); };
+    xhr.send(u.file);
+  });
+}
+
+async function sha256Hex(file) {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function handleTransferEvent(event) {
+  const u = uploads.find((x) => x.id === event.fileId);
+  if (!u) return;
+  if (event.type === 'transfer_progress') { u.received = Math.max(u.received, event.received || 0); renderAttachmentProgress(u); return; }
+  if (event.type === 'transfer_complete') {
+    u.path = event.path; u.name = event.fileName || u.name; u.sha256 = event.sha256; u.received = u.size;
+    if (u.state !== 'cancelled') u.state = 'done';
+    renderAttachments(); refreshComposer();
+    return;
+  }
+  if (event.type === 'transfer_failed' && u.state !== 'cancelled') { u.state = 'failed'; u.error = event.message || '传输失败'; renderAttachments(); refreshComposer(); }
+}
+
+function downloadUrl(path) {
+  if (!transfer || !path) return null;
+  return `${transfer.url}/api/localsend/v2/download?scope=${encodeURIComponent(transfer.scope)}&token=${encodeURIComponent(transfer.token)}&fileId=${encodeURIComponent(path)}`;
+}
+
+function refreshToolDownloadLinks() {
+  for (const entry of entries) if (entry.k === 'tool' && entry.node) addToolDownloadLink(entry);
+}
+function addToolDownloadLink(entry) {
+  const args = entry.args && typeof entry.args === 'object' ? entry.args : {};
+  const path = args.path || args.file_path;
+  if (!path || !['write', 'edit', 'read'].includes(entry.name)) return;
+  const summary = entry.node.querySelector('summary');
+  if (!summary || summary.querySelector('.tool-dl')) return;
+  const href = downloadUrl(String(path));
+  if (!href) return;
+  const link = document.createElement('a');
+  link.className = 'tool-dl';
+  link.href = href; link.target = '_blank'; link.rel = 'noopener'; link.title = '从 User VM 下载这个文件';
+  link.textContent = '下载';
+  link.addEventListener('click', (e) => e.stopPropagation());
+  summary.insertBefore(link, summary.querySelector('.state'));
 }
 function encodeImage(file) {
   return new Promise((resolve, reject) => {
@@ -812,7 +945,7 @@ function encodeImage(file) {
 }
 function renderAttachments() {
   ui.attachments.innerHTML = '';
-  ui.attachments.classList.toggle('hidden', attachments.length === 0);
+  ui.attachments.classList.toggle('hidden', attachments.length === 0 && uploads.length === 0);
   attachments.forEach((image, index) => {
     const wrap = el('div', 'attachment');
     const img = document.createElement('img');
@@ -825,9 +958,49 @@ function renderAttachments() {
     wrap.append(img, remove);
     ui.attachments.appendChild(wrap);
   });
+  for (const u of uploads) {
+    const chip = el('div', 'upload-chip ' + u.state);
+    chip.dataset.id = u.id;
+    chip.innerHTML = '<span class="file-ico">📄</span><span class="upload-main"><span class="upload-name"></span><span class="upload-meta"></span><span class="upload-bar"><span class="upload-fill"></span></span></span>';
+    chip.querySelector('.upload-name').textContent = u.name;
+    const remove = el('button', 'attachment-remove', '×');
+    remove.type = 'button';
+    remove.title = u.state === 'uploading' ? '取消上传' : '移除';
+    remove.addEventListener('click', () => {
+      if (u.state === 'uploading' && u.xhr) u.xhr.abort();
+      uploads = uploads.filter((x) => x !== u);
+      renderAttachments(); refreshComposer();
+    });
+    chip.appendChild(remove);
+    ui.attachments.appendChild(chip);
+    renderAttachmentProgress(u);
+  }
 }
+function renderAttachmentProgress(u) {
+  const chip = ui.attachments.querySelector(`.upload-chip[data-id="${u.id}"]`);
+  if (!chip) return;
+  chip.className = 'upload-chip ' + u.state;
+  const pct = u.size ? Math.min(100, Math.round((u.received / u.size) * 100)) : 100;
+  chip.querySelector('.upload-fill').style.width = pct + '%';
+  const meta = chip.querySelector('.upload-meta');
+  if (u.state === 'uploading') meta.textContent = `${formatBytes(u.received)} / ${formatBytes(u.size)} · ${pct}%`;
+  else if (u.state === 'finishing') meta.textContent = '校验中…';
+  else if (u.state === 'done') meta.textContent = `${formatBytes(u.size)} · 已存入 User VM`;
+  else if (u.state === 'failed') meta.textContent = u.error || '失败';
+  else meta.textContent = '已取消';
+}
+function resetTransfers() {
+  // Endpoint and token are per Session; anything in flight belonged to the old one.
+  for (const u of uploads) if (u.state === 'uploading' && u.xhr) u.xhr.abort();
+  uploads = [];
+  transfer = null;
+  renderAttachments();
+}
+function uploadsBusy() { return uploads.some((u) => u.state === 'uploading' || u.state === 'finishing'); }
+function completedUploads() { return uploads.filter((u) => u.state === 'done' && u.path); }
 ui.attach.addEventListener('click', () => ui.file.click());
 ui.file.addEventListener('change', () => { addFiles([...ui.file.files]); ui.file.value = ''; });
+ui.file.removeAttribute('accept'); // any file type: images inline, everything else straight to the VM
 ui.prompt.addEventListener('paste', (event) => {
   const files = [...(event.clipboardData?.items || [])].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean);
   if (files.length) { event.preventDefault(); addFiles(files); }
@@ -865,7 +1038,9 @@ ui.mode.addEventListener('change', refreshComposer);
 $('#composer').addEventListener('submit', (event) => {
   event.preventDefault();
   const text = ui.prompt.value.trim();
-  if ((!text && attachments.length === 0) || !socket || socket.readyState !== WebSocket.OPEN) return;
+  const files = completedUploads();
+  if ((!text && attachments.length === 0 && files.length === 0) || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (uploadsBusy()) { toast('等待文件传输完成'); return; }
   const images = attachments.slice();
   if (!opened) {
     // First message of a brand-new conversation: (re)use the in-flight open
@@ -880,21 +1055,27 @@ $('#composer').addEventListener('submit', (event) => {
     showThinking(true);
     return;
   }
-  submitPrompt(text || '（图片）', images);
+  submitPrompt(text || (files.length ? '（附件）' : '（图片）'), images);
 });
 function submitPrompt(text, images) {
   const mode = streaming ? ui.mode.value : 'prompt';
-  const frame = { v: 1, type: 'prompt', requestId: requestId('web'), text };
+  const files = completedUploads().map((u) => ({ name: u.name, size: u.size, path: u.path, href: downloadUrl(u.path) }));
+  // Files are already on the User VM's disk; the model gets their paths, not their bytes.
+  const wireText = files.length
+    ? text + '\n\n[已上传到工作目录的文件]\n' + files.map((f) => `- ${f.path} (${formatBytes(f.size)})`).join('\n')
+    : text;
+  const frame = { v: 1, type: 'prompt', requestId: requestId('web'), text: wireText };
   if (images && images.length) frame.images = images;
   if (mode !== 'prompt') frame.mode = mode;
   if (mode === 'prompt') {
-    pushUser(text, images);
+    pushUser(text, images, undefined, files);
     lastUserText = text;
     setStreaming(true);
     showThinking(true);
   }
   send(frame);
   attachments = [];
+  uploads = uploads.filter((u) => u.state === 'uploading' || u.state === 'finishing');
   renderAttachments();
   ui.prompt.value = '';
   ui.slash.classList.add('hidden');

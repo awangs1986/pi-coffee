@@ -204,6 +204,22 @@ export type ServerFrame =
       stats: SessionStats;
     }
   | {
+      /**
+       * Where this browser transfers files for the open Session: the Host's
+       * LocalSend v2 endpoint on the User VM (ADR-0009). Sent after `opened`.
+       * Absent when the Host runs without a transfer server.
+       */
+      v: typeof PROTOCOL_VERSION;
+      type: "transfer";
+      sessionId: string;
+      url: string;
+      scope: string;
+      token: string;
+      inbox: string;
+      maxFileBytes: number;
+      maxBatchBytes: number;
+    }
+  | {
       v: typeof PROTOCOL_VERSION;
       type: "pong";
       nonce: string;

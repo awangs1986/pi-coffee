@@ -178,6 +178,15 @@ export class HostSession {
     return this.pendingUi.has(id);
   }
 
+  /**
+   * Publish a Host-originated event (e.g. transfer progress) on the same
+   * ordered stream as Pi's events, so browsers see one consistent timeline.
+   */
+  announce(event: JsonValue): void {
+    if (!this.started) return;
+    this.handlePiEvent(event);
+  }
+
   /** Answer a pending extension dialog; unknown ids are ignored (already answered or timed out). */
   async respondUi(response: UiResponse): Promise<boolean> {
     if (!this.pendingUi.has(response.id)) return false;

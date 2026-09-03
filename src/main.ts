@@ -1,5 +1,6 @@
 import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
+import { DEFAULT_MAX_BATCH_BYTES, DEFAULT_MAX_FILE_BYTES, TransferServer } from "./host/transfer.js";
 import { resolvePiExtensions } from "./pi-extensions.js";
 import { RelayServer } from "./relay/server.js";
 import { WebServer } from "./web/server.js";
@@ -42,14 +43,33 @@ async function run(selectedRole: Role): Promise<void> {
   });
   if (relay) await relay.start();
 
-  const host = selectedRole === "web" || selectedRole === "relay" ? undefined : new HostServer({
+  const wantHost = selectedRole !== "web" && selectedRole !== "relay";
+  const workdir = process.env.PI_COFFEE_WORKDIR ?? process.cwd();
+  // File transfer (ADR-0009): the Host speaks LocalSend v2 on the User VM's LAN
+  // interface so browsers move files without touching the Web Server.
+  let host: HostServer | undefined;
+  const transferBind = envString("PI_COFFEE_TRANSFER_BIND", "0.0.0.0");
+  const transfer = !wantHost || transferBind === "off" ? undefined : new TransferServer({
+    host: transferBind,
+    port: envNumber("PI_COFFEE_TRANSFER_PORT", 53317),
+    workdir,
+    advertiseHost: process.env.PI_COFFEE_TRANSFER_ADVERTISE,
+    alias: envString("PI_COFFEE_TRANSFER_ALIAS", "PI Coffee"),
+    maxFileBytes: envNumber("PI_COFFEE_MAX_FILE_BYTES", DEFAULT_MAX_FILE_BYTES),
+    maxBatchBytes: envNumber("PI_COFFEE_MAX_BATCH_BYTES", DEFAULT_MAX_BATCH_BYTES),
+    onEvent: (scope, event) => host?.announce(scope, event),
+  });
+  if (transfer) await transfer.start();
+
+  host = !wantHost ? undefined : new HostServer({
     host: envString("PI_COFFEE_HOST_BIND", "127.0.0.1"),
     port: envNumber("PI_COFFEE_HOST_PORT", 8788),
     token: process.env.PI_COFFEE_HOST_TOKEN,
     eventBufferSize: envNumber("PI_COFFEE_EVENT_BUFFER", 256),
     idleTimeoutMs: envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000),
+    transfer,
     factory: new RpcPiSessionFactory({
-      cwd: process.env.PI_COFFEE_WORKDIR ?? process.cwd(),
+      cwd: workdir,
       agentDir: process.env.PI_COFFEE_AGENT_DIR,
       sessionDir: process.env.PI_COFFEE_SESSION_DIR,
       provider: process.env.PI_COFFEE_PROVIDER,
@@ -70,6 +90,7 @@ async function run(selectedRole: Role): Promise<void> {
   const shutdown = async () => {
     await web?.close();
     await host?.close();
+    await transfer?.close();
     await relay?.close();
   };
   process.once("SIGINT", () => void shutdown().finally(() => process.exit(0)));
@@ -78,6 +99,7 @@ async function run(selectedRole: Role): Promise<void> {
   const addresses = [
     relay ? `Relay http://${relay.address().host}:${relay.address().port}/v1` : undefined,
     host ? `Host ws://${host.address().host}:${host.address().port}/host` : undefined,
+    transfer ? `Transfer ${transfer.publicUrl()}/api/localsend/v2 (LocalSend v2, inbox ${transfer.inboxFor("<session>").split("\\").join("/")})` : undefined,
     web ? `Web http://${web.address().host}:${web.address().port}/` : undefined,
   ].filter((address): address is string => address !== undefined);
   for (const address of addresses) console.log(address);

@@ -17,8 +17,12 @@ Browser ──HTTP/WS──> Web Server (server) ──WS + Host token──> Ag
 | LLM Relay | server | `relay` | the sole upstream key; the list of Relay tokens |
 | Web Server | server | `web` | the Host token |
 | Agent Host (+ Pi) | User VM | `host` | the Host token; this VM's Relay token |
+| File transfer (part of `host`) | User VM, LAN port 53317 | — | per-Session tokens it issues itself |
 
-No process on a User VM ever sees the upstream key. Both the Host and the Relay
+No process on a User VM ever sees the upstream key. File transfer (ADR-0009)
+is LocalSend v2 over plain HTTP served by the Host on the User VM's LAN
+interface: browsers upload and download **directly to the User VM**; the
+server never carries a file byte. Both the Host and the Relay
 refuse to start on a non-loopback bind without their token (fail closed).
 
 ## Prerequisites (both machines)
@@ -30,8 +34,9 @@ refuse to start on a non-loopback bind without their token (fail closed).
   and locked `pi-subagents@0.63.0` are installed by `npm ci` inside the
   checkout; nothing else to install for Pi.
 - Firewall: the server must reach `USER_VM:8788` (Host); the User VM must reach
-  `SERVER:8789` (Relay); browsers reach `SERVER:3000` (or your TLS proxy).
-  Do not expose 8788/8789 beyond those two peers.
+  `SERVER:8789` (Relay); browsers reach `SERVER:3000` (or your TLS proxy) **and
+  `USER_VM:53317`** (file transfer, direct from the browser). Do not expose
+  8788/8789 beyond their two peers.
 
 ## Checkout (both machines)
 
@@ -101,6 +106,17 @@ journalctl -u pi-coffee-host -n 20 --no-pager
 interpolation: the token comes from the Host's environment at request time and
 is never written to disk by PI Coffee.
 
+File transfer listens on `PI_COFFEE_TRANSFER_BIND:PI_COFFEE_TRANSFER_PORT`
+(default `0.0.0.0:53317`). The Host advertises the address browsers should use
+as its first non-internal IPv4; set `PI_COFFEE_TRANSFER_ADVERTISE=<ip or name>`
+when the VM has several interfaces or sits behind a port forward. Uploaded
+files go to `<PI_COFFEE_WORKDIR>/.pi-coffee/inbox/<session>/`, where Pi's
+tools read them. Check from a browser-side machine:
+
+```bash
+curl -s http://USER_VM:53317/api/localsend/v2/info     # LocalSend device description
+```
+
 The Host automatically loads the PI Coffee Web adapter, bundled V5 Harness,
 `pi-subagents`, and the official `pi-web-access` adapter. The `web_search`
 tool calls the Control Plane's `/v1/search/serper` route; only the Relay has
@@ -142,6 +158,7 @@ Then open `http://SERVER:3000/` in a browser and use the shell.
 | Host token mismatch | Web logs 401 from the Host; browser gets `host_unavailable` | make `PI_COFFEE_HOST_TOKEN` identical on both sides |
 | Relay down or Relay token wrong | `模型调用失败：…` note after the prompt | `systemctl status pi-coffee-relay`; check `PI_COFFEE_RELAY_TOKEN(S)` |
 | Upstream (CPA) error | `模型调用失败：…` or Pi's auto-retry note; Relay log line has `outcome: upstream_error` | upstream side |
+| Browser cannot reach `USER_VM:53317` | attachment chip turns red: "无法连接 User VM 的传输端点" | firewall/route from the user network to the VM; `PI_COFFEE_TRANSFER_ADVERTISE` if the auto-detected address is wrong |
 | Upstream/CPA rate limit (HTTP 429) | `exceeded retry limit, last status: 429 Too Many Requests` (often with a Cloudflare request id) | This is upstream quota/concurrency/rate limiting. Check the CPA dashboard/logs and `Retry-After`; wait or reduce concurrency. Pi retries transient 429s up to its configured limit (`retry.maxRetries`, default 3, with 2/4/8 s backoff). The Relay does not retry or hide the 429. Set `retry.enabled: false` temporarily when repeated retries are undesirable. |
 | Browser closed / refreshed / opened on another machine | nothing — the run continues on the Host; the browser reloads the conversation list and history from Pi's session store in the User VM | none needed |
 | Idle Pi process stopped (`PI_COFFEE_IDLE_TIMEOUT_MS`, default 10 min) | nothing visible; the next open resumes the conversation from the store | none needed |
@@ -217,6 +234,13 @@ Terminate TLS and expose only the Web Server to the internal browser network.
 Forward WebSocket upgrades on `/ws`. Keep 8788 (Host) and 8789 (Relay) private
 to their peers. Do not publish Gitea, the Host or the Relay to the public
 internet.
+
+Note the file-transfer trade-off (ADR-0009): browsers reach the User VM's
+53317 over plain HTTP because they refuse self-signed certificates. If the Web
+Server is served over HTTPS, browsers will block those plain-HTTP uploads as
+mixed content; on this internal LAN the owner chose to serve the Web Server
+over HTTP as well. Encryption for transfers would need an internal CA or a
+WebRTC path (see the ADR).
 
 ## Recovery
 
