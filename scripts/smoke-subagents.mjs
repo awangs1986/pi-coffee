@@ -39,11 +39,16 @@ try {
   const inspection = await readJsonWhenReady(inspectionPath);
   const commands = await client.getCommands();
   const names = new Set(commands.map((command) => command.name));
-  const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold"];
+  const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold", "websearch"];
   const missing = required.filter((name) => !names.has(name));
   const expectedSimple = ["read", "bash", "edit", "write", "grep", "find", "ls", "search_tools"];
   if (inspection.all.includes("subagent") !== true || inspection.all.includes("bg_wait") !== true) {
     throw new Error(`pi-subagents tools were not registered: ${JSON.stringify(inspection)}`);
+  }
+  const requiredWebTools = ["web_search", "research_seal", "fetch_content", "source_check", "get_search_content"];
+  const missingWebTools = requiredWebTools.filter((name) => !inspection.all.includes(name));
+  if (missingWebTools.length > 0) {
+    throw new Error(`web extension tools were not registered: ${missingWebTools.join(", ")}`);
   }
   if (!inspection.all.includes("recall_folded") || !inspection.all.includes("unfold")) {
     throw new Error(`context-fold tools were not registered: ${JSON.stringify(inspection)}`);

@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import harnessExtension from "../src/harness/extension.js";
+import harnessExtension, { createHarnessExtension } from "../src/harness/extension.js";
+import { MemoryCapabilitySettingsStore } from "../src/capabilities/settings.js";
 import { FULL_TOOLS, SIMPLE_TOOLS } from "../src/harness/mode.js";
+import { createWebExtension } from "../src/web/extension.js";
 
 type Handler = (event: unknown, context: unknown) => unknown;
 
@@ -201,7 +203,7 @@ describe("PI Coffee V5 harness extension", () => {
     expect(full.systemPrompt.match(/# PI Coffee Harness Prompt \(Full\)/g)).toHaveLength(1);
   });
 
-  it("keeps git and verify resident but requires full mode for activation", async () => {
+  it("keeps git and verify in the Harness table rather than the optional capability catalog", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
     sessions.push(cwd);
     const pi = new FakePi(cwd);
@@ -212,13 +214,13 @@ describe("PI Coffee V5 harness extension", () => {
     expect(pi.tools.has("verify")).toBe(true);
     expect(pi.getActiveTools()).not.toContain("git");
     const search = await pi.runTool("search_tools", { action: "search", query: "git" });
-    expect(search.content[0].text).toContain("git");
+    expect(search.content[0].text).toBe("No matching trusted capabilities.");
     const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "git" });
-    expect(activation.content[0].text).toContain("/harness full");
+    expect(activation.content[0].text).toContain("unknown");
     expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
   });
 
-  it("discovers and deliberately activates optional extension tools without changing V5 counts", async () => {
+  it("keeps a not-run optional runner out of agent search while exposing honest settings status", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
     sessions.push(cwd);
     const pi = new FakePi(cwd);
@@ -231,21 +233,58 @@ describe("PI Coffee V5 harness extension", () => {
         execute: async () => ({ content: [{ type: "text", text: "" }], details: {} }),
       });
     }
-    harnessExtension(pi.asExtensionApi());
+    createHarnessExtension({
+      settings: new MemoryCapabilitySettingsStore(),
+      conformedCapabilities: new Set(),
+    })(pi.asExtensionApi());
     await pi.emit("session_start", { type: "session_start", reason: "startup" });
 
     const search = await pi.runTool("search_tools", { action: "search", query: "subagent" });
-    expect(search.content[0].text).toContain("subagent");
-    expect(search.content[0].text).toContain("available for activation");
+    expect(search.content[0].text).toBe("No matching trusted capabilities.");
+    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
+    expect(activation.details).toMatchObject({ ok: false, code: "not-ready" });
     expect(pi.getActiveTools()).toHaveLength(SIMPLE_TOOLS.length);
 
-    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
-    expect(activation.details).toMatchObject({ ok: true, name: "subagent" });
-    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "subagent"]);
+    await pi.runCommand("capabilities", "");
+    expect(pi.notifications.at(-1)?.message).toContain("subagent");
+    expect(pi.notifications.at(-1)?.message).toContain("not_run");
+  });
+
+  it("activates a conformed Full-only subagent bundle without changing the V5 base counts", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
+    sessions.push(cwd);
+    const pi = new FakePi(cwd);
+    for (const name of ["subagent", "bg_wait"]) {
+      pi.tools.set(name, {
+        name,
+        label: name,
+        description: `${name} optional extension tool`,
+        parameters: {} as never,
+        execute: async () => ({ content: [{ type: "text", text: "" }], details: {} }),
+      });
+    }
+    createHarnessExtension({
+      settings: new MemoryCapabilitySettingsStore(),
+      conformedCapabilities: new Set(["subagent"]),
+    })(pi.asExtensionApi());
+    await pi.emit("session_start", { type: "session_start", reason: "startup" });
+
+    expect((await pi.runTool("search_tools", { action: "search", query: "subagent" })).content[0].text)
+      .toBe("No matching trusted capabilities.");
 
     await pi.runCommand("harness", "full");
     expect(pi.getActiveTools()).toEqual([...FULL_TOOLS]);
     expect(pi.getActiveTools()).toHaveLength(FULL_TOOLS.length);
+
+    const search = await pi.runTool("search_tools", { action: "search", query: "delegate child" });
+    expect(search.content[0].text).toContain("subagent");
+    expect(search.details.hits[0]).not.toHaveProperty("tools");
+    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
+    expect(activation.details).toMatchObject({ ok: true, capabilityId: "subagent" });
+    expect(pi.getActiveTools()).toEqual([...FULL_TOOLS, "subagent", "bg_wait"]);
+
+    await pi.runCommand("harness", "simple");
+    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
   });
 
   it("reports native VM verification results without V5 gate claims", async () => {
@@ -265,5 +304,20 @@ describe("PI Coffee V5 harness extension", () => {
     const result = await pi.runTool("verify", { action: "run" });
     expect(result.content[0].text).toContain("overall: passed");
     expect(result.content[0].text).not.toContain("Completion Label");
+  });
+
+  it("discovers and activates the local Relay-backed web capability", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
+    sessions.push(cwd);
+    const pi = new FakePi(cwd);
+    createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
+    createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
+    await pi.emit("session_start", { type: "session_start", reason: "startup" });
+
+    const search = await pi.runTool("search_tools", { action: "search", query: "serper research" });
+    expect(search.content[0].text).toContain("web:");
+    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "web" });
+    expect(activation.details).toMatchObject({ ok: true, capabilityId: "web" });
+    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "web_search", "research_seal"]);
   });
 });
