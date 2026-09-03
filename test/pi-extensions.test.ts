@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { discoverAndLoadExtensions } from "@earendil-works/pi-coding-agent";
 import {
+  resolveWebExtension,
   resolveHarnessExtension,
   resolvePiExtensions,
   resolveContextFoldExtension,
+  resolvePiLensExtension,
+  resolveRpivTodoExtension,
+  resolvePiMcpAdapterExtension,
   resolvePiSubagentsExtension,
   resolvePiSubagentsResourceExtension,
+  resolvePiWebAccessExtension,
+  resolvePiWebAccessPackage,
 } from "../src/pi-extensions.js";
 import subagentsResourceExtension from "../src/subagents/extension.js";
 
@@ -13,8 +19,10 @@ describe("PI Coffee native extension selection", () => {
   it("loads context-fold last so deterministic compaction replaces Pi's native summary", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
+      resolveWebExtension(),
       resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
+      resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
     ]);
@@ -22,26 +30,93 @@ describe("PI Coffee native extension selection", () => {
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
     expect(resolvePiSubagentsExtension()).toMatch(/node_modules[\\/]pi-subagents[\\/]index\.ts$/);
+    expect(resolvePiWebAccessExtension()).toMatch(/[\\/]web[\\/]pi-web-access-adapter\.js$/);
+    expect(resolvePiWebAccessPackage()).toMatch(/node_modules[\\/]pi-web-access[\\/]index\.ts$/);
     expect(resolveContextFoldExtension()).toMatch(/node_modules[\\/]context-fold[\\/]index\.ts$/);
   });
 
   it("can disable only pi-subagents while retaining Harness", () => {
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([
+      resolveWebExtension(),
       resolveHarnessExtension(),
+      resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([
+      resolveWebExtension(),
       resolveHarnessExtension(),
+      resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
     ]);
   });
 
   it("can disable context-fold independently, leaving Pi native compaction available", () => {
     expect(resolvePiExtensions({ PI_COFFEE_CONTEXT_FOLD: "off" })).toEqual([
+      resolveWebExtension(),
+      resolveHarnessExtension(),
+      resolvePiSubagentsExtension(),
+      resolvePiWebAccessExtension(),
+      resolvePiSubagentsResourceExtension(),
+    ]);
+  });
+
+  it("can disable the web adapters independently", () => {
+    expect(resolvePiExtensions({ PI_COFFEE_WEB: "off" })).toEqual([
+      resolveHarnessExtension(),
+      resolvePiSubagentsExtension(),
+      resolvePiWebAccessExtension(),
+      resolvePiSubagentsResourceExtension(),
+      resolveContextFoldExtension(),
+    ]);
+    expect(resolvePiExtensions({ PI_COFFEE_WEB_ACCESS: "off" })).toEqual([
+      resolveWebExtension(),
       resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiSubagentsResourceExtension(),
+      resolveContextFoldExtension(),
     ]);
+  });
+
+  it("keeps pi-lens non-visible until explicitly opted in", () => {
+    const defaults = resolvePiExtensions({});
+    expect(defaults.some((path) => /[\\/]pi-lens[\\/]/.test(path))).toBe(false);
+
+    const enabled = resolvePiExtensions({
+      PI_COFFEE_PI_LENS: "on",
+      PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent",
+    });
+    expect(enabled).toContain(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" }));
+    expect(enabled.indexOf(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })))
+      .toBeLessThan(enabled.indexOf(resolveContextFoldExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })));
+    expect(resolvePiLensExtension({ PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" })).toMatch(/node_modules[\\/]pi-lens[\\/](dist[\\/]index\.js|index\.js)$/);
+  });
+
+  it("keeps rpiv-todo non-visible until explicitly opted in", () => {
+    const defaults = resolvePiExtensions({});
+    expect(defaults.some((path) => /[\\/]rpiv-todo[\\/]/.test(path))).toBe(false);
+
+    const agentEnv = { PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" };
+    const enabled = resolvePiExtensions({ ...agentEnv, PI_COFFEE_RPIV_TODO: "on" });
+    const todo = resolveRpivTodoExtension(agentEnv);
+    expect(enabled).toContain(todo);
+    expect(enabled.indexOf(todo)).toBeLessThan(
+      enabled.indexOf(resolveContextFoldExtension(agentEnv)),
+    );
+    expect(todo).toMatch(/node_modules[\\/]@juicesharp[\\/]rpiv-todo[\\/]index\.ts$/);
+  });
+
+  it("keeps pi-mcp-adapter non-visible until explicitly opted in", () => {
+    const defaults = resolvePiExtensions({});
+    expect(defaults.some((path) => /[\\/]pi-mcp-adapter[\\/]/.test(path))).toBe(false);
+
+    const agentEnv = { PI_COFFEE_AGENT_DIR: "/tmp/pi-coffee-no-agent" };
+    const enabled = resolvePiExtensions({ ...agentEnv, PI_COFFEE_PI_MCP_ADAPTER: "on" });
+    const adapter = resolvePiMcpAdapterExtension(agentEnv);
+    expect(enabled).toContain(adapter);
+    expect(enabled.indexOf(adapter)).toBeLessThan(
+      enabled.indexOf(resolveContextFoldExtension(agentEnv)),
+    );
+    expect(adapter).toMatch(/node_modules[\\/]pi-mcp-adapter[\\/]index\.ts$/);
   });
 
   it("loads the pinned context-fold entry through Pi's native loader", async () => {

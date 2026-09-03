@@ -15,12 +15,14 @@ PI Coffee 的外部 Seam 是现有的 `RpcPiSessionFactoryOptions.extensions`：
 ```text
 Agent Host
   └─ RpcPiSessionFactory
+      ├─ PI Coffee Web adapter             (本地 Relay/search seam)
       ├─ PI Coffee Harness extension       (本地实现)
       ├─ pi-subagents/index.ts             (上游实现，由 Pi loader 加载)
+      ├─ pi-web-access adapter             (上游内容工具，屏蔽同名 web_search)
       └─ subagents/extension.js            (本地资源 Adapter)
 ```
 
-`src/pi-extensions.ts` 负责解析这三条入口；`src/subagents/extension.ts`
+`src/pi-extensions.ts` 负责解析这些入口；`src/subagents/extension.ts`
 只把上游包自带的 `skills/` 和 `prompts/` 目录接到 Pi 的
 `resources_discover` seam。上游 child launch、workflow、background run、
 result handoff 和 supervision 都留在上游 Module 内，因此调用方只需知道
@@ -63,7 +65,7 @@ foreground 子 Agent 结果和 slash-command 报告）显示为通知；`display
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `PI_COFFEE_EXTENSIONS` | 内置 Harness + `pi-subagents` | 冒号分隔的显式替换列表；设为 `off` 关闭全部扩展 |
+| `PI_COFFEE_EXTENSIONS` | 内置 Web + Harness + `pi-subagents` + `pi-web-access` | 冒号分隔的显式替换列表；设为 `off` 关闭全部扩展 |
 | `PI_COFFEE_SUBAGENTS` | 启用 | 设为 `off`、`0`、`false` 或 `no`，只关闭内置 `pi-subagents`，保留 Harness |
 | `PI_COFFEE_AGENT_DIR` | Pi 默认 | 上游配置、session 和异步结果仍归 User VM 的 Pi 目录 |
 
