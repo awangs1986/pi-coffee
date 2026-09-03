@@ -1,7 +1,8 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import { networkInterfaces } from "node:os";
 import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { JsonValue } from "../shared/protocol.js";
@@ -25,6 +26,12 @@ export interface TransferServerOptions {
   maxBatchBytes?: number;
   /** Transfer lifecycle events for a scope (a Session id), forwarded to its browsers. */
   onEvent?: (scope: string, event: JsonValue) => void;
+  /**
+   * Optional HTTPS route: a certificate browsers trust (internal CA). Plain
+   * HTTP is the 0.1 default; see the runbook for the all-or-nothing rule with
+   * the Web Server's scheme (mixed content).
+   */
+  tls?: { cert: string | Buffer; key: string | Buffer };
 }
 
 export const DEFAULT_MAX_FILE_BYTES = 256 * 1024 * 1024;
@@ -64,7 +71,8 @@ export class TransferServer {
   private readonly http: HttpServer;
   private readonly tokens = new Map<string, string>();        // scope -> token
   private readonly uploads = new Map<string, UploadSession>(); // upload session id -> session
-  private readonly fingerprint = randomBytes(16).toString("hex");
+  private readonly fingerprint: string;
+  private readonly secure: boolean;
   private started = false;
 
   constructor(options: TransferServerOptions) {
@@ -76,10 +84,14 @@ export class TransferServer {
     this.maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
     this.maxBatchBytes = options.maxBatchBytes ?? DEFAULT_MAX_BATCH_BYTES;
     this.onEvent = options.onEvent;
-    this.http = createServer((request, response) => void this.handle(request, response).catch((error) => {
+    this.secure = options.tls !== undefined;
+    // LocalSend convention: over HTTPS the fingerprint is the certificate's SHA-256.
+    this.fingerprint = options.tls ? new X509Certificate(options.tls.cert).fingerprint256.replace(/:/g, "").toLowerCase() : randomBytes(16).toString("hex");
+    const handler = (request: IncomingMessage, response: ServerResponse) => void this.handle(request, response).catch((error) => {
       if (!response.headersSent) sendJson(response, 500, { message: error instanceof Error ? error.message : "Unknown error" });
       else response.destroy();
-    }));
+    });
+    this.http = options.tls ? createHttpsServer({ cert: options.tls.cert, key: options.tls.key }, handler) : createServer(handler);
     this.http.requestTimeout = 0; // large uploads
   }
 
@@ -111,7 +123,7 @@ export class TransferServer {
   /** Base URL a browser on the LAN should use. */
   publicUrl(): string {
     const host = this.advertiseHost ?? detectLanAddress() ?? "127.0.0.1";
-    return `http://${host}:${this.address().port}`;
+    return `${this.secure ? "https" : "http"}://${host}:${this.address().port}`;
   }
 
   /** The token a browser presents for this scope (Session); stable while the Host runs. */
@@ -183,7 +195,7 @@ export class TransferServer {
       deviceType: "server",
       fingerprint: this.fingerprint,
       port: this.address().port,
-      protocol: "http",
+      protocol: this.secure ? "https" : "http",
       download: true,
     };
   }

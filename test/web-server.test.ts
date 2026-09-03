@@ -1,4 +1,7 @@
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
+import { request as httpsRequest } from "node:https";
+import { resolve } from "node:path";
 import { WebSocket } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import { HostServer } from "../src/host/server.js";
@@ -208,6 +211,34 @@ describe("Web Server seam", () => {
       const blocked = await fetch(`${base}${path}`);
       expect(blocked.status, path).toBe(404);
     }
+  });
+
+  it("serves the shell and the WebSocket over HTTPS when given TLS material (the optional secure route)", async () => {
+    const cert = readFileSync(resolve("test/fixtures/tls/test-cert.pem"));
+    const key = readFileSync(resolve("test/fixtures/tls/test-key.pem"));
+    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    await host.start();
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host`, tls: { cert, key } });
+    await web.start();
+    expect(web.scheme).toBe("https");
+
+    // The test certificate is the trust anchor here, standing in for an internal CA.
+    const page = await new Promise<{ status: number; body: string }>((resolvePromise, reject) => {
+      httpsRequest({ host: "127.0.0.1", port: web!.address().port, path: "/", ca: cert }, (response) => {
+        let body = "";
+        response.on("data", (chunk) => (body += chunk));
+        response.on("end", () => resolvePromise({ status: response.statusCode ?? 0, body }));
+      }).on("error", reject).end();
+    });
+    expect(page.status).toBe(200);
+    expect(page.body).toContain("PI Coffee");
+
+    const browser = new WebSocket(`wss://127.0.0.1:${web.address().port}/ws`, { ca: cert });
+    await once(browser, "open");
+    const frames = new FrameQueue(browser);
+    browser.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    expect(await frames.nextSessions()).toMatchObject({ type: "sessions" });
+    browser.close();
   });
 
   it("returns a structured error when the browser sends malformed JSON", async () => {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
 import { DEFAULT_MAX_BATCH_BYTES, DEFAULT_MAX_FILE_BYTES, TransferServer } from "./host/transfer.js";
@@ -45,6 +46,14 @@ async function run(selectedRole: Role): Promise<void> {
 
   const wantHost = selectedRole !== "web" && selectedRole !== "relay";
   const workdir = process.env.PI_COFFEE_WORKDIR ?? process.cwd();
+  // Optional HTTPS route (internal CA). 0.1 runs plain HTTP; when a
+  // certificate is given, both browser-facing surfaces must use one, because a
+  // browser on an https page refuses plain-http transfers as mixed content.
+  const webTls = loadTls("PI_COFFEE_WEB_TLS_CERT", "PI_COFFEE_WEB_TLS_KEY");
+  const transferTls = loadTls("PI_COFFEE_TRANSFER_TLS_CERT", "PI_COFFEE_TRANSFER_TLS_KEY");
+  if (selectedRole === "all" && (webTls === undefined) !== (transferTls === undefined)) {
+    throw new Error("Set TLS for both the Web Server and the transfer port, or for neither (browsers block mixed content)");
+  }
   // File transfer (ADR-0009): the Host speaks LocalSend v2 on the User VM's LAN
   // interface so browsers move files without touching the Web Server.
   let host: HostServer | undefined;
@@ -58,6 +67,7 @@ async function run(selectedRole: Role): Promise<void> {
     maxFileBytes: envNumber("PI_COFFEE_MAX_FILE_BYTES", DEFAULT_MAX_FILE_BYTES),
     maxBatchBytes: envNumber("PI_COFFEE_MAX_BATCH_BYTES", DEFAULT_MAX_BATCH_BYTES),
     onEvent: (scope, event) => host?.announce(scope, event),
+    ...(transferTls === undefined ? {} : { tls: transferTls }),
   });
   if (transfer) await transfer.start();
 
@@ -84,6 +94,7 @@ async function run(selectedRole: Role): Promise<void> {
     port: envNumber("PI_COFFEE_WEB_PORT", 3000),
     hostUrl: process.env.PI_COFFEE_HOST_URL ?? `ws://127.0.0.1:${host?.address().port ?? envNumber("PI_COFFEE_HOST_PORT", 8788)}/host`,
     hostToken: process.env.PI_COFFEE_HOST_TOKEN,
+    ...(webTls === undefined ? {} : { tls: webTls }),
   });
   if (web) await web.start();
 
@@ -100,7 +111,7 @@ async function run(selectedRole: Role): Promise<void> {
     relay ? `Relay http://${relay.address().host}:${relay.address().port}/v1` : undefined,
     host ? `Host ws://${host.address().host}:${host.address().port}/host` : undefined,
     transfer ? `Transfer ${transfer.publicUrl()}/api/localsend/v2 (LocalSend v2, inbox ${transfer.inboxFor("<session>").split("\\").join("/")})` : undefined,
-    web ? `Web http://${web.address().host}:${web.address().port}/` : undefined,
+    web ? `Web ${web.scheme}://${web.address().host}:${web.address().port}/` : undefined,
   ].filter((address): address is string => address !== undefined);
   for (const address of addresses) console.log(address);
 }
@@ -113,6 +124,15 @@ function envString(name: string, fallback: string): string {
 function envNumber(name: string, fallback: number): number {
   const value = Number.parseInt(process.env[name] ?? "", 10);
   return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+}
+
+/** Reads a PEM certificate/key pair named by two env vars; undefined when neither is set. */
+function loadTls(certVar: string, keyVar: string): { cert: Buffer; key: Buffer } | undefined {
+  const certPath = process.env[certVar]?.trim();
+  const keyPath = process.env[keyVar]?.trim();
+  if (!certPath && !keyPath) return undefined;
+  if (!certPath || !keyPath) throw new Error(`${certVar} and ${keyVar} must be set together`);
+  return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
 }
 
 function envList(name: string): string[] {

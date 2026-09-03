@@ -228,6 +228,38 @@ For search-only testing, configure `PI_COFFEE_SERPER_KEY` and optionally
 Both `https://awangsawangs.xyz/v1` and `https://b.awangsawangs.xyz/v1` serve the
 same model list; use the one your network resolves.
 
+## Optional route: HTTPS with an internal CA
+
+0.1 runs plain HTTP (owner decision: internal LAN, browsers accept `http://`
+private addresses without warnings). The HTTPS route is built in and switched
+on by certificate files; it exists for when the network policy changes.
+
+The rule is **all or nothing**: a browser on an `https://` page refuses
+plain-HTTP uploads to the User VM as mixed content, so the Web Server and every
+User VM's transfer port must use certificates the browsers trust. That means an
+internal CA distributed to the user machines (group policy or manual import),
+a certificate for the Web Server, and one per User VM — sign them for a DNS
+name (`vm-alice.corp`) rather than an IP, and give `PI_COFFEE_TRANSFER_ADVERTISE`
+that name.
+
+```bash
+# server (web.env)
+PI_COFFEE_WEB_TLS_CERT=/etc/pi-coffee/tls/web.crt
+PI_COFFEE_WEB_TLS_KEY=/etc/pi-coffee/tls/web.key
+# each User VM (host.env)
+PI_COFFEE_TRANSFER_TLS_CERT=/etc/pi-coffee/tls/vm.crt
+PI_COFFEE_TRANSFER_TLS_KEY=/etc/pi-coffee/tls/vm.key
+PI_COFFEE_TRANSFER_ADVERTISE=vm-alice.corp
+```
+
+With TLS on, the Web Server serves `https://` and `wss://`, the transfer port
+answers `protocol: "https"` with the certificate's SHA-256 as its LocalSend
+fingerprint, and `npm start` refuses a configuration that secures only one of
+the two browser-facing surfaces. The private Host port (8788, server ↔ VM) and
+the Relay (8789, VM ↔ server) stay HTTP with bearer tokens; they never face a
+browser. Secure contexts also unlock browser features the shell degrades
+without: clipboard API, in-browser SHA-256 of uploads, desktop notifications.
+
 ## Reverse proxy
 
 Terminate TLS and expose only the Web Server to the internal browser network.
@@ -236,11 +268,9 @@ to their peers. Do not publish Gitea, the Host or the Relay to the public
 internet.
 
 Note the file-transfer trade-off (ADR-0009): browsers reach the User VM's
-53317 over plain HTTP because they refuse self-signed certificates. If the Web
-Server is served over HTTPS, browsers will block those plain-HTTP uploads as
-mixed content; on this internal LAN the owner chose to serve the Web Server
-over HTTP as well. Encryption for transfers would need an internal CA or a
-WebRTC path (see the ADR).
+53317 directly, so a TLS-terminating proxy in front of the Web Server alone
+would turn those uploads into blocked mixed content. Either keep everything on
+HTTP (0.1) or follow the HTTPS route above for both surfaces.
 
 ## Recovery
 

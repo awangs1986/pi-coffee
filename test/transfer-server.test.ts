@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -137,6 +138,28 @@ describe("TransferServer (LocalSend v2)", () => {
     expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=${encodeURIComponent("../pi-coffee-outside.txt")}`)).status).toBe(403);
     expect((await fetch(`${base}/download?scope=sess-1&token=bad&fileId=out/result.csv`)).status).toBe(401);
     expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=missing.txt`)).status).toBe(404);
+  });
+
+  it("speaks HTTPS with a certificate fingerprint when given TLS material (the optional secure route)", async () => {
+    const cert = readFileSync(join(process.cwd(), "test/fixtures/tls/test-cert.pem"));
+    const key = readFileSync(join(process.cwd(), "test/fixtures/tls/test-key.pem"));
+    const { base, token } = await start({ tls: { cert, key } });
+    expect(server!.publicUrl()).toMatch(/^https:\/\/127\.0\.0\.1:\d+$/);
+    const httpsBase = base.replace("http://", "https://");
+    const info = await new Promise<Record<string, unknown>>((resolvePromise, reject) => {
+      httpsRequest({ host: "127.0.0.1", port: server!.address().port, path: "/api/localsend/v2/info", ca: cert }, (response) => {
+        let body = "";
+        response.on("data", (chunk) => (body += chunk));
+        response.on("end", () => resolvePromise(JSON.parse(body)));
+      }).on("error", reject).end();
+    });
+    expect(info.protocol).toBe("https");
+    // LocalSend: over HTTPS the fingerprint is the certificate's SHA-256.
+    expect(info.fingerprint).toBe(new X509Certificate(cert).fingerprint256.replace(/:/g, "").toLowerCase());
+    // A plain-HTTP client is refused by TLS, which is the point.
+    await expect(fetch(`${base}/info`)).rejects.toThrow();
+    void httpsBase;
+    void token;
   });
 
   it("sanitizes file names without losing the extension", () => {
