@@ -16,12 +16,17 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <button class="new-task" id="new-task" type="button">
+        <button class="new-task" id="new-task" type="button" title="新对话 (Ctrl/⌘+K)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           新对话
         </button>
-        <div class="side-label">对话</div>
-        <ul class="session-list" id="session-list"></ul>
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" type="search" placeholder="搜索对话" aria-label="搜索对话" autocomplete="off" />
+        </div>
+        <div class="session-scroll">
+          <ul class="session-list" id="session-list"></ul>
+        </div>
         <div class="sidebar-foot"><span id="dot" class="dot"></span><span id="status">连接中…</span></div>
       </aside>
 
@@ -30,22 +35,49 @@
           <button class="icon-btn menu" id="open-side" type="button" aria-label="打开侧栏">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
           </button>
-          <div class="topbar-title" id="title">新对话</div>
+          <button class="topbar-title" id="title" type="button" title="点击重命名">新对话</button>
+          <div class="ext-status" id="ext-status"></div>
           <div class="topbar-state" id="topbar-state"></div>
+          <button class="chip-btn hidden" id="stats" type="button" title="上下文用量 · 点击压缩上下文"></button>
           <div class="topbar-meta" id="session-meta"></div>
         </header>
 
         <div class="scroller" id="scroller">
           <div class="thread" id="thread"></div>
         </div>
+        <button class="to-bottom hidden" id="to-bottom" type="button" aria-label="滚动到底部">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </button>
 
         <div class="composer-wrap">
+          <div class="widgets hidden" id="widgets"></div>
+          <div class="queue hidden" id="queue"></div>
+          <div class="slash hidden" id="slash" role="listbox"></div>
           <form class="composer" id="composer">
-            <textarea id="prompt" rows="1" placeholder="给 Pi 一个任务…" aria-label="输入"></textarea>
+            <div class="attachments hidden" id="attachments"></div>
+            <textarea id="prompt" rows="1" placeholder="给 Pi 一个任务… 输入 / 查看命令，可粘贴图片" aria-label="输入"></textarea>
             <div class="composer-bar">
-              <span class="hint">Enter 发送 · Shift+Enter 换行</span>
-              <div>
-                <button class="stop hidden" id="stop" type="button" aria-label="停止" title="停止">
+              <div class="composer-left">
+                <label class="select-wrap" title="模型">
+                  <select id="model" aria-label="模型"><option value="">模型…</option></select>
+                </label>
+                <label class="select-wrap" title="思考深度">
+                  <select id="thinking" aria-label="思考深度"><option value="">思考…</option></select>
+                </label>
+                <button class="icon-btn small" id="attach" type="button" title="添加图片">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-9 8"/></svg>
+                </button>
+                <input id="file" type="file" accept="image/*" multiple class="hidden" />
+                <span class="hint" id="hint">Enter 发送 · Shift+Enter 换行</span>
+              </div>
+              <div class="composer-right">
+                <label class="select-wrap hidden" id="mode-wrap" title="运行中发送方式">
+                  <select id="mode" aria-label="运行中发送方式">
+                    <option value="follow_up">排队</option>
+                    <option value="steer">插话</option>
+                  </select>
+                </label>
+                <button class="stop hidden" id="stop" type="button" aria-label="停止" title="停止 (Esc)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                 </button>
                 <button class="send" id="send" type="submit" disabled aria-label="发送" title="发送">
@@ -54,10 +86,42 @@
               </div>
             </div>
           </form>
-          <div class="footnote">对话由 User VM 中的原版 Pi agent 执行；关闭页面不会中断正在运行的任务。</div>
+          <div class="footnote">对话由 User VM 中的原版 Pi agent 执行；记录保存在 VM 上，关闭页面不会中断正在运行的任务。</div>
         </div>
       </main>
     </div>
-    <script src="/app.js"></script>
+
+    <div class="modal-backdrop hidden" id="modal">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2 id="modal-title"></h2>
+        <p id="modal-text"></p>
+        <input id="modal-input" class="hidden" type="text" />
+        <div class="modal-actions">
+          <button type="button" class="btn" id="modal-cancel">取消</button>
+          <button type="button" class="btn primary" id="modal-ok">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extension dialogs (Pi ctx.ui.select / confirm / input / editor) -->
+    <div class="modal-backdrop hidden" id="ui-modal">
+      <div class="modal ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-title">
+        <div class="ui-badge">扩展请求</div>
+        <h2 id="ui-title"></h2>
+        <p id="ui-text"></p>
+        <div id="ui-options" class="ui-options hidden" role="listbox"></div>
+        <input id="ui-input" class="hidden" type="text" />
+        <textarea id="ui-editor" class="hidden" rows="8"></textarea>
+        <div class="ui-meta" id="ui-meta"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="ui-cancel">取消</button>
+          <button type="button" class="btn" id="ui-no">否</button>
+          <button type="button" class="btn primary" id="ui-ok">确定</button>
+        </div>
+      </div>
+    </div>
+    <div class="toast hidden" id="toast"></div>
+
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

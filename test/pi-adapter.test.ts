@@ -1,6 +1,8 @@
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { appendExtensionArgs, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
+import { appendExtensionArgs, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
 
 describe("original Pi RPC adapter", () => {
   it("adds configured Pi extensions once while preserving explicit CLI args", () => {
@@ -32,11 +34,128 @@ describe("original Pi RPC adapter", () => {
           { type: "agent_settled" },
         ]),
       );
+      // History comes from the RPC process's durable entries (get_entries).
+      const history = await session.getHistory();
+      expect(history.entries).toEqual([
+        expect.objectContaining({ kind: "user", text: "hello from adapter" }),
+        expect.objectContaining({ kind: "assistant", text: "echo: hello from adapter" }),
+      ]);
+      expect(history.leafId).toBe(history.entries.at(-1)?.id);
+
+      // Conversation controls map one-to-one onto documented RPC commands.
+      await session.rename("Adapter run");
+      expect((await session.getState()).sessionName).toBe("Adapter run");
+      const models = await session.getModels();
+      expect(models).toMatchObject({ current: { provider: "fake", id: "fake-mini" }, thinkingLevel: "medium", thinkingLevels: ["off", "low", "medium", "high"] });
+      expect(models.models.map((m) => m.id)).toEqual(["fake-mini", "fake-large"]);
+      await session.setModel("fake", "fake-large");
+      await session.setThinkingLevel("high");
+      expect(await session.getModels()).toMatchObject({ current: { id: "fake-large" }, thinkingLevel: "high" });
+      expect(await session.getCommands()).toEqual([
+        { name: "harness", description: "Switch harness mode", source: "extension" },
+        { name: "review", description: "Review the diff", source: "prompt" },
+      ]);
+      expect(await session.getStats()).toMatchObject({ userMessages: 1, assistantMessages: 1, tokens: { total: 1540 }, cost: 0.0042, contextUsage: { percent: 0.77 } });
+      await session.steer("focus");
+      await session.followUp("then summarize");
+      await waitFor(() => events.filter((event) => isEvent(event, "queue_update")).length === 2);
+      await session.compact();
+
+      // Extension dialog round trip: the request arrives as an event, the
+      // answer goes back over the RPC sub-protocol and unblocks the run.
+      events.length = 0;
+      await session.prompt("ask: proceed?");
+      await waitFor(() => events.some((event) => isEvent(event, "extension_ui_request")));
+      const request = events.find((event) => isEvent(event, "extension_ui_request")) as { id: string; method: string; title: string };
+      expect(request).toMatchObject({ method: "confirm", title: "proceed?" });
+      await session.respondUi({ id: request.id, confirmed: true });
+      await waitFor(() => events.some((event) => isEvent(event, "agent_settled")));
+      expect((await session.getHistory()).entries.at(-1)).toMatchObject({ kind: "assistant", text: "answer: confirmed=true" });
     } finally {
       unsubscribe();
       await session.stop();
     }
   }, 10_000);
+
+  it("resumes a conversation that already exists in the session store instead of creating a new one", async () => {
+    const sessionDir = mkdtempSync(join(tmpdir(), "pi-coffee-resume-"));
+    const id = "11111111-2222-4333-8444-555555555555";
+    // A minimal Pi v3 session file, as Pi itself writes them.
+    writeFileSync(
+      join(sessionDir, `2026-09-03T00-00-00-000Z_${id}.jsonl`),
+      [
+        JSON.stringify({ type: "session", version: 3, id, timestamp: "2026-09-03T00:00:00.000Z", cwd: process.cwd() }),
+        JSON.stringify({ type: "message", id: "m1", parentId: null, timestamp: "2026-09-03T00:00:01.000Z", message: { role: "user", content: [{ type: "text", text: "earlier question" }] } }),
+        JSON.stringify({ type: "message", id: "m2", parentId: "m1", timestamp: "2026-09-03T00:00:02.000Z", message: { role: "assistant", content: [{ type: "text", text: "earlier answer" }] } }),
+        "",
+      ].join("\n"),
+    );
+    const factory = new RpcPiSessionFactory({
+      cliPath: resolve("test/fixtures/fake-pi-rpc.mjs"),
+      cwd: process.cwd(),
+      sessionDir,
+    });
+    try {
+      const listed = await factory.list();
+      expect(listed).toEqual([
+        expect.objectContaining({ id, messageCount: 2, preview: "earlier question" }),
+      ]);
+      expect(JSON.stringify(listed)).not.toContain(sessionDir); // VM paths never leave the adapter
+
+      const session = await factory.create({ sessionId: id });
+      try {
+        // The fake CLI seeds a "resumed from <path>" exchange only when it was
+        // started with --session <path>, which is how the adapter must resume.
+        const history = await session.getHistory();
+        expect(history.entries[0]).toMatchObject({ kind: "user", text: expect.stringMatching(/^resumed from .*\.jsonl$/) });
+      } finally {
+        await session.stop();
+      }
+      // Deleting removes the file from the store; unknown ids are reported, not thrown.
+      expect(await factory.delete(id)).toBe(true);
+      expect(await factory.list()).toEqual([]);
+      expect(await factory.delete(id)).toBe(false);
+    } finally {
+      rmSync(sessionDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+});
+
+describe("history projection", () => {
+  it("follows the active branch and pairs tool calls with their results", () => {
+    const entries = [
+      { type: "model_change", id: "x0", parentId: null, provider: "cpa", modelId: "m" },
+      { type: "message", id: "u1", parentId: "x0", timestamp: "t1", message: { role: "user", content: "list files" } },
+      {
+        type: "message", id: "a1", parentId: "u1", timestamp: "t2",
+        message: { role: "assistant", content: [{ type: "text", text: "Sure." }, { type: "toolCall", id: "call-1", name: "bash", arguments: { command: "ls" } }] },
+      },
+      { type: "message", id: "r1", parentId: "a1", timestamp: "t3", message: { role: "toolResult", toolCallId: "call-1", isError: false, content: [{ type: "text", text: "a.txt\nb.txt" }] } },
+      { type: "message", id: "a2", parentId: "r1", timestamp: "t4", message: { role: "assistant", content: [{ type: "text", text: "Two files." }] } },
+      // Abandoned branch off u1: must not appear when the leaf is a2.
+      { type: "message", id: "alt", parentId: "u1", timestamp: "t5", message: { role: "assistant", content: [{ type: "text", text: "abandoned" }] } },
+      { type: "compaction", id: "c1", parentId: "a2", timestamp: "t6", summary: "…" },
+      { type: "message", id: "u2", parentId: "c1", timestamp: "t7", message: { role: "user", content: [{ type: "text", text: "thanks" }, { type: "image", data: "…", mimeType: "image/png" }] } },
+    ];
+    const history = projectHistory(entries, "u2");
+    expect(history.entries).toEqual([
+      { kind: "user", id: "u1", at: "t1", text: "list files" },
+      { kind: "assistant", id: "a1", at: "t2", text: "Sure." },
+      { kind: "tool", id: "call-1", at: "t2", name: "bash", args: { command: "ls" }, result: "a.txt\nb.txt", isError: false },
+      { kind: "assistant", id: "a2", at: "t4", text: "Two files." },
+      expect.objectContaining({ kind: "note", id: "c1" }),
+      { kind: "user", id: "u2", at: "t7", text: "thanks", imageCount: 1 },
+    ]);
+    expect(JSON.stringify(history.entries)).not.toContain("abandoned");
+  });
+
+  it("falls back to append order when there is no leaf", () => {
+    const entries = [
+      { type: "message", id: "u1", parentId: null, message: { role: "user", content: "hi" } },
+      { type: "message", id: "a1", parentId: "u1", message: { role: "assistant", content: [{ type: "text", text: "hello" }] } },
+    ];
+    expect(projectHistory(entries, null).entries.map((entry) => entry.text)).toEqual(["hi", "hello"]);
+  });
 });
 
 async function waitFor(predicate: () => boolean): Promise<void> {

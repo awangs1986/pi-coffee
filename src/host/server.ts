@@ -4,7 +4,9 @@ import { WebSocketServer, WebSocket, type RawData } from "ws";
 import {
   decodeClientFrame,
   encodeFrame,
+  MAX_FRAME_BYTES,
   type ClientFrame,
+  type HistoryEntry,
   type ServerFrame,
 } from "../shared/protocol.js";
 import type { PiSessionFactory } from "./pi-adapter.js";
@@ -16,6 +18,8 @@ export interface HostServerOptions {
   token?: string;
   factory: PiSessionFactory;
   eventBufferSize?: number;
+  /** Stop idle Pi processes after this long; the conversation stays in Pi's session store. */
+  idleTimeoutMs?: number;
 }
 
 export interface HostAddress {
@@ -44,6 +48,7 @@ export class HostServer {
     this.registry = new HostSessionRegistry({
       factory: options.factory,
       eventBufferSize: options.eventBufferSize,
+      ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
     });
     this.http = createServer((request, response) => {
       if (request.url === "/healthz") {
@@ -61,6 +66,25 @@ export class HostServer {
       this.sockets.add(hostSocket);
       hostSocket.onClose = () => this.sockets.delete(hostSocket);
     });
+    // Every browser's sidebar mirrors the same store: push the list whenever
+    // it changes instead of making each browser poll.
+    this.registry.onChange(() => void this.broadcastSessions());
+  }
+
+  private broadcastTimer?: ReturnType<typeof setTimeout>;
+
+  private async broadcastSessions(): Promise<void> {
+    if (this.broadcastTimer !== undefined) return;
+    this.broadcastTimer = setTimeout(async () => {
+      this.broadcastTimer = undefined;
+      if (this.sockets.size === 0) return;
+      try {
+        const sessions = await this.registry.list();
+        for (const socket of this.sockets) socket.send({ v: 1, type: "sessions", sessions });
+      } catch {
+        // Listing is best-effort; the browser can still ask explicitly.
+      }
+    }, 150);
   }
 
   async start(): Promise<void> {
@@ -183,12 +207,80 @@ class HostSocket implements SessionSink {
         case "open":
           await this.open(frame);
           break;
+        case "list_sessions":
+          // Allowed before open: the sidebar needs the list to choose from.
+          this.send({ v: 1, type: "sessions", sessions: await this.registry.list() });
+          break;
+        case "delete_session":
+          // Allowed before open: deleting from the sidebar must not require
+          // attaching to the conversation first.
+          if (!(await this.registry.delete(frame.sessionId))) {
+            this.send({ v: 1, type: "error", code: "unknown_session", message: "No such conversation", ...rid(frame) });
+            break;
+          }
+          if (this.session?.id === frame.sessionId) {
+            this.session = undefined;
+            this.opened = false;
+          }
+          this.send({ v: 1, type: "ack", operation: "delete_session", ...rid(frame) });
+          break;
+        case "rename_session":
+          if (frame.sessionId !== undefined && frame.sessionId !== this.session?.id) {
+            await this.registry.rename(frame.sessionId, frame.name);
+          } else {
+            if (!this.session || !this.opened) throw new NotOpenError();
+            await this.registry.rename(this.session.id, frame.name);
+          }
+          this.send({ v: 1, type: "ack", operation: "rename_session", ...rid(frame) });
+          break;
         case "prompt":
           await this.prompt(frame);
           break;
         case "abort":
           await this.abort(frame);
           break;
+        case "get_models": {
+          if (!this.session || !this.opened) throw new NotOpenError();
+          const models = await this.session.getModels();
+          this.send({ v: 1, type: "models", ...models });
+          break;
+        }
+        case "set_model":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          await this.session.setModel(frame.provider, frame.id);
+          this.send({ v: 1, type: "ack", operation: "set_model", ...rid(frame) });
+          break;
+        case "set_thinking":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          await this.session.setThinkingLevel(frame.level);
+          this.send({ v: 1, type: "ack", operation: "set_thinking", ...rid(frame) });
+          break;
+        case "get_commands":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "commands", commands: await this.session.getCommands() });
+          break;
+        case "get_stats":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "stats", sessionId: this.session.id, stats: await this.session.getStats() });
+          break;
+        case "compact":
+          if (!this.session || !this.opened) throw new NotOpenError();
+          this.send({ v: 1, type: "ack", operation: "compact", ...rid(frame) });
+          await this.session.compact();
+          break;
+        case "ui_response": {
+          if (!this.session || !this.opened) throw new NotOpenError();
+          const { v: _v, type: _t, requestId: _r, ...response } = frame;
+          if (!this.session.hasPendingUi(response.id)) {
+            this.send({ v: 1, type: "error", code: "unknown_ui_request", message: "That dialog is no longer waiting for an answer", ...rid(frame) });
+            break;
+          }
+          // Ack first: the answer crossed the seam. Pi's follow-on events
+          // (the run resuming) arrive after it.
+          this.send({ v: 1, type: "ack", operation: "ui_response", ...rid(frame) });
+          await this.session.respondUi(response);
+          break;
+        }
         case "ping":
           if (!this.opened) throw new NotOpenError();
           this.send({ v: 1, type: "pong", nonce: frame.nonce });
@@ -207,7 +299,7 @@ class HostSocket implements SessionSink {
             ? "not_open"
             : "operation_failed",
         message: error instanceof Error ? error.message : "Operation failed",
-        ...(frame.type === "prompt" ? { requestId: frame.requestId } : {}),
+        ...rid(frame),
       });
     }
   }
@@ -231,6 +323,7 @@ class HostSocket implements SessionSink {
       cursor: result.session.currentCursor,
       state,
     });
+    this.send(boundedHistoryFrame(result.session.id, result.history.entries, result.history.leafId));
     if (result.resync) {
       this.send({
         v: 1,
@@ -242,10 +335,28 @@ class HostSocket implements SessionSink {
       return;
     }
     for (const replay of result.replay) this.send(replay);
+    // A dialog Pi is still blocked on must reach this browser even if the
+    // request itself predates the replay window (e.g. after a reload).
+    const replayed = new Set(result.replay.map((frame) => (frame.type === "event" ? frame.cursor : -1)));
+    for (const pending of result.session.pendingUiRequests) {
+      if (pending.type === "event" && !replayed.has(pending.cursor)) this.send(pending);
+    }
   }
 
   private async prompt(frame: Extract<ClientFrame, { type: "prompt" }>): Promise<void> {
-    if (!this.session || !this.opened) throw new Error("Connection must be opened first");
+    if (!this.session || !this.opened) throw new NotOpenError();
+    if (frame.mode === "steer" || frame.mode === "follow_up") {
+      // Joining a busy run: Pi owns the queue and reports it via queue_update.
+      // If nothing is running, treat it as a plain prompt so the message is
+      // never silently parked.
+      if (this.session.isStreaming) {
+        // Same contract as prompt: the ack means "accepted at the seam"; Pi's
+        // queue_update event follows and is the authoritative queue state.
+        this.send({ v: 1, type: "ack", operation: frame.mode, requestId: frame.requestId });
+        await this.session.enqueue(frame.mode, frame.text, frame.images);
+        return;
+      }
+    }
     this.session.reservePrompt(frame.requestId);
     // Acknowledgement means the command crossed the seam and was accepted;
     // lifecycle events continue asynchronously after it.
@@ -284,11 +395,31 @@ class HostSocket implements SessionSink {
   }
 }
 
+function rid(frame: ClientFrame): { requestId?: string } {
+  return "requestId" in frame && typeof frame.requestId === "string" ? { requestId: frame.requestId } : {};
+}
+
 class NotOpenError extends Error {
   constructor() {
     super("Connection must be opened first");
     this.name = "NotOpenError";
   }
+}
+
+/**
+ * The history frame must respect MAX_FRAME_BYTES. Keep the newest entries and
+ * flag truncation; older conversation stays in the User VM's session file.
+ */
+function boundedHistoryFrame(sessionId: string, entries: HistoryEntry[], leafId: string | null): ServerFrame {
+  const budget = MAX_FRAME_BYTES - 4096;
+  let kept = entries;
+  let truncated = false;
+  const measure = (list: HistoryEntry[]) => Buffer.byteLength(JSON.stringify(list), "utf8");
+  while (kept.length > 0 && measure(kept) > budget) {
+    kept = kept.slice(Math.max(1, Math.floor(kept.length / 4)));
+    truncated = true;
+  }
+  return { v: 1, type: "history", sessionId, entries: kept, leafId, truncated };
 }
 
 function isLoopback(host: string): boolean {

@@ -143,8 +143,9 @@ Then open `http://SERVER:3000/` in a browser and use the shell.
 | Relay down or Relay token wrong | `模型调用失败：…` note after the prompt | `systemctl status pi-coffee-relay`; check `PI_COFFEE_RELAY_TOKEN(S)` |
 | Upstream (CPA) error | `模型调用失败：…` or Pi's auto-retry note; Relay log line has `outcome: upstream_error` | upstream side |
 | Upstream/CPA rate limit (HTTP 429) | `exceeded retry limit, last status: 429 Too Many Requests` (often with a Cloudflare request id) | This is upstream quota/concurrency/rate limiting. Check the CPA dashboard/logs and `Retry-After`; wait or reduce concurrency. Pi retries transient 429s up to its configured limit (`retry.maxRetries`, default 3, with 2/4/8 s backoff). The Relay does not retry or hide the 429. Set `retry.enabled: false` temporarily when repeated retries are undesirable. |
-| Browser closed / refreshed | nothing — the run continues on the Host; reconnect replays from the stored cursor | none needed |
-| Host restarted | browser reconnects; the previous Session is gone (MVP limit) | start a new conversation; native session recovery is `REC-001` (0.1) |
+| Browser closed / refreshed / opened on another machine | nothing — the run continues on the Host; the browser reloads the conversation list and history from Pi's session store in the User VM | none needed |
+| Idle Pi process stopped (`PI_COFFEE_IDLE_TIMEOUT_MS`, default 10 min) | nothing visible; the next open resumes the conversation from the store | none needed |
+| Host restarted | browser reconnects; every completed conversation is listed and readable; a message that was mid-stream at the crash is cut at its last completed message | resend the last prompt; mid-run recovery is `REC-001` (0.1) |
 
 ## Developer smoke on one machine (no VMs)
 
