@@ -39,7 +39,7 @@ try {
   const inspection = await readJsonWhenReady(inspectionPath);
   const commands = await client.getCommands();
   const names = new Set(commands.map((command) => command.name));
-  const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold", "websearch"];
+  const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold", "websearch", "subagents-model"];
   const missing = required.filter((name) => !names.has(name));
   const expectedSimple = ["read", "bash", "edit", "write", "grep", "find", "ls", "search_tools"];
   if (inspection.all.includes("subagent") !== true || inspection.all.includes("bg_wait") !== true) {
