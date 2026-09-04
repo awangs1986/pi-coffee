@@ -69,6 +69,23 @@ foreground 子 Agent 结果和 slash-command 报告）显示为通知；`display
 | `PI_COFFEE_SUBAGENTS` | 启用 | 设为 `off`、`0`、`false` 或 `no`，只关闭内置 `pi-subagents`，保留 Harness |
 | `PI_COFFEE_AGENT_DIR` | Pi 默认 | 上游配置、session 和异步结果仍归 User VM 的 Pi 目录 |
 
+### 全局模型
+
+PI Coffee 提供 `/subagents-model` 命令管理用户级 Pi 配置中的
+`subagents.defaultModel`：
+
+```text
+/subagents-model                 # 查看当前全局模型
+/subagents-model provider/model  # 设置所有未显式指定模型的 subagent
+/subagents-model off             # 清除设置，恢复继承当前父 agent 模型
+```
+
+配置写入 `PI_COFFEE_AGENT_DIR/settings.json`（未设置时使用 Pi 默认 agent
+目录），保留文件中的其他字段，并使用 0700 目录/0600 文件权限和原子替换。
+该设置对内置、包、用户和项目 agent 的默认模型均生效；单次调用、agent
+frontmatter、`agentOverrides` 仍按上游 `pi-subagents` 优先级覆盖全局默认。
+本阶段只提供一个全局模型；第二模型与父模型回退链保留为后续扩展。
+
 显式 `PI_COFFEE_EXTENSIONS` 优先级最高：一旦设置，它不会隐式追加
 `pi-subagents`。这给部署和故障诊断一个可预测的回退点。
 

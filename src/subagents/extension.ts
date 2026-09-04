@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { installSubagentModelPolicy } from "./model-policy.js";
 
 // Resolve the package without importing its TypeScript source. Node's native
 // ESM loader intentionally refuses type stripping for files under
@@ -19,6 +20,7 @@ const packageRoot = dirname(packageEntry);
  * explicit `--extension` path alone.
  */
 export default function piCoffeeSubagentsResources(pi: ExtensionAPI): void {
+  installSubagentModelPolicy(pi);
   pi.on("resources_discover", () => ({
     skillPaths: [join(packageRoot, "skills")],
     promptPaths: [join(packageRoot, "prompts")],
