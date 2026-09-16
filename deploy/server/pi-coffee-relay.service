@@ -1,0 +1,22 @@
+[Unit]
+Description=PI Coffee LLM Relay (Control Plane; the only process holding the upstream key)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi-coffee
+Group=pi-coffee
+WorkingDirectory=/opt/pi-coffee
+EnvironmentFile=/etc/pi-coffee/relay.env
+ExecStart=/usr/bin/node dist/src/main.js relay
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/pi-coffee
+
+[Install]
+WantedBy=multi-user.target

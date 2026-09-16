@@ -1,0 +1,22 @@
+[Unit]
+Description=PI Coffee Agent Host (runs the original Pi agent as the VM owner)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Pi must run as the VM owner: it needs that user's normal shell, files and tools.
+# The VM boundary is the isolation boundary (ADR-0005); do not sandbox here.
+User=REPLACE_WITH_VM_OWNER
+Group=REPLACE_WITH_VM_OWNER
+WorkingDirectory=/opt/pi-coffee
+EnvironmentFile=/etc/pi-coffee/host.env
+Environment=HOME=/home/REPLACE_WITH_VM_OWNER
+ExecStart=/usr/bin/node dist/src/main.js host
+Restart=on-failure
+RestartSec=2
+# Give Pi a real PATH: package managers, compilers and git live in the usual places.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/REPLACE_WITH_VM_OWNER/.local/bin
+
+[Install]
+WantedBy=multi-user.target
