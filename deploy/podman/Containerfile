@@ -1,0 +1,23 @@
+# PI Coffee smoke image: one image, three roles (relay | web | host).
+# Mirrors the deployment shape on a workstation: `scripts/smoke-podman.mjs`
+# starts a relay and a web container ("server") and a host container ("User
+# VM") on a private network, each with only its own secrets.
+FROM docker.io/library/node:22-bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bash ca-certificates curl git procps \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/pi-coffee
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY . .
+RUN npm run build
+
+# The "User VM" role runs as the unprivileged `node` user (uid 1000) that the
+# base image provides, standing in for the VM owner. Pi gets that user's home.
+RUN mkdir -p /home/node/work /home/node/.pi-coffee/agent /home/node/.pi-coffee/sessions \
+ && chown -R node:node /home/node
+
+EXPOSE 3000 8788 8789
+CMD ["node", "dist/src/main.js", "all"]

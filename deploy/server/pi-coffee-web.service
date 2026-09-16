@@ -1,0 +1,22 @@
+[Unit]
+Description=PI Coffee Web Server (browser entrypoint; bridges to the User VM Host)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi-coffee
+Group=pi-coffee
+WorkingDirectory=/opt/pi-coffee
+EnvironmentFile=/etc/pi-coffee/web.env
+ExecStart=/usr/bin/node dist/src/main.js web
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/opt/pi-coffee
+
+[Install]
+WantedBy=multi-user.target

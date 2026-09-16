@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+.pi/
+sessions/
+*.log
+.scratch/
+.DS_Store
+
+public/vendor-*.js
