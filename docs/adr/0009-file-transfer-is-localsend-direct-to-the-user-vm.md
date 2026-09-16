@@ -1,0 +1,11 @@
+# File transfer is LocalSend v2, browser to User VM, never through the Web Server
+
+Status: accepted (owner decision, 2026-09-03)
+
+Files move directly between the user's browser (C) and the user's VM (A). The Agent Host exposes the [LocalSend v2](https://github.com/localsend/protocol) transfer API over plain HTTP on the User VM's LAN interface (default port 53317, `protocol: http`, CORS enabled): `prepare-upload` → `upload` → `cancel` for browser-to-VM, `prepare-download` → `download` for VM-to-browser. Uploaded files land in the conversation's inbox under the Pi working directory, so the agent reads them with its ordinary tools; the Host computes SHA-256 while receiving and reports progress through the existing Host → Web → browser event stream. The Web Server (B) never carries or stores a file byte; its only part is telling the browser where A listens and with which per-Session token.
+
+Why LocalSend rather than a home-grown shape: it is a proven, documented, minimal LAN transfer protocol whose transport half is plain HTTP a browser can speak natively with `fetch(File)`; adopting it costs nothing extra and keeps the door open for the LocalSend apps to send to the VM later by IP. Why plain HTTP: browsers reject self-signed certificates and the owner has ruled security out of scope on this internal LAN. Why direct rather than via B: the owner's requirement, and B's only contribution would have been bandwidth. Discovery (multicast, `register`), fingerprints and the PIN flow are not implemented: the browser always knows its target.
+
+Consequences: the User VM must allow the user network to reach 53317 (the private Host port 8788 still stays B-only; the runbook and `deploy/` change accordingly). Transfers are not resumable (LocalSend has no chunk protocol); a failed file restarts. Uploads are scoped by a token the Host issues per open Session.
+
+Encryption is kept as a built-in alternative rather than a redesign: both browser-facing surfaces (Web Server and transfer port) accept certificate files and then serve HTTPS/WSS, with the certificate hash as the LocalSend fingerprint. It is all-or-nothing because of mixed-content rules, and it presumes an internal CA trusted by the user machines. 0.1 ships on HTTP by owner decision; WebRTC remains the option if C and A ever stop being directly routable.

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>PI Coffee</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <div class="brand"><span class="brand-mark">π</span><span>PI Coffee</span></div>
+          <button class="icon-btn" id="close-side" type="button" aria-label="收起侧栏" title="收起侧栏">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <button class="new-task" id="new-task" type="button" title="新对话 (Ctrl/⌘+K)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          新对话
+        </button>
+        <section id="project-controls" class="project-controls hidden" aria-label="项目">
+          <label for="project-select">工作项目</label>
+          <select id="project-select"><option value="">选择项目</option></select>
+          <input id="start-branch" placeholder="起始分支（默认项目分支）" aria-label="起始分支" />
+          <div class="project-actions"><button id="project-add" class="btn small">＋ 项目</button><button id="project-discover" class="btn small">发现仓库</button></div>
+          <div class="project-actions"><button id="show-active" class="btn small">对话</button><button id="show-archive" class="btn small">归档</button></div>
+        </section>
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" type="search" placeholder="搜索对话" aria-label="搜索对话" autocomplete="off" />
+        </div>
+        <div class="session-scroll">
+          <ul class="session-list" id="session-list"></ul>
+        </div>
+        <div class="sidebar-foot">
+          <span id="dot" class="dot"></span><span id="status" class="status-text">连接中…</span>
+          <button class="foot-btn" id="plugins-btn" type="button" title="User VM 里 Pi 已加载的扩展、技能和提示模板">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/><circle cx="12" cy="12" r="3.5"/></svg>
+            插件
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <button class="icon-btn menu" id="open-side" type="button" aria-label="打开侧栏">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <button class="topbar-title" id="title" type="button" title="点击重命名">新对话</button>
+          <div class="ext-status" id="ext-status"></div>
+          <div class="topbar-state" id="topbar-state"></div>
+          <div class="stats-wrap" id="stats-wrap">
+            <button class="chip-btn hidden" id="stats" type="button" aria-haspopup="dialog" aria-expanded="false" title="上下文用量"></button>
+            <div class="stats-pop hidden" id="stats-pop" role="dialog" aria-label="上下文用量">
+              <div class="stats-head"><span>上下文用量</span><span class="stats-num" id="sp-pct"></span></div>
+              <div class="stats-sub"><span id="sp-fill"></span><span id="sp-window"></span></div>
+              <div class="stats-bar" id="sp-bar"><span class="seg used"></span></div>
+              <div class="stats-legend" id="sp-legend"></div>
+              <div class="stats-foot">
+                <span id="sp-cost"></span>
+                <button type="button" class="btn small" id="sp-compact">本地压缩上下文</button>
+              </div>
+              <div class="stats-note">占用与用量由 User VM 中的 Pi 统计；Pi 不区分系统提示 / 工具定义 / 对话三段。</div>
+            </div>
+          </div>
+          <button id="merge-workspace" class="btn small hidden">查看合并</button>
+          <button id="files-toggle" class="btn small hidden">文件</button>
+          <div class="topbar-meta" id="session-meta"></div>
+        </header>
+
+        <div class="scroller" id="scroller">
+          <div class="thread" id="thread"></div>
+        </div>
+        <button class="to-bottom hidden" id="to-bottom" type="button" aria-label="滚动到底部">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        </button>
+
+        <div class="composer-wrap">
+          <div class="widgets hidden" id="widgets"></div>
+          <div class="queue hidden" id="queue"></div>
+          <div class="slash hidden" id="slash" role="listbox"></div>
+          <form class="composer" id="composer">
+            <div class="attachments hidden" id="attachments"></div>
+            <textarea id="prompt" rows="1" placeholder="给 Pi 一个任务… 输入 / 查看命令，可粘贴图片" aria-label="输入"></textarea>
+            <div class="composer-bar">
+              <div class="composer-left">
+                <label class="select-wrap" title="显式选择模型来源；失败不自动切换"><select id="model-source" aria-label="模型来源"><option value="native">原生 Pi</option><option value="relay">管理员 Relay</option></select></label>
+                <label class="select-wrap" title="模型">
+                  <select id="model" aria-label="模型"><option value="">模型…</option></select>
+                </label>
+                <label class="select-wrap" title="思考深度">
+                  <select id="thinking" aria-label="思考深度"><option value="">思考…</option></select>
+                </label>
+                <button class="icon-btn small" id="attach" type="button" title="添加图片">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 16-5-5-9 8"/></svg>
+                </button>
+                <input id="file" type="file" accept="image/*" multiple class="hidden" />
+                <span class="hint" id="hint">Enter 发送 · Shift+Enter 换行</span>
+              </div>
+              <div class="composer-right">
+                <label class="select-wrap hidden" id="mode-wrap" title="运行中发送方式">
+                  <select id="mode" aria-label="运行中发送方式">
+                    <option value="follow_up">排队</option>
+                    <option value="steer">插话</option>
+                  </select>
+                </label>
+                <button class="stop hidden" id="stop" type="button" aria-label="停止" title="停止 (Esc)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                </button>
+                <button class="send" id="send" type="submit" disabled aria-label="发送" title="发送">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <div class="footnote">对话由 User VM 中的原版 Pi agent 执行；记录保存在 VM 上，关闭页面不会中断正在运行的任务。</div>
+        </div>
+      </main>
+      <aside id="workspace-panel" class="workspace-panel hidden" aria-label="工作区文件与预览">
+        <header><strong>工作区</strong><button id="files-refresh" class="btn small">刷新</button><button id="files-close" class="btn small" aria-label="关闭文件面板">×</button></header>
+        <div class="file-tabs"><button id="files-tree" class="btn small">文件树</button><button id="files-uploads" class="btn small">上传记录</button></div>
+        <nav id="file-path" aria-label="当前目录"></nav>
+        <div id="file-list" class="file-list"></div>
+        <div id="artifact-preview" class="artifact-preview"><p>选择文件以预览。文件保存在你的 VM。</p></div>
+      </aside>
+    </div>
+
+    <div class="modal-backdrop hidden" id="modal">
+      <div class="modal" role="dialog" aria-modal="true">
+        <h2 id="modal-title"></h2>
+        <p id="modal-text"></p>
+        <input id="modal-input" class="hidden" type="text" />
+        <div class="modal-actions">
+          <button type="button" class="btn" id="modal-cancel">取消</button>
+          <button type="button" class="btn primary" id="modal-ok">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plugins panel: what the User VM's Pi has loaded -->
+    <div class="modal-backdrop hidden" id="plugins-modal">
+      <div class="modal plugins" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
+        <div class="plugins-head">
+          <h2 id="plugins-title">插件</h2>
+          <span class="plugins-sub" id="plugins-sub"></span>
+          <button type="button" class="icon-btn" id="plugins-close" aria-label="关闭">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="plugins-body" id="plugins-body"></div>
+        <div class="stats-note">列表来自当前对话的 Pi 进程（User VM 内）实际加载的内容；扩展按注册命令的源文件分组，PI Coffee 通过 <code>--extension</code> 传入的扩展即使没有命令也会显示。</div>
+      </div>
+    </div>
+
+    <!-- Extension dialogs (Pi ctx.ui.select / confirm / input / editor) -->
+    <div class="modal-backdrop hidden" id="ui-modal">
+      <div class="modal ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-title">
+        <div class="ui-badge">扩展请求</div>
+        <h2 id="ui-title"></h2>
+        <p id="ui-text"></p>
+        <div id="ui-options" class="ui-options hidden" role="listbox"></div>
+        <input id="ui-input" class="hidden" type="text" />
+        <textarea id="ui-editor" class="hidden" rows="8"></textarea>
+        <div class="ui-meta" id="ui-meta"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="ui-cancel">取消</button>
+          <button type="button" class="btn" id="ui-no">否</button>
+          <button type="button" class="btn primary" id="ui-ok">确定</button>
+        </div>
+      </div>
+    </div>
+    <div class="toast hidden" id="toast"></div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,256 @@
+import { once } from "node:events";
+import { readFileSync } from "node:fs";
+import { request as httpsRequest } from "node:https";
+import { resolve } from "node:path";
+import { WebSocket } from "ws";
+import { afterEach, describe, expect, it } from "vitest";
+import { HostServer } from "../src/host/server.js";
+import type { PiSession, PiSessionFactory } from "../src/host/pi-adapter.js";
+import { WebServer } from "../src/web/server.js";
+import { decodeServerFrame, encodeFrame, type HistoryEntry, type ImageInput, type ServerFrame } from "../src/shared/protocol.js";
+
+class FakePiSession implements PiSession {
+  private readonly listeners = new Set<(event: unknown) => void>();
+  private state = { isStreaming: false, messageCount: 0 };
+
+  readonly history: HistoryEntry[] = [];
+
+  async prompt(text: string, _images?: ImageInput[]): Promise<void> {
+    this.state = { ...this.state, isStreaming: true };
+    this.emit({ type: "agent_start" });
+    this.history.push({ kind: "user", id: `u${this.history.length}`, text });
+    this.emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: `echo: ${text}` } });
+    this.history.push({ kind: "assistant", id: `a${this.history.length}`, text: `echo: ${text}` });
+    this.emit({ type: "message_end", message: { role: "assistant" } });
+    this.state = { isStreaming: false, messageCount: this.state.messageCount + 2 };
+    this.emit({ type: "agent_settled" });
+  }
+
+  async getHistory() {
+    return { entries: [...this.history], leafId: this.history.at(-1)?.id ?? null };
+  }
+  async steer(): Promise<void> {}
+  async followUp(): Promise<void> {}
+  async rename(): Promise<void> {}
+  async getModels() { return { models: [], current: null, thinkingLevel: "medium", thinkingLevels: [] }; }
+  async setModel(): Promise<void> {}
+  async setThinkingLevel(): Promise<void> {}
+  async getCommands() { return []; }
+  async getExtensions() { return []; }
+  async getStats() { return { userMessages: 0, assistantMessages: 0, toolCalls: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }; }
+  async compact(): Promise<void> {}
+  async respondUi(): Promise<void> {}
+
+  async abort(): Promise<void> {
+    this.state = { ...this.state, isStreaming: false };
+    this.emit({ type: "agent_settled" });
+  }
+
+  async getState() {
+    return this.state;
+  }
+
+  onEvent(listener: (event: unknown) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  async stop(): Promise<void> {}
+
+  private emit(event: unknown): void {
+    for (const listener of this.listeners) listener(event);
+  }
+}
+
+class FakeFactory implements PiSessionFactory {
+  private readonly sessions = new Map<string, FakePiSession>();
+
+  async create(options: { sessionId: string }): Promise<PiSession> {
+    const existing = this.sessions.get(options.sessionId);
+    if (existing) return existing;
+    const session = new FakePiSession();
+    this.sessions.set(options.sessionId, session);
+    return session;
+  }
+
+  async list() {
+    const now = new Date().toISOString();
+    return [...this.sessions.entries()].map(([id, session]) => ({ id, createdAt: now, updatedAt: now, messageCount: session.history.length, preview: session.history[0]?.text ?? "" }));
+  }
+
+  async delete(sessionId: string): Promise<boolean> {
+    return this.sessions.delete(sessionId);
+  }
+}
+
+/** `sessions` broadcasts can arrive at any time; read them via nextSessions(). */
+class FrameQueue {
+  private readonly frames: ServerFrame[] = [];
+  private readonly sessionFrames: ServerFrame[] = [];
+  private readonly waiters: Array<(frame: ServerFrame) => void> = [];
+  private readonly sessionWaiters: Array<(frame: ServerFrame) => void> = [];
+
+  constructor(private readonly socket: WebSocket) {
+    socket.on("message", (data) => {
+      const frame = decodeServerFrame(data as Buffer);
+      const [queue, waiters] = frame.type === "sessions" ? [this.sessionFrames, this.sessionWaiters] : [this.frames, this.waiters];
+      const waiter = waiters.shift();
+      if (waiter) waiter(frame);
+      else queue.push(frame);
+    });
+  }
+
+  next(): Promise<ServerFrame> {
+    const frame = this.frames.shift();
+    if (frame) return Promise.resolve(frame);
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+
+  nextSessions(): Promise<ServerFrame> {
+    const frame = this.sessionFrames.shift();
+    if (frame) return Promise.resolve(frame);
+    return new Promise((resolve) => this.sessionWaiters.push(resolve));
+  }
+}
+
+let host: HostServer | undefined;
+let web: WebServer | undefined;
+
+afterEach(async () => {
+  await web?.close();
+  await host?.close();
+  web = undefined;
+  host = undefined;
+});
+
+async function connect(url: string): Promise<WebSocket> {
+  const socket = new WebSocket(url);
+  await once(socket, "open");
+  return socket;
+}
+
+describe("Web Server seam", () => {
+  it("bridges a browser conversation to Host and serves the shell", async () => {
+    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    await host.start();
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
+    await web.start();
+
+    const health = await fetch(`http://127.0.0.1:${web.address().port}/healthz`);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toMatchObject({ ok: true, role: "web" });
+    const shell = await fetch(`http://127.0.0.1:${web.address().port}/`);
+    expect(await shell.text()).toContain("PI Coffee");
+
+    const browser = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
+    const frames = new FrameQueue(browser);
+    // The sidebar asks for the list before any session exists; the bridge
+    // forwards it to the Host without requiring open first.
+    browser.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    expect(await frames.nextSessions()).toMatchObject({ type: "sessions", sessions: [] });
+
+    browser.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    expect(opened.type).toBe("opened");
+    if (opened.type !== "opened") throw new Error("expected opened");
+    expect(await frames.next()).toMatchObject({ type: "history", entries: [] });
+    browser.send(encodeFrame({ v: 1, type: "prompt", requestId: "web-r1", text: "hello web" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", requestId: "web-r1" });
+    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_start" } });
+    expect(await frames.next()).toMatchObject({
+      type: "event",
+      event: { assistantMessageEvent: { delta: "echo: hello web" } },
+    });
+    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "message_end" } });
+    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_settled" } });
+    const sessionId = opened.sessionId;
+    browser.close();
+    await once(browser, "close");
+
+    // A different browser with no local state sees the conversation through
+    // the Web Server purely from what the Host serves.
+    const reconnected = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
+    const replay = new FrameQueue(reconnected);
+    reconnected.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    expect(await replay.nextSessions()).toMatchObject({ type: "sessions", sessions: [{ id: sessionId }] });
+    reconnected.send(encodeFrame({ v: 1, type: "open", sessionId }));
+    expect(await replay.next()).toMatchObject({ type: "opened", sessionId });
+    expect(await replay.next()).toMatchObject({
+      type: "history",
+      sessionId,
+      entries: [{ kind: "user", text: "hello web" }, { kind: "assistant", text: "echo: hello web" }],
+    });
+    reconnected.close();
+  });
+
+  it("serves the shell assets from public/ and nothing else", async () => {
+    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    await host.start();
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
+    await web.start();
+    const base = `http://127.0.0.1:${web.address().port}`;
+
+    const page = await fetch(`${base}/`);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    const html = await page.text();
+    expect(html).toContain('href="/app.css"');
+    expect(html).toContain('src="/app.js"');
+
+    const css = await fetch(`${base}/app.css`);
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(await css.text()).toContain("color-scheme: light");
+
+    const js = await fetch(`${base}/app.js`);
+    expect(js.status).toBe(200);
+    expect(js.headers.get("content-type")).toContain("text/javascript");
+    const jsText = await js.text();
+    expect(jsText).toContain("'/ws'");
+    expect(jsText).toContain("extension_ui_request");
+
+    for (const path of ["/app.txt", "/nested/app.js", "/..%2Fpackage.json", "/../package.json", "/package.json", "/app.js.map"]) {
+      const blocked = await fetch(`${base}${path}`);
+      expect(blocked.status, path).toBe(404);
+    }
+  });
+
+  it("serves the shell and the WebSocket over HTTPS when given TLS material (the optional secure route)", async () => {
+    const cert = readFileSync(resolve("test/fixtures/tls/test-cert.pem"));
+    const key = readFileSync(resolve("test/fixtures/tls/test-key.pem"));
+    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    await host.start();
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host`, tls: { cert, key } });
+    await web.start();
+    expect(web.scheme).toBe("https");
+
+    // The test certificate is the trust anchor here, standing in for an internal CA.
+    const page = await new Promise<{ status: number; body: string }>((resolvePromise, reject) => {
+      httpsRequest({ host: "127.0.0.1", port: web!.address().port, path: "/", ca: cert }, (response) => {
+        let body = "";
+        response.on("data", (chunk) => (body += chunk));
+        response.on("end", () => resolvePromise({ status: response.statusCode ?? 0, body }));
+      }).on("error", reject).end();
+    });
+    expect(page.status).toBe(200);
+    expect(page.body).toContain("PI Coffee");
+
+    const browser = new WebSocket(`wss://127.0.0.1:${web.address().port}/ws`, { ca: cert });
+    await once(browser, "open");
+    const frames = new FrameQueue(browser);
+    browser.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    expect(await frames.nextSessions()).toMatchObject({ type: "sessions" });
+    browser.close();
+  });
+
+  it("returns a structured error when the browser sends malformed JSON", async () => {
+    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    await host.start();
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
+    await web.start();
+    const browser = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
+    const frames = new FrameQueue(browser);
+    browser.send("not-json");
+    await expect(frames.next()).resolves.toMatchObject({ type: "error", code: "invalid_json", fatal: true });
+    browser.close();
+  });
+});

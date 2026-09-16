@@ -1,0 +1,131 @@
+# PI Coffee MVP protocol
+
+The Browser and Host use the same versioned JSON frame vocabulary. The Web Server validates the Browser frame and forwards it; it does not reinterpret Pi events and keeps no conversation state.
+
+## Connection sequence
+
+```text
+Browser -> Web Server -> Host: {"v":1,"type":"list_sessions"}            (allowed before open)
+Host -> Web Server -> Browser: sessions
+Browser -> Web Server -> Host: {"v":1,"type":"open", "sessionId?", "after?"}
+Host -> Web Server -> Browser: opened
+Host -> Web Server -> Browser: history                                   (always, right after opened)
+Host -> Web Server -> Browser: event…                                    (only the in-flight tail, if any)
+Browser -> Web Server -> Host: prompt | abort | ping | list_sessions
+Host -> Web Server -> Browser: ack | event | error | sessions
+```
+
+`open` without a `sessionId` creates a Session. `open` with an ID attaches to the live Host Session if there is one, otherwise the Host resumes the conversation from Pi's session store in the User VM (`pi --session <file>`). Either way the Browser receives the same two things: `opened`, then `history`.
+
+## Where conversation state lives
+
+- **Completed messages** live in Pi's own session file in the User VM (ADR-0008). The Host projects them into `history` on every `open`. The Browser renders `history` from scratch and keeps nothing across page loads except which conversation it last looked at.
+- **In-flight events** (a message that is still streaming, a tool that is still running) live in the Host's bounded per-Session buffer. After `history`, the Host replays only buffered Events newer than `max(after, cursor of the last completed message)`. So a Browser that has never seen the Session and a Browser that reconnects mid-stream both end up with: history + the current tail, no duplicates.
+- If the in-flight tail itself has fallen out of the bounded buffer (a single message with more Events than the buffer), the Host emits `resync_required` instead of a partial tail; completed messages are unaffected because they come from `history`.
+- The Host may stop an idle Pi process (no Browser attached, nothing running) after `PI_COFFEE_IDLE_TIMEOUT_MS`. The conversation is unaffected: the next `open` resumes it from the store.
+
+## Client frames
+
+```json
+{"v":1,"type":"list_sessions"}
+{"v":1,"type":"open","sessionId":"optional","after":42}
+{"v":1,"type":"prompt","requestId":"r-1","text":"hello","images":[{"type":"image","mimeType":"image/jpeg","data":"<base64>"}],"mode":"follow_up"}
+{"v":1,"type":"abort","requestId":"r-1"}
+{"v":1,"type":"rename_session","requestId":"n-1","sessionId":"optional (default: the open one)","name":"Coffee plan"}
+{"v":1,"type":"delete_session","requestId":"d-1","sessionId":"…"}
+{"v":1,"type":"get_models"}
+{"v":1,"type":"set_model","requestId":"m-1","provider":"cpa","id":"gpt-5.5"}
+{"v":1,"type":"set_thinking","requestId":"t-1","level":"high"}
+{"v":1,"type":"get_commands"}
+{"v":1,"type":"get_extensions"}
+{"v":1,"type":"get_stats"}
+{"v":1,"type":"compact","requestId":"c-1"}
+{"v":1,"type":"ui_response","requestId":"u-1","id":"<extension_ui_request id>","value":"Allow"}
+{"v":1,"type":"ui_response","id":"…","confirmed":true}
+{"v":1,"type":"ui_response","id":"…","cancelled":true}
+{"v":1,"type":"ping","nonce":"n-1"}
+{"v":1,"type":"close"}
+```
+
+### Extension UI
+
+Pi extensions talk to the user through `ctx.ui.*`. In RPC mode Pi emits them as
+`extension_ui_request` events, which the Host forwards unchanged inside `event`
+frames. Fire-and-forget methods (`notify`, `setStatus`, `setWidget`,
+`setTitle`, `set_editor_text`) need no answer; the browser renders them (note,
+status chip, widget strip, composer prefill). Dialog methods (`select`,
+`confirm`, `input`, `editor`) block the extension until the browser sends
+`ui_response` with the same `id` and exactly one of `value` / `confirmed` /
+`cancelled` — the same shape as Pi's `extension_ui_response`. The Host keeps
+the dialogs Pi is still waiting on and re-sends them after `history` to any
+browser that opens the Session, so a reload or a second device can answer. An
+answer to an id nobody is waiting on (already answered, timed out, or the run
+settled) gets `error{code:"unknown_ui_request"}`. `custom()` is TUI-only and is
+not supported.
+
+`prompt.mode` decides how a message joins a Session that is already running: omitted/`prompt` requires an idle Session (`busy` error otherwise); `follow_up` queues it for after the run; `steer` interrupts after the current tool calls. On an idle Session both fall back to a plain prompt so nothing is silently parked. Pi reports the queue via the `queue_update` event.
+
+`list_sessions`, `rename_session` and `delete_session` are sidebar commands and are accepted before `open`. `delete_session` stops a live Pi process for that conversation and removes its file from the User VM's session store. Every other command needs an open Session (`not_open` error).
+
+Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`); the browser downscales before sending. Bulk uploads into the Task inbox are `FILE-001`.
+
+## Server frames
+
+```json
+{"v":1,"type":"sessions","sessions":[{"id":"…","name":"optional","createdAt":"…","updatedAt":"…","messageCount":6,"preview":"first user message","running":false}]}
+{"v":1,"type":"opened","sessionId":"…","cursor":0,"state":{"isStreaming":false,"messageCount":0}}
+{"v":1,"type":"history","sessionId":"…","leafId":"…","truncated":false,"entries":[
+  {"kind":"user","id":"…","at":"…","text":"list files","imageCount":1},
+  {"kind":"assistant","id":"…","at":"…","text":"Sure."},
+  {"kind":"tool","id":"call-1","at":"…","name":"bash","args":{"command":"ls"},"result":"a.txt","isError":false},
+  {"kind":"note","id":"…","text":"会话上下文已压缩…"}
+]}
+{"v":1,"type":"ack","operation":"prompt | steer | follow_up | abort | rename_session | delete_session | set_model | set_thinking | compact | ui_response","requestId":"r-1"}
+{"v":1,"type":"models","models":[{"provider":"cpa","id":"gpt-5.4-mini","contextWindow":200000,"reasoning":true}],"current":{"provider":"cpa","id":"gpt-5.4-mini"},"thinkingLevel":"medium","thinkingLevels":["off","low","medium","high"]}
+{"v":1,"type":"commands","commands":[{"name":"harness","description":"…","source":"extension"}]}
+{"v":1,"type":"extensions","sessionId":"…","extensions":[{"name":"harness/extension.js","kind":"extension","path":"…","origin":"configured","scope":"temporary","commands":[{"name":"harness","description":"…"}]}]}
+{"v":1,"type":"stats","sessionId":"…","stats":{"userMessages":3,"assistantMessages":3,"toolCalls":2,"tokens":{"input":1200,"output":340,"cacheRead":0,"cacheWrite":0,"total":1540},"cost":0.0042,"contextUsage":{"tokens":1540,"contextWindow":200000,"percent":0.77}}}
+{"v":1,"type":"event","sessionId":"…","cursor":1,"event":{"type":"message_update"}}
+{"v":1,"type":"error","code":"busy","message":"…","requestId":"r-2"}
+```
+
+`extensions` describes what the Session's Pi process actually loaded, grouped by the file that registered each slash command (kind `extension` / `skill` / `prompt`, origin `configured` for paths PI Coffee passed with `--extension`, otherwise Pi's own source: `cli`, `auto`, `inline`, `package`). Extensions PI Coffee configured appear even when they register no command.
+
+`sessions` is also **pushed** by the Host to every connected browser whenever the list may have changed (a conversation was created, finished a run, was renamed, deleted, or its idle Pi process was stopped), so sidebars stay in sync without polling. `history.entries[kind=tool]` may carry `diff`: the patch Pi itself recorded for an `edit`, so a reloaded browser renders the same change view as the live one.
+
+`history.entries` follows the active branch of Pi's entry tree (leaf → root); abandoned branches are omitted, compactions and branch switches appear as notes so the user sees the whole past conversation rather than the model's current context. The frame is bounded by `MAX_FRAME_BYTES`: when a conversation does not fit, the newest entries are kept and `truncated` is `true` — the rest stays in the User VM's session file. Tool results are capped at 4000 characters. Session-file paths never appear in any frame.
+
+Pi event payloads are opaque JSON values at this seam. The browser renders `message_update` → `text_delta`, tool execution start/end, `message_end` errors, `extension_ui_request` notifications and visible custom messages.
+
+### File transfer (ADR-0009)
+
+Files never cross this protocol or the Web Server. After `opened`/`history`
+the Host sends
+
+```json
+{"v":1,"type":"transfer","sessionId":"…","url":"http://<user-vm-lan-ip>:53317","scope":"<sessionId>","token":"…","inbox":".pi-coffee/inbox/<sessionId>","maxFileBytes":268435456,"maxBatchBytes":1073741824}
+```
+
+and the browser talks LocalSend v2 directly to that URL: `POST
+/api/localsend/v2/prepare-upload?scope&token` with the file list (optionally
+`sha256`), then one `POST /api/localsend/v2/upload?sessionId&fileId&token` per
+file with the raw bytes; `POST /cancel?sessionId` aborts. Files land in the
+inbox under Pi's working directory, so the prompt only needs to mention their
+paths. The Host reports progress on the ordinary event stream:
+
+```json
+{"type":"transfer_progress","sessionId":"<upload session>","fileId":"…","fileName":"…","received":123,"size":456}
+{"type":"transfer_complete","sessionId":"…","fileId":"…","fileName":"…","path":".pi-coffee/inbox/<sessionId>/name.pdf","size":456,"sha256":"…","fileType":"application/pdf"}
+{"type":"transfer_failed","sessionId":"…","fileId":"…","fileName":"…","message":"Checksum mismatch (sha256)"}
+```
+
+Downloads use the LocalSend download API against the same URL: `POST
+/prepare-download?scope&token` lists the inbox; `GET
+/download?scope&token&fileId=<workdir-relative path>` streams any file under
+the working directory (agent output included). A LocalSend app that sends
+without scope/token lands in the `shared` inbox. These are Host-originated
+events; unlike Pi events they are not part of the durable history.
+
+## Lifetime rule
+
+Closing a Browser WebSocket detaches that Browser from the Session. It is not a stop command and must not interrupt Pi. The Host stops a Pi process only during Host shutdown or after the idle timeout above, and in both cases the conversation remains in Pi's session store.
