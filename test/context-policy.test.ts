@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -32,12 +32,17 @@ describe("bounded context and local recovery", () => {
   });
 
   it("returns a bounded explicit error on disk failure instead of a raw log", async () => {
+    const root = await mkdtemp(join(tmpdir(), "context-policy-failure-"));
+    const file = join(root, "not-a-directory");
+    await writeFile(file, "x");
     const handlers = new Map<string, Function>();
     installContextPolicy({ on: (event: string, handler: Function) => handlers.set(event, handler) } as never);
-    const result = await handlers.get("tool_result")!({ toolName: "read", content: [{ type: "text", text: "RAW".repeat(10000) }] }, { sessionManager: { getSessionDir: () => '/dev/null/no-dir' } });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("not saved");
-    expect(result.content[0].text).not.toContain("RAW");
+    try {
+      const result = await handlers.get("tool_result")!({ toolName: "read", content: [{ type: "text", text: "RAW".repeat(10000) }] }, { sessionManager: { getSessionDir: () => file } });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("not saved");
+      expect(result.content[0].text).not.toContain("RAW");
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   it("uses final request size even if reported usage is absent or zero, reserving output space", async () => {

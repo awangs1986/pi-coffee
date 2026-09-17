@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { delimiter, isAbsolute } from "node:path";
 import { discoverAndLoadExtensions } from "@earendil-works/pi-coding-agent";
 import {
   resolveWebExtension,
@@ -26,7 +27,7 @@ describe("PI Coffee native extension selection", () => {
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
     ]);
-    expect(extensions.every((path) => path.startsWith("/"))).toBe(true);
+    expect(extensions.every((path) => isAbsolute(path))).toBe(true);
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
     expect(resolvePiSubagentsExtension()).toMatch(/[\\/]subagents[\\/]native-adapter\.js$/);
@@ -130,7 +131,7 @@ describe("PI Coffee native extension selection", () => {
   });
 
   it("keeps an explicit extension replacement list authoritative", () => {
-    expect(resolvePiExtensions({ PI_COFFEE_EXTENSIONS: " ./one.js:/two.js: " })).toEqual([
+    expect(resolvePiExtensions({ PI_COFFEE_EXTENSIONS: ` ./one.js${delimiter}/two.js${delimiter} ` })).toEqual([
       "./one.js",
       "/two.js",
     ]);

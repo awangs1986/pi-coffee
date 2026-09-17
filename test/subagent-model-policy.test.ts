@@ -35,8 +35,10 @@ describe("global subagent model policy", () => {
       packages: ["x"],
       subagents: { defaultModel: "openai/gpt-5.6-luna:low" },
     });
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
-    expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") {
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+      expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
+    }
   });
 
   it("clears only the global default model", async () => {

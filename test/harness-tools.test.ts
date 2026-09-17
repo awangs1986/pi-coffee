@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createNativeGitTool, type NativeCommandResult, type NativeCommandRunner } from "../src/harness/native-git.js";
 import { FULL_TOOLS, SIMPLE_TOOLS, resolveToolTable } from "../src/harness/mode.js";
@@ -59,7 +60,7 @@ describe("PI Coffee V5 tool adapters", () => {
     );
     expect(invocation).toEqual({
       command: "git",
-      args: ["worktree", "add", "--detach", "/task-wt", "HEAD"],
+      args: ["worktree", "add", "--detach", resolve("/workspace", "../task-wt"), "HEAD"],
     });
   });
 
