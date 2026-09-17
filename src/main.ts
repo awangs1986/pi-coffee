@@ -1,5 +1,5 @@
 import { Workspaces } from "./host/workspaces.js";
-import type { IdentityOptions } from "./web/identity.js";
+import { parseUserRoutes, type IdentityOptions } from "./web/identity.js";
 import { readFileSync } from "node:fs";
 import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
@@ -159,5 +159,5 @@ function identityOptions(): IdentityOptions | undefined {
   const routeFile = process.env.PI_COFFEE_ROUTES_FILE;
   if (!routeFile) return undefined; // Existing single-Host local mode; not a multi-user deployment.
   const required = (key: string) => { const value=process.env[key]; if(!value) throw new Error(`${key} is required for multi-user mode`); return value; };
-  return { giteaUrl: required("PI_COFFEE_GITEA_URL"), clientId: required("PI_COFFEE_GITEA_CLIENT_ID"), clientSecret: required("PI_COFFEE_GITEA_CLIENT_SECRET"), publicUrl: required("PI_COFFEE_PUBLIC_URL"), routes: () => JSON.parse(readFileSync(routeFile,"utf8")) };
+  return { giteaUrl: required("PI_COFFEE_GITEA_URL"), clientId: required("PI_COFFEE_GITEA_CLIENT_ID"), clientSecret: required("PI_COFFEE_GITEA_CLIENT_SECRET"), publicUrl: required("PI_COFFEE_PUBLIC_URL"), routes: () => parseUserRoutes(readFileSync(routeFile,"utf8")) };
 }

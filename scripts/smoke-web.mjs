@@ -10,6 +10,7 @@ const smokeRoot = await mkdtemp(join(tmpdir(), "pi-coffee-web-smoke-"));
 const agentDir = join(smokeRoot, "agent");
 const inspectionPath = join(smokeRoot, "tools.json");
 const inspectionExtension = join(smokeRoot, "inspect.mjs");
+const nativeSubagents = process.platform === "linux";
 
 await writeFile(
   inspectionExtension,
@@ -18,7 +19,7 @@ await writeFile(
 
 const extensions = resolvePiExtensions({
   PI_COFFEE_EXTENSIONS: "",
-  PI_COFFEE_SUBAGENTS: "",
+  PI_COFFEE_SUBAGENTS: nativeSubagents ? "" : "off",
   PI_COFFEE_AGENT_DIR: agentDir,
 });
 const client = new RpcClient({
@@ -44,8 +45,11 @@ try {
   const requiredTools = ["web_search", "research_seal", "fetch_content", "source_check", "get_search_content"];
   const missingTools = requiredTools.filter((name) => !inspection.all.includes(name));
   if (missingTools.length > 0) throw new Error(`Missing Web tools: ${missingTools.join(", ")}`);
-  if (!inspection.all.includes("subagent") || !inspection.all.includes("bg_wait")) {
-    throw new Error(`pi-subagents tools were not registered: ${JSON.stringify(inspection)}`);
+  if (nativeSubagents && (!inspection.all.includes("subagent") || !inspection.all.includes("bg_wait"))) {
+    throw new Error(`pi-subagents tools were not registered on the Linux User VM: ${JSON.stringify(inspection)}`);
+  }
+  if (!nativeSubagents && (inspection.all.includes("subagent") || inspection.all.includes("bg_wait"))) {
+    throw new Error(`Linux-only pi-subagents tools unexpectedly registered on ${process.platform}: ${JSON.stringify(inspection)}`);
   }
   if (!inspection.all.includes("recall_folded") || !inspection.all.includes("unfold")) {
     throw new Error(`context-fold tools were not registered: ${JSON.stringify(inspection)}`);
@@ -59,7 +63,9 @@ try {
   console.log(JSON.stringify({
     ok: true,
     webTools: requiredTools,
-    piSubagentsTools: ["subagent", "bg_wait"],
+    piSubagents: nativeSubagents
+      ? { verified: true, tools: ["subagent", "bg_wait"] }
+      : { verified: false, skipped: true, reason: "native admission requires the Linux User VM" },
     contextFoldTools: ["recall_folded", "unfold"],
     command: "websearch",
     extensions,

@@ -7,11 +7,13 @@
 在一台 Windows 11 真机的 fresh checkout 上完成了安装、构建、测试、Chrome 工作台和真实原生 Pi 模型链路复核。初始结果为 131 项通过、24 项失败；失败集中在 POSIX 路径/权限假设、Python 启动器、浏览器静态目录 URL 转换，以及明确依赖 Linux `/proc`、`fcntl`、POSIX 信号的子 Agent admission 验收。
 
 - 已修复产品代码中的 Git 项目路径比较和 ZIP Python 启动器，并把测试夹具改成跨平台路径、失败和 symlink 场景。
-- Windows 最终 `npm run check`：构建成功，142 项通过，13 项 Linux User VM 专属测试明确跳过；Linux 最终仍为 29 个文件、155 项全部通过。
+- Windows 最终 `npm run check`：构建成功，143 项通过，13 项 Linux User VM 专属测试明确跳过；Linux 最终仍为 29 个文件、156 项全部通过。
 - Windows Chrome 工作台 smoke 通过；修复了 `URL.pathname` 不能直接作为 Windows 静态资源路径的问题。
 - Windows 上关闭 Linux 专属子 Agent admission 后，使用本机原生 Pi 登录完成真实模型 smoke：流式回复、断线重连、Host 历史恢复和同会话第二轮均通过。没有保存认证材料或模型正文。
+- 使用临时 Gitea OAuth 应用完成真实 PKCE 登录、cookie 属性、固定路由撤销、重新登录和 logout 验收，并修复 PowerShell UTF-8 BOM 路由文件解析；临时应用、token 配置和浏览器会话已删除。
+- Windows `smoke:web` 已实际验证 Web Search、context-fold 和 Harness；`smoke:subagents` 以结构化结果标明 Linux native admission 不适用。Linux 上两项仍完整通过。
 - Linux 上 `smoke:subagents`、`smoke:web`、Chrome 工作台 smoke 全部通过；`npm audit` 为 0 漏洞。
-- 证据与平台边界见 [Windows 真机验收记录](docs/reviews/windows-real-machine-acceptance-20260917.md)。真实双 Linux User VM、完整 Gitea OAuth/撤销与故障矩阵仍属于 P5，不能因这次 Windows 复核标为完成。
+- 证据与平台边界见 [Windows 真机验收记录](docs/reviews/windows-real-machine-acceptance-20260917.md)。真实双 Linux User VM、多用户并发及完整故障矩阵仍属于 P5，不能因这次 Windows 复核标为完成。
 
 ## 本轮质量审核修复（2026-09-16，Europe/Paris）
 

@@ -5,7 +5,7 @@
 
 ## 目的与边界
 
-本次在独立 Windows 11 真机 fresh checkout 上复核仓库能否安装、构建、运行跨平台测试、启动 Chrome 工作台，并通过原生 Pi 的真实模型链路。产品发布目标仍是 Debian Control Plane + Linux Mint User VM；Windows 结果用于发现可移植性缺陷，不替代 P5 的双 Linux VM、Gitea OAuth/撤销和完整故障矩阵。
+本次在独立 Windows 11 真机 fresh checkout 上复核仓库能否安装、构建、运行跨平台测试、启动 Chrome 工作台，并通过原生 Pi 的真实模型链路和真实 Gitea OAuth。产品发布目标仍是 Debian Control Plane + Linux Mint User VM；Windows 结果用于发现可移植性缺陷，不替代 P5 的双 Linux VM、多用户并发和完整故障矩阵。
 
 测试中没有把密码、API key、cookie、认证文件、模型回复或用户 transcript 写入仓库和本记录。
 
@@ -33,29 +33,33 @@ fresh checkout 的 `npm ci` 在约 17 秒内成功，`npm audit` 报告 0 漏洞
 5. ZIP 导入写死 `python3`，而 Windows 只有有效的 `python` 命令。
 6. 浏览器 smoke 把 URL pathname 直接当文件系统路径，Windows 上静态资源返回失败。
 7. 原生 admission/process 测试依赖 Linux `/proc`、Python `fcntl` 和 POSIX 信号；这属于 Linux User VM 的实现边界。
+8. Windows PowerShell 5 写出的 UTF-8 JSON 带 BOM，固定 VM 路由文件在真实 OAuth 回调中被 `JSON.parse` 拒绝。
 
-修复后，路径比较先规范化并在 Windows 上忽略大小写；Python 启动器按平台选择；测试用平台原生 path API 和临时文件系统夹具；浏览器静态目录用 `fileURLToPath`。Linux 专属进程测试显式标注平台，并继续在 Linux 全量运行。
+修复后，路径比较先规范化并在 Windows 上忽略大小写；Python 启动器按平台选择；测试用平台原生 path API 和临时文件系统夹具；浏览器静态目录用 `fileURLToPath`；路由 JSON 在解析前移除 UTF-8 BOM。Linux 专属进程测试显式标注平台，并继续在 Linux 全量运行。
 
 ## 最终证据
 
 | 环境/命令 | 结果 |
 | --- | --- |
-| Windows `npm run check` | 构建成功；27 个文件通过、2 个 Linux 专属文件跳过；142 项通过、13 项 Linux 专属跳过 |
+| Windows `npm run check` | 构建成功；27 个文件通过、2 个 Linux 专属文件跳过；143 项通过、13 项 Linux 专属跳过 |
 | Windows `npm audit --audit-level=low` | 0 漏洞 |
+| Windows `npm run smoke:subagents` | `ok: true, skipped: true`；明确报告 Linux native admission 平台边界 |
+| Windows `npm run smoke:web` | `ok: true`；Web Search、context-fold、Harness 通过，Linux subagent 部分结构化跳过 |
 | Windows `npm run smoke:workspace-browser` | 通过；无 pageerror；SVG 与 Markdown 渲染、归档恢复、390px 布局均通过 |
+| Windows `npm run smoke:gitea-oauth` | 真实 Gitea 通过：匿名 401、PKCE 登录、HttpOnly/SameSite cookie、路由撤销 401、重新登录、logout 204、登出后 401 |
 | Windows 真实模型 smoke | 退出 0；`open`、流式回复、断线重连、历史恢复、无旧事件重放、同会话第二轮均通过 |
-| Linux `npm run check` | 29 个文件、155 项全部通过 |
+| Linux `npm run check` | 29 个文件、156 项全部通过 |
 | Linux `npm run smoke:subagents` | `ok: true` |
 | Linux `npm run smoke:web` | `ok: true` |
 | Linux Chrome 工作台 smoke | 通过；无 pageerror |
 | `git diff --check` | 通过 |
 
-Windows 的真实模型运行设置 `PI_COFFEE_SUBAGENTS=off`；默认子 Agent extension 会明确拒绝非 Linux admission。Linux smoke 已验证 `pi-subagents`、Web 工具、context-fold、Harness tool table 和命令注册。
+Windows 的真实模型运行设置 `PI_COFFEE_SUBAGENTS=off`；默认子 Agent extension 会明确拒绝非 Linux admission。Linux smoke 已验证 `pi-subagents`、Web 工具、context-fold、Harness tool table 和命令注册。真实 OAuth 使用一次性测试应用；测试完成后应用、临时配置和浏览器会话均已删除。
 
 ## 未满足的发布门槛
 
 - 尚未在两台真实 Linux User VM 上执行 2 用户 × 3 活跃对话、重启、断网和进程故障矩阵。
-- 尚未用真实 Gitea OAuth app 执行登录、cookie 生命周期、logout 和身份撤销测试。
+- 单用户真实 Gitea 登录、cookie、logout 和固定路由撤销已经通过；尚未覆盖禁用 Gitea 用户、双用户到双 VM 路由和 OAuth 服务故障矩阵。
 - Windows 上不支持 Linux native child admission；这不是发布目标，也没有用弱化实现模拟通过。
 
 因此本记录支持“本轮质量问题已修复并有跨平台真机证据”，不支持关闭 P5 或宣告完整生产发布验收完成。

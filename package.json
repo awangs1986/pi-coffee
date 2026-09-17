@@ -23,7 +23,8 @@
     "start:relay": "node dist/src/main.js relay",
     "smoke:subagents": "npm run build && node scripts/smoke-subagents.mjs",
     "smoke:web": "npm run build && node scripts/smoke-web.mjs",
-    "smoke:workspace-browser": "npm run build && node scripts/smoke-workspace-browser.mjs"
+    "smoke:workspace-browser": "npm run build && node scripts/smoke-workspace-browser.mjs",
+    "smoke:gitea-oauth": "npm run build && node scripts/smoke-gitea-oauth.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.4",

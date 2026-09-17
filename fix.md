@@ -20,6 +20,9 @@
 13. **修复跨平台浏览器 smoke**：静态资源目录改用 `fileURLToPath`，避免 Windows URL pathname 被当成错误的本地路径。
 14. **保留 Linux 安全语义**：权限位断言只在支持 POSIX mode 的平台执行；依赖 `/proc`、`fcntl`、SIGKILL 的进程/admission 验收明确限定 Linux，Linux 上仍完整执行而非放宽断言。
 15. **使用可移植失败夹具**：磁盘写入失败和符号链接逃逸测试使用临时文件/目录制造真实错误，不再依赖 `/dev/null` 或 `/etc`。
+16. **兼容 Windows 路由文件**：`routes.json` 解析接受 Windows PowerShell 5 写出的 UTF-8 BOM，并增加回归测试；真实 Gitea OAuth 回调不再因 BOM 拒绝固定 VM 路由。
+17. **明确跨平台 smoke 结果**：Windows 上继续实际验证 Web Search、context-fold 和 Harness；Linux native subagent smoke 返回带原因的结构化跳过，Linux 上仍执行完整 admission/extension 验收。
+18. **增加真实 Gitea OAuth smoke**：自动验证匿名拒绝、PKCE 登录、HttpOnly/SameSite cookie、固定 VM 路由撤销、重新登录和 logout；凭据只通过环境变量传入。
 
 新增公共接口回归和 RPC 进程 SIGKILL 故障测试；另让 verify 测试使用当前 Node 的绝对路径，消除 login shell PATH 差异。同步更新 `handoff.md` 和审核报告。
 
@@ -30,7 +33,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | `npm ci` | 成功 |
-| `npm run check` | 构建成功，29 个测试文件、155 项通过 |
+| `npm run check` | 构建成功，29 个测试文件、156 项通过 |
 | `npm audit` | 0 漏洞 |
 | `npm run smoke:subagents` | `ok: true` |
 | `npm run smoke:web` | `ok: true` |
@@ -42,8 +45,11 @@ Windows 11 真机补充验证（Node 24.18.0、npm 11.16.0、Git 2.55.0.windows.
 | 检查 | 结果 |
 | --- | --- |
 | fresh `npm ci` | 成功，0 个依赖漏洞 |
-| `npm run check` | 构建成功；27 个测试文件通过、2 个 Linux 专属文件跳过；142 项通过、13 项 Linux 专属跳过 |
+| `npm run check` | 构建成功；27 个测试文件通过、2 个 Linux 专属文件跳过；143 项通过、13 项 Linux 专属跳过 |
+| `npm run smoke:subagents` | `ok: true, skipped: true`；明确记录 Linux native admission 平台边界 |
+| `npm run smoke:web` | `ok: true`；Web Search、context-fold、Harness 通过，Linux subagent 部分结构化跳过 |
 | `npm run smoke:workspace-browser` | 通过；SVG、Markdown、归档恢复、390px 布局，pageerror 为 0 |
+| `npm run smoke:gitea-oauth` | 真实 Gitea 通过；匿名 401、登录、cookie、路由撤销 401、重新登录、logout 204、登出后 401 |
 | 真实原生 Pi 模型 smoke | 通过；`open`、流式回复、断线重连、历史恢复、同会话第二轮均成功 |
 
 Windows 真机上的真实模型 smoke 设置 `PI_COFFEE_SUBAGENTS=off`，因为原生子 Agent admission 明确依赖 Linux 的 `/proc`、`fcntl` 和 POSIX 信号。完整子 Agent/Web 扩展 smoke 已在 Linux 通过。未保存模型回复、认证材料或测试会话正文。
@@ -52,7 +58,7 @@ Windows 真机上的真实模型 smoke 设置 `PI_COFFEE_SUBAGENTS=off`，因为
 
 ## 剩余边界
 
-- P5 双用户、双真实 VM、原生认证刷新及完整故障矩阵尚未执行，不能据此宣告发布验收完成。
+- P5 双用户、双真实 Linux VM、原生认证刷新及完整故障矩阵尚未执行，不能据此宣告发布验收完成；单用户真实 Gitea OAuth/固定路由撤销已在 Windows 真机通过。
 - 跨 cwd 子任务、手工后台 shell 和跨目录写入仍没有全局作业关联。
 - 崩溃锁清理、删除与元数据保存之间的恢复窗口，以及 PDF、长上传撤销和目标网络设备仍需验收。
 - 本次只把修复交付到指定工作分支，不更新 `main`；Gitea #1 记录验收证据，但 P5 未完成前不关闭 Issue。

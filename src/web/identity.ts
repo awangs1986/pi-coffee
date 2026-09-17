@@ -2,6 +2,9 @@ import { createHash, randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 export interface UserRoute { hostUrl: string; hostToken: string }
+export function parseUserRoutes(text:string):Record<string,UserRoute> {
+  return JSON.parse(text.replace(/^\uFEFF/,'')) as Record<string,UserRoute>;
+}
 export interface IdentityOptions {
   giteaUrl: string; clientId: string; clientSecret: string; publicUrl: string;
   /** Admin-owned routing configuration, re-read for each authorization check. */
