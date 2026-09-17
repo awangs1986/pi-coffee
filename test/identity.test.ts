@@ -1,9 +1,14 @@
 import { describe,it,expect } from 'vitest';
 import { WebServer } from '../src/web/server.js';
-import type { UserRoute } from '../src/web/identity.js';
+import { parseUserRoutes, type UserRoute } from '../src/web/identity.js';
 import { WebSocket } from 'ws';
 import { createServer } from 'node:http';
 describe('Gitea identity and fixed VM routing',()=> {
+ it('accepts the UTF-8 BOM emitted by Windows PowerShell route files',()=> {
+  expect(parseUserRoutes('\uFEFF{"4":{"hostUrl":"ws://127.0.0.1:8788/host","hostToken":"token"}}')).toEqual({
+   '4':{hostUrl:'ws://127.0.0.1:8788/host',hostToken:'token'},
+  });
+ });
  it('invalidates login immediately even when the VM file-revocation endpoint is stalled',async()=> {
   let release!:()=>void;
   let requested!:()=>void;
