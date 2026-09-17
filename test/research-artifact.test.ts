@@ -20,7 +20,7 @@ describe("research Markdown closure", () => {
     expect(markdown).toContain("# PI Coffee Research Closure");
     expect(markdown).toContain("The answer is [safe].");
     expect(store.read(ref)).toBe(markdown);
-    expect((await stat(ref.path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(ref.path)).mode & 0o777).toBe(0o600);
     expect(pointerContext(ref, "answer")).toContain(ref.artifactId);
   });
 

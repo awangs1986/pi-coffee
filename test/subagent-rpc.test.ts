@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { resolvePiExtensions } from "../src/pi-extensions.js";
@@ -15,7 +15,7 @@ function completion(res: any, model: string, tool?: { name: string; args: unknow
  res.end('data: [DONE]\n\n');
 }
 
-describe('real native subagents and delegated search', () => {
+describe.skipIf(process.platform !== 'linux')('real native subagents and delegated search (Linux User VM)', () => {
  it.each(['subagent', 'web', 'batch', 'background', 'background-guard', 'full', 'override', 'simple-web', 'lean-web', 'simple-no-subagent'] as const)('honors harness policy for %s with real native execution and bounded results', async (route) => {
   const simple = route.startsWith('simple-') || route === 'lean-web';
   const webRoute = route === 'web' || route.endsWith('-web');
@@ -70,7 +70,12 @@ print(n)`], {encoding:'utf8'});
   const port = (server.address() as {port:number}).port;
   await writeFile(join(agentDir,'models.json'), JSON.stringify({ providers: { localtest: { baseUrl: `http://127.0.0.1:${port}/v1`, api: 'openai-completions', apiKey: 'local-test-placeholder', models: ['parent','child'].map(id => ({ id, name: id, reasoning: false, input: ['text'], contextWindow: 128000, maxTokens: 4096 })) } } }));
   await writeFile(join(agentDir,'settings.json'), JSON.stringify({ subagents: { defaultModel: route === 'override' ? 'localtest/unused' : 'localtest/child' }, compaction: { enabled: false } }));
-  const extensions = resolvePiExtensions({ PI_COFFEE_AGENT_DIR: agentDir }).map(p => p.replace(resolve("src")+"/", resolve("dist/src")+"/"));
+  const sourceRoot = resolve("src");
+  const buildRoot = resolve("dist/src");
+  const extensions = resolvePiExtensions({ PI_COFFEE_AGENT_DIR: agentDir }).map((path) => {
+    const local = relative(sourceRoot, path);
+    return local.startsWith('..') ? path : resolve(buildRoot, local);
+  });
   const client = new RpcClient({ cliPath: resolve('node_modules/@earendil-works/pi-coding-agent/dist/cli.js'), cwd: root, provider: 'localtest', model: 'parent',
    env: { PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: '1', PI_SUBAGENTS_TEMP_ROOT: join(root,'native-temp'), PI_COFFEE_SEARCH_URL: `http://127.0.0.1:${port}`, PI_COFFEE_SCHEDULER_DIR: join(root,'admission') },
    args: ['--offline', '--session-dir', join(root,'sessions'), ...extensions.flatMap(p => ['--extension',p])],

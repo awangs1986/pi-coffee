@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Workspaces } from '../src/host/workspaces.js';
 const exec=promisify(execFile);
+const python=process.platform === 'win32' ? 'python' : 'python3';
 const git=(cwd:string,args:string[])=>exec('git',['-c','user.name=Test','-c','user.email=test@localhost',...args],{cwd});
 describe('VM project lifecycle using native Git',()=>{
  it('creates independent branches, confirms heads, archives before deletion and preserves project',async()=>{
@@ -32,7 +33,8 @@ describe('VM project lifecycle using native Git',()=>{
   const root=await mkdtemp(join(tmpdir(),'coffee-projects-'));
   try {
    const store=new Workspaces(root),p=await store.createProject('demo'),c=await store.createConversation(p.id);
-   await symlink('/etc',join(c.cwd,'escape'));await expect(store.file(c.id,'escape/passwd')).rejects.toThrow('outside');
+   const outside=join(root,'outside');await mkdir(outside);await writeFile(join(outside,'secret'),'x');
+   await symlink(outside,join(c.cwd,'escape'),process.platform === 'win32' ? 'junction' : 'dir');await expect(store.file(c.id,'escape/secret')).rejects.toThrow('outside');
    await expect(store.file(c.id,'.git')).rejects.toThrow('Git internals');await rm(join(c.cwd,'escape'));
    await writeFile(join(p.path,'dirty'),'x');await expect(store.prepareMerge(c.id)).rejects.toThrow('clean');await rm(join(p.path,'dirty'));
    await writeFile(join(c.cwd,'work'),'x');await git(c.cwd,['add','.']);await git(c.cwd,['commit','-m','work']);
@@ -64,9 +66,9 @@ describe('workspace interruption and import boundaries',()=>{
   const root=await mkdtemp(join(tmpdir(),'coffee-import-'));
   try{
    const ws=new Workspaces(join(root,'projects'));
-   await exec('python3',['-c',`import zipfile,sys\nwith zipfile.ZipFile(sys.argv[1],'w') as z:z.writestr('README.md','hello')`,join(root,'safe.zip')]);
+   await exec(python,['-c',`import zipfile,sys\nwith zipfile.ZipFile(sys.argv[1],'w') as z:z.writestr('README.md','hello')`,join(root,'safe.zip')]);
    const p=await ws.createProject('safe',undefined,join(root,'safe.zip'));const c=await ws.createConversation(p.id);expect((await ws.tree(c.id)).entries[0].name).toBe('README.md');
-   await exec('python3',['-c',`import zipfile,sys\nwith zipfile.ZipFile(sys.argv[1],'w') as z:z.writestr('../escape','no')`,join(root,'bad.zip')]);
+   await exec(python,['-c',`import zipfile,sys\nwith zipfile.ZipFile(sys.argv[1],'w') as z:z.writestr('../escape','no')`,join(root,'bad.zip')]);
    await expect(ws.createProject('bad',undefined,join(root,'bad.zip'))).rejects.toThrow('creation failed');
   }finally{await rm(root,{recursive:true,force:true});}
  });

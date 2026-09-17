@@ -14,7 +14,7 @@ it('treats accepted but not started/missing/paused native work as non-quiescent'
   writeFileSync(join(dir,'status.json'),JSON.stringify({runId:'job',state:'complete'}));expect(pendingNativeRuns(entries)).toBe(0);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
-it('checks process birth identity, including queued launchers; PID reuse is not active work',()=>{
+it.skipIf(process.platform !== 'linux')('checks Linux process birth identity, including queued launchers; PID reuse is not active work',()=>{
  const root=mkdtempSync(join(tmpdir(),'coffee-process-'));const old=process.env.PI_COFFEE_SCHEDULER_DIR;process.env.PI_COFFEE_SCHEDULER_DIR=root;
  const dir=join(root,'sessions',createHash('sha256').update('root').digest('hex'),'processes');mkdirSync(dir,{recursive:true});
  const info=readFileSync('/proc/self/stat','utf8');const start=info.slice(info.lastIndexOf(')')+1).trim().split(/\s+/)[19];

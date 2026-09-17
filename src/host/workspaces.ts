@@ -2,13 +2,19 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, readdir, realpath, rm, stat } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
+import { join, resolve, relative, isAbsolute, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 const exec = promisify(execFile);
 export interface Project { id: string; name: string; path: string; branch: string }
 export interface Conversation { id: string; projectId: string; cwd: string; branch: string; archived: boolean; createdAt: string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
 interface Artifact { path:string; modifiedAt:string; size:number; available:boolean }
 const privateName=(name:string)=> /^(\.git|\.pi|\.coffee|\.ssh|\.aws|\.env(?:\..*)?|\.npmrc|\.netrc|auth\.json|credentials(?:\..*)?)$/i.test(name);
+const pythonCommand=process.platform === "win32" ? "python" : "python3";
+const samePath=(left:string,right:string)=> {
+  const normalized=(value:string)=>normalize(resolve(value));
+  const [a,b]=[normalized(left),normalized(right)];
+  return process.platform === "win32" ? a.toLowerCase()===b.toLowerCase() : a===b;
+};
 interface State { version: 1; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[] }
 interface Proposal { token: string; sessionId: string; source: string; target: string; diff: string; expires: number }
 const slug = (v: unknown) => { if(typeof v !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(v)) throw new Error('Use a project name containing letters, numbers, - or _ (1–64 characters)');return v; };
@@ -67,7 +73,7 @@ export class Workspaces {
       if(!dir.isDirectory() || dir.name.startsWith('.') || this.state.projects.some(p=>p.path===join(this.root,dir.name))) continue;
       try {
         const path=await realpath(join(this.root,dir.name));
-        if(await this.git(path,['rev-parse','--show-toplevel'])!==path)continue;
+        if(!samePath(await this.git(path,['rev-parse','--show-toplevel']),path))continue;
         const branch=await this.git(path,['symbolic-ref','--short','HEAD']);
         this.state.projects.push({id:randomUUID(),name:dir.name,path,branch});
       } catch { /* Not a standalone Git project. */ }
@@ -82,7 +88,7 @@ export class Workspaces {
         if((/^https?:/.test(url) && new URL(url).username) || (/^(https?|ssh):/.test(url) && new URL(url).password))throw new Error('Use VM Git credential storage, not URL credentials');
         await this.git(this.root,['-c','protocol.file.allow=never','clone','--',url,path]);
       } else {
-        if(archive) await exec('python3',[fileURLToPath(new URL('./import-zip.py',import.meta.url)),archive,path],{timeout:60000,maxBuffer:1024*1024});
+        if(archive) await exec(pythonCommand,[fileURLToPath(new URL('./import-zip.py',import.meta.url)),archive,path],{timeout:60000,maxBuffer:1024*1024});
         await this.git(path,['init','-b','main']);
       }
       let branch=await this.git(path,['symbolic-ref','--short','HEAD']);

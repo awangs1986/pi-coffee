@@ -15,7 +15,7 @@ function run(root: string, session: string, probe: string, extra = {}) {
   return { child, done: new Promise<number | null>((r, reject) => { child.on("error", reject); child.on("exit", code => r(code)); }), error: () => error };
 }
 
-describe("VM-wide native child admission", () => {
+describe.skipIf(process.platform !== "linux")("VM-wide native child admission on the Linux User VM", () => {
   it("enforces 3 per root session and 5 per VM across independent processes, queuing extras", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-admission-"));
     const probe = join(root, "probe.mjs");

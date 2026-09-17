@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {Workspaces} from '../dist/src/host/workspaces.js';
 import {HostServer} from '../dist/src/host/server.js';
 import {TransferServer} from '../dist/src/host/transfer.js';
@@ -17,7 +18,7 @@ const factory={list:async()=>[...history.keys()].map(id=>({id,createdAt:new Date
 }};
 const transfer=new TransferServer({host:'127.0.0.1',port:0,advertiseHost:'127.0.0.1',workdir:root,workspaces,allowUnscoped:false});await transfer.start();
 const host=new HostServer({port:0,token:'browser-fixture-token',factory,workspaces,transfer});await host.start();
-const web=new WebServer({port:0,hostUrl:`ws://127.0.0.1:${host.address().port}/host`,hostToken:'browser-fixture-token',publicDir:new URL('../dist/public',import.meta.url).pathname});await web.start();
+const web=new WebServer({port:0,hostUrl:`ws://127.0.0.1:${host.address().port}/host`,hostToken:'browser-fixture-token',publicDir:fileURLToPath(new URL('../dist/public',import.meta.url))});await web.start();
 const browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH,args:['--no-sandbox','--disable-dev-shm-usage','--no-zygote','--use-gl=angle','--use-angle=swiftshader'],headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:950}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
