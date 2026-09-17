@@ -2,6 +2,17 @@
 
 更新日期：2026-09-17（Asia/Hong_Kong）
 
+## 本轮质量审核修复（2026-09-16，Europe/Paris）
+
+已按本文件基线审核 `arena/01a0a607-pi-coffee@1d33508` 并在本地工作分支修复。详见 [审核报告、修复与待验收边界](docs/reviews/completion-quality-20260916.md)。以下原交接的提交前测试与已知问题是历史记录；与本段冲突时，以本段和审核报告为准。
+
+- 修复断线闲置回收中断后台工作、Git 队列失败传播、detached HEAD 未合并成果删除、手工发现空仓库不能新建对话、同名上传覆盖和完成凭证重用、VM 撤销端点卡住导致退出延迟、Pi 异常退出永久 busy，以及 390px 输入栏溢出。
+- Vitest 锁定至 **4.1.11**，fresh `npm ci` 成功，`npm audit` **0 漏洞**。3.2.7 已不能消除当前 mocker advisory，未采用 `audit fix --force`。
+- 最终 `npm run check`：构建成功，**29 个测试文件、155 项通过**；`smoke:subagents` 与 `smoke:web` 均 `ok: true`。
+- 本轮实际重新执行了真实 Chrome 工作台 smoke：SVG/Markdown 可见、来源切换、归档恢复、390px 无横向溢出、无 pageerror。仍使用假 Pi；不等于 P5。
+- Pi 故障测试实际 SIGKILL 本地 RPC fixture，验证中断落盘、重连无旧轮次重放、显式重新发送成功；不是完整实机故障矩阵。
+- **P5 仍未执行**，跨 cwd/手工后台写入及原交接列出的恢复边界仍待验收。Gitea 本轮不可达，未关闭或更新 Issue。owner 于 2026-09-17 要求将修复和 [fix.md](fix.md) 一起提交并推送至 `arena/01a0a607-pi-coffee`；实际提交与远端状态以 Git 历史为准，不更新 `main`。
+
 ## 1. 审查入口与提交范围
 
 - 仓库：`awangs1986/pi-coffee`

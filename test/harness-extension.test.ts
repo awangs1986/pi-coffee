@@ -313,7 +313,7 @@ describe("PI Coffee V5 harness extension", () => {
     await mkdir(join(cwd, ".picode"), { recursive: true });
     await writeFile(
       join(cwd, ".picode", "verify.json"),
-      JSON.stringify({ quick: [{ name: "smoke", command: "node -e \"console.log('ok')\"" }] }),
+      JSON.stringify({ quick: [{ name: "smoke", command: `'${process.execPath.replace(/'/g, "'\\''")}' -e "console.log('ok')"` }] }),
     );
     const pi = new FakePi(cwd);
     harnessExtension(pi.asExtensionApi());

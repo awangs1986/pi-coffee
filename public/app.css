@@ -407,5 +407,5 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
 @media(max-width:760px){.app.files-open{grid-template-columns:minmax(0,1fr)}}
 .interrupted-badge{display:block;font-size:10px;color:var(--warn)}
 .artifact-download{display:inline-block;font-size:12px;margin:6px 0 14px;color:var(--text-2)}
-@media(max-width:600px){.composer .hint{display:none}.select-wrap select{max-width:132px}.topbar{gap:5px}.topbar .btn{white-space:nowrap}}
+@media(max-width:600px){.composer .hint{display:none}.composer-left{flex:1;flex-wrap:wrap}.composer-right{flex-shrink:0}.select-wrap{min-width:0;max-width:100%}.select-wrap select{max-width:min(132px,100%)}.topbar{gap:5px}.topbar .btn{white-space:nowrap}}
 .generated-artifacts{margin:24px 0;padding-top:12px;border-top:1px solid var(--border)}.generated-artifacts h3{font-size:12px;color:var(--text-2);font-weight:500}.generated-card{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px;border:1px solid var(--border);border-radius:10px;margin:8px 0;font-size:12px}.generated-card>span{flex:1;overflow-wrap:anywhere}.generated-card img{display:block;max-width:100%;max-height:360px;border-radius:8px}.generated-card>a:has(img){flex-basis:100%}

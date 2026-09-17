@@ -218,13 +218,49 @@ class RpcPiSession implements PiSession {
   private readonly configuredExtensions: readonly string[];
   private readonly listeners = new Set<(event: unknown) => void>();
   private unsubscribe?: () => void;
+  private healthTimer?: ReturnType<typeof setTimeout>;
+  private runGeneration = 0;
+  private running = false;
 
   constructor(client: RpcClient, configuredExtensions: readonly string[] = []) {
     this.client = client;
     this.configuredExtensions = configuredExtensions;
     this.unsubscribe = client.onEvent((event) => {
+      if (event.type === "agent_start") {
+        this.running = true;
+        this.watchActiveProcess();
+      } else if (event.type === "agent_settled") {
+        this.stopWatching();
+      }
       for (const listener of this.listeners) listener(event);
     });
+  }
+
+  // Pinned RpcClient has no public process-exit callback. Probe only active runs
+  // through its public RPC seam; transient RPC timeouts do not prove Pi died.
+  private watchActiveProcess(): void {
+    if (!this.running || this.healthTimer) return;
+    const generation = this.runGeneration;
+    this.healthTimer = setTimeout(async () => {
+      this.healthTimer = undefined;
+      try { await this.client.getState(); }
+      catch (error) {
+        if (this.running && generation === this.runGeneration && error instanceof Error && /^Agent process exited \(/.test(error.message)) {
+          this.stopWatching();
+          for (const listener of this.listeners) listener({type:"agent_interrupted"});
+          return;
+        }
+      }
+      if (generation === this.runGeneration) this.watchActiveProcess();
+    }, 1000);
+    this.healthTimer.unref();
+  }
+
+  private stopWatching(): void {
+    this.running = false;
+    this.runGeneration++;
+    if (this.healthTimer) clearTimeout(this.healthTimer);
+    this.healthTimer = undefined;
   }
 
   async start(): Promise<void> {
@@ -240,7 +276,10 @@ class RpcPiSession implements PiSession {
   async prompt(text: string, images?: ImageInput[]): Promise<void> {
     // The RPC package's wire image shape is intentionally the same compact
     // shape used by PI Coffee.  Keep the cast local to this adapter.
-    await this.client.prompt(text, images as never);
+    this.running = true;
+    this.watchActiveProcess();
+    try { await this.client.prompt(text, images as never); }
+    catch (error) {this.stopWatching();throw error;}
   }
 
   async steer(text: string, images?: ImageInput[]): Promise<void> {
@@ -386,6 +425,7 @@ class RpcPiSession implements PiSession {
   }
 
   async stop(): Promise<void> {
+    this.stopWatching();
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     this.listeners.clear();

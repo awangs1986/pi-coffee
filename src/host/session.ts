@@ -58,6 +58,8 @@ export class HostSession {
   /** Extension dialogs awaiting an answer, keyed by request id. */
   private readonly pendingUi = new Map<string, ServerFrame>();
   private started = false;
+  private interrupted = false;
+  private recoveryPromise?: Promise<void>;
   private startPromise?: Promise<void>;
   private idleTimer?: ReturnType<typeof setTimeout>;
 
@@ -95,6 +97,10 @@ export class HostSession {
   }
 
   async prepare(after?: number): Promise<SessionOpenResult> {
+    if (this.interrupted) {
+      this.recoveryPromise ??= this.stop().then(()=>{this.interrupted=false;});
+      try {await this.recoveryPromise;} finally {this.recoveryPromise=undefined;}
+    }
     await this.start();
     if (!this.pi) throw new Error("Session is not ready");
     const history = await this.pi.getHistory();
@@ -139,9 +145,11 @@ export class HostSession {
   }
 
   get isBusy(): boolean { return this.state.isStreaming || this.activeRequestId !== undefined; }
+  get wasInterrupted(): boolean { return this.interrupted; }
   releasePrompt(requestId: string): void { if(this.activeRequestId===requestId)this.activeRequestId=undefined; }
 
   reservePrompt(requestId: string): void {
+    if (this.interrupted) throw new Error("Pi was interrupted. Reopen the conversation before retrying; the previous request was not replayed.");
     if (!this.pi || !this.started) throw new Error("Session is not ready");
     if (this.activeRequestId !== undefined || this.state.isStreaming) {
       throw new SessionBusyError();
@@ -242,10 +250,22 @@ export class HostSession {
     if (!this.started || this.idleTimeoutMs === 0 || this.onIdle === undefined) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined;
-      if (this.sinks.size === 0 && !this.state.isStreaming && this.activeRequestId === undefined) {
-        this.onIdle?.(this);
-      }
+      void this.checkIdle();
     }, this.idleTimeoutMs);
+  }
+
+  private async checkIdle(): Promise<void> {
+    if (!this.started || this.hasSinks || this.isBusy) return;
+    let background: { known: boolean; active: number };
+    try {
+      background = await this.backgroundState();
+    } catch {
+      background = { known: false, active: 0 };
+    }
+    // A browser may reconnect or a child may resume the parent during the probe.
+    if (!this.started || this.hasSinks || this.isBusy) return;
+    if (background.known && background.active === 0) this.onIdle?.(this);
+    else this.scheduleIdleCheck();
   }
 
   private clearIdleTimer(): void {
@@ -258,6 +278,19 @@ export class HostSession {
     let settled = false;
     let lifecycle = false;
     if (isRecord(safeEvent) && typeof safeEvent.type === "string") {
+      if (safeEvent.type === "agent_interrupted") {
+        this.interrupted = true;
+        this.state = {...this.state,isStreaming:false};
+        this.activeRequestId = undefined;
+        this.pendingUi.clear();
+        // A reopened browser must not replay the dead run's agent_start/deltas
+        // as though it were still streaming; durable history remains authoritative.
+        this.lastMessageEndCursor = this.cursor;
+        this.clearIdleTimer();
+        this.onLifecycle?.(this);
+        for (const sink of this.sinks) sink.send({v:1,type:"error",code:"pi_interrupted",fatal:true,message:"Pi exited unexpectedly. This run was interrupted and was not replayed. Reopen the conversation, inspect the saved results, and retry explicitly."});
+        return;
+      }
       if (safeEvent.type === "agent_start") {
         this.state = { ...this.state, isStreaming: true };
         lifecycle = true;
@@ -319,7 +352,7 @@ export class HostSessionRegistry {
   private readonly eventBufferSize: number;
   private readonly idleTimeoutMs: number;
   private readonly sessions = new Map<string, HostSession>();
-  private readonly changeListeners = new Set<() => void>();
+  private readonly changeListeners = new Set<(session?:HostSession) => void>();
 
   constructor(options: { factory: PiSessionFactory; eventBufferSize?: number; idleTimeoutMs?: number }) {
     this.factory = options.factory;
@@ -328,14 +361,14 @@ export class HostSessionRegistry {
   }
 
   /** Fires whenever the conversation list may have changed (new, settled, renamed, deleted, retired). */
-  onChange(listener: () => void): () => void {
+  onChange(listener: (session?:HostSession) => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
   }
 
-  private notifyChange(): void {
+  private notifyChange(session?:HostSession): void {
     for (const listener of this.changeListeners) {
-      try { listener(); } catch { /* a bad listener must not break the registry */ }
+      try { listener(session); } catch { /* a bad listener must not break the registry */ }
     }
   }
 
@@ -347,7 +380,7 @@ export class HostSessionRegistry {
       eventBufferSize: this.eventBufferSize,
       idleTimeoutMs: this.idleTimeoutMs,
       onIdle: (idle) => void this.retire(idle),
-      onLifecycle: () => this.notifyChange(),
+      onLifecycle: (session) => this.notifyChange(session),
     });
     this.sessions.set(session.id, session);
     try {
