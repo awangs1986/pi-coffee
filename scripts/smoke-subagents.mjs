@@ -5,6 +5,16 @@ import { fileURLToPath } from "node:url";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { resolvePiExtensions } from "../dist/src/pi-extensions.js";
 
+if (process.platform !== "linux") {
+  console.log(JSON.stringify({
+    ok: true,
+    skipped: true,
+    platform: process.platform,
+    reason: "native subagent admission requires the Linux User VM (/proc, fcntl, and POSIX signals)",
+  }, null, 2));
+  process.exit(0);
+}
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const smokeRoot = await mkdtemp(join(tmpdir(), "pi-coffee-subagents-smoke-"));
 const agentDir = join(smokeRoot, "agent");
