@@ -1,7 +1,7 @@
 import type { Workspaces } from "./workspaces.js";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, rename, rm, stat, realpath } from "node:fs/promises";
+import { link, mkdir, readdir, rm, stat, realpath } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { networkInterfaces } from "node:os";
@@ -298,14 +298,16 @@ export class TransferServer {
     const session = this.uploads.get(sessionId);
     const file = session?.files.get(fileId);
     if (!session || !file || file.token !== token) { sendJson(response, 403, { message: "Invalid token" }); return; }
-    if (file.state === "uploading") { sendJson(response, 409, { message: "Already uploading" }); return; }
+    if (file.state === "uploading" || file.state === "done") { sendJson(response, 409, { message: "Already uploading or completed" }); return; }
+    if (this.workspaces && (this.tokenExpiry.get(session.scope) ?? 0) <= Date.now()) {
+      sendJson(response, 403, { message: "File authorization expired; refresh the workspace and retry" }); return;
+    }
     file.state = "uploading";
 
     const hash = createHash("sha256");
     let received = 0;
     let lastProgress = 0;
     const scope = session.scope;
-    const relativeFinal = relative(this.workdir, file.finalPath).split(sep).join("/");
     const fail = async (status: number, message: string) => {
       file.state = "failed";
       await rm(file.partPath, { force: true }).catch(() => undefined);
@@ -351,14 +353,19 @@ export class TransferServer {
     if (received !== file.size) { await fail(400, `Expected ${file.size} bytes, received ${received}`); return; }
     const digest = hash.digest("hex");
     if (file.sha256 !== undefined && file.sha256 !== digest) { await fail(422, "Checksum mismatch (sha256)"); return; }
-    await rename(file.partPath, file.finalPath);
+    try {
+      await this.publishUpload(file);
+    } catch (error) {
+      await fail(500, error instanceof Error ? error.message : "Upload publication failed");
+      return;
+    }
     file.state = "done";
     this.emit(scope, {
       type: "transfer_complete",
       sessionId: session.id,
       fileId: file.id,
       fileName: file.fileName,
-      path: relativeFinal,
+      path: relative(this.workdir, file.finalPath).split(sep).join("/"),
       size: file.size,
       sha256: digest,
       fileType: file.fileType,
@@ -366,6 +373,27 @@ export class TransferServer {
     response.writeHead(200);
     response.end();
     if ([...session.files.values()].every((f) => f.state === "done" || f.state === "failed")) this.uploads.delete(session.id);
+  }
+
+  /** Publish complete bytes without replacing another upload or a user's file. */
+  private async publishUpload(file: PendingFile): Promise<void> {
+    const dir = resolve(file.finalPath, "..");
+    const originalName = file.fileName;
+    const used = new Set<string>();
+    for (;;) {
+      try {
+        // Both paths are in the same inbox. link is atomic and fails if the destination exists.
+        await link(file.partPath, file.finalPath);
+        await rm(file.partPath, { force: true });
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        used.add(file.fileName);
+        for (const name of await readdir(dir)) used.add(name);
+        file.fileName = uniqueName(originalName, used);
+        file.finalPath = join(dir, file.fileName);
+      }
+    }
   }
 
   private async cancel(response: ServerResponse, url: URL): Promise<void> {

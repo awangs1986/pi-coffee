@@ -110,3 +110,38 @@ describe('workspace metadata recovery and artifact references',()=>{
   }finally{await rm(root,{recursive:true,force:true});}
  });
 });
+
+describe('review regressions: preserve actual work and recover operation queues',()=>{
+ it('refuses deletion of unmerged detached HEAD commits',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'coffee-detached-'));
+  try {
+   const ws=new Workspaces(root),p=await ws.createProject('demo'),c=await ws.createConversation(p.id);
+   await git(c.cwd,['checkout','--detach']);await writeFile(join(c.cwd,'unique.txt'),'must survive');
+   await git(c.cwd,['add','.']);await git(c.cwd,['commit','-m','detached work']);
+   await ws.archive(c.id,true);
+   await expect(ws.deleteWorkspace(c.id,c.id)).rejects.toThrow('Unmerged');
+   expect((await ws.tree(c.id)).entries.some(e=>e.name==='unique.txt')).toBe(true);
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
+ it('creates a conversation from a discovered empty repository without committing unrelated files',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'coffee-empty-discovered-'));
+  try {
+   const path=join(root,'manual');await mkdir(path);await git(path,['init','-b','main']);
+   await git(path,['config','user.name','Test']);await git(path,['config','user.email','test@localhost']);
+   await writeFile(join(path,'unrelated.txt'),'leave untracked');
+   await writeFile(join(path,'staged.txt'),'leave staged');await git(path,['add','staged.txt']);
+   const ws=new Workspaces(root),[p]=await ws.discover();const c=await ws.createConversation(p.id);
+   expect(c.cwd).not.toBe(path);expect((await git(path,['status','--porcelain'])).stdout).toContain('?? unrelated.txt');
+   expect((await git(path,['status','--porcelain'])).stdout).toContain('A  staged.txt');
+   expect((await git(c.cwd,['ls-files'])).stdout).toBe('');
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
+ it('does not discard a queued operation when its predecessor fails',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'coffee-queue-failure-'));
+  try {
+   const ws=new Workspaces(root),p=await ws.createProject('demo');
+   const results=await Promise.allSettled([ws.createConversation(p.id,'missing'),ws.createConversation(p.id)]);
+   expect(results[0].status).toBe('rejected');expect(results[1].status).toBe('fulfilled');
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
+});

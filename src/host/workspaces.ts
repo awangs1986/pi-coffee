@@ -47,7 +47,7 @@ export class Workspaces {
   /** Git operations serialize per project; only metadata publication is VM-wide. */
   private async mutate<T>(run:()=>Promise<T>, key:()=>string=()=>"registry"):Promise<T> {
     await this.load();const name=key();
-    const next=(this.tails.get(name) ?? Promise.resolve()).then(async()=> {
+    const next=(this.tails.get(name) ?? Promise.resolve()).catch(()=>undefined).then(async()=> {
       const dir=join(this.root,'.coffee','locks');await mkdir(dir,{recursive:true,mode:0o700});
       const lock=join(dir,createHash('sha256').update(name).digest('hex'));
       try { await mkdir(lock); } catch { throw new Error('Workspace operation locked. If Host restarted, inspect unfinished Git work before an administrator removes its .coffee/locks marker.'); }
@@ -98,6 +98,14 @@ export class Workspaces {
     if(this.state.conversations.some(c=>c.id===id))throw new Error('Conversation already exists');
     const p=this.project(projectId);const from=branch || p.branch;
     await this.git(p.path,['check-ref-format','--branch',from]);
+    // A manually cloned empty repository has no commit to attach a worktree to.
+    // Initialize only its unborn default branch, leaving the user's index/files untouched.
+    if(from===p.branch && await this.git(p.path,['symbolic-ref','--short','HEAD']).catch(()=>'')===p.branch &&
+      !await this.git(p.path,['rev-parse','--verify','HEAD']).then(()=>true,()=>false)) {
+      try {await this.git(p.path,['var','GIT_AUTHOR_IDENT']);await this.git(p.path,['var','GIT_COMMITTER_IDENT']);}
+      catch {throw new Error('Configure Git user.name and user.email in the VM before initializing this empty project');}
+      await this.git(p.path,['commit','--allow-empty','--only','-m','Initialize project']);
+    }
     const head=await this.git(p.path,['rev-parse','--verify',`refs/heads/${from}^{commit}`]);
     const cwd=join(this.root,'.worktrees',id);await mkdir(join(this.root,'.worktrees'),{recursive:true});
     const ownedBranch=`coffee/${id}`;await this.git(p.path,['worktree','add','-b',ownedBranch,cwd,head]);
@@ -154,7 +162,11 @@ export class Workspaces {
     if(!c.archived || confirmation!==id)throw new Error('Delete requires an archived conversation and its exact ID confirmation');
     if(!c.workspaceRemoved) {
     if(await this.git(c.cwd,['status','--porcelain']))throw new Error('Workspace has uncommitted work; preserve it before deletion');
-    try {await this.git(p.path,['merge-base','--is-ancestor',c.branch,p.branch]);} catch {throw new Error('Unmerged commits remain; merge or preserve them before deletion');}
+    try {
+      const head=await this.git(c.cwd,['rev-parse','HEAD']);
+      await this.git(p.path,['merge-base','--is-ancestor',head,p.branch]);
+      await this.git(p.path,['merge-base','--is-ancestor',c.branch,p.branch]);
+    } catch {throw new Error('Unmerged commits remain; merge or preserve them before deletion');}
     await this.git(p.path,['worktree','remove','--',c.cwd]);
     c.workspaceRemoved=true;await this.save();
     }

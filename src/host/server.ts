@@ -81,9 +81,10 @@ export class HostServer {
     });
     // Every browser's sidebar mirrors the same store: push the list whenever
     // it changes instead of making each browser poll.
-    this.registry.onChange(() => {
+    this.registry.onChange((session) => {
       void this.broadcastSessions();
-      void this.workspaces?.settleRuns(id=>this.registry.get(id)?.isBusy).catch(()=>undefined);
+      if(session?.wasInterrupted) void this.workspaces?.markRun(session.id,"interrupted").catch(()=>undefined);
+      void this.workspaces?.settleRuns(id=>this.registry.get(id)?.wasInterrupted ? undefined : this.registry.get(id)?.isBusy).catch(()=>undefined);
     });
   }
 

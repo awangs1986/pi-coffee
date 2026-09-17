@@ -2,7 +2,36 @@ import { describe,it,expect } from 'vitest';
 import { WebServer } from '../src/web/server.js';
 import type { UserRoute } from '../src/web/identity.js';
 import { WebSocket } from 'ws';
+import { createServer } from 'node:http';
 describe('Gitea identity and fixed VM routing',()=> {
+ it('invalidates login immediately even when the VM file-revocation endpoint is stalled',async()=> {
+  let release!:()=>void;
+  let requested!:()=>void;
+  const stalled=new Promise<void>(resolve=>{release=resolve;});
+  const revoking=new Promise<void>(resolve=>{requested=resolve;});
+  const host=createServer(async(_req,res)=>{requested();await stalled;res.writeHead(200);res.end('{}');});
+  await new Promise<void>(resolve=>host.listen(0,'127.0.0.1',resolve));
+  const address=host.address() as {port:number};
+  const web=new WebServer({port:0,hostUrl:'ws://127.0.0.1:1/host',identity:{
+   giteaUrl:'http://gitea.test',clientId:'app',clientSecret:'test-only',publicUrl:'http://coffee.test',
+   routes:()=>({'7':{hostUrl:`ws://127.0.0.1:${address.port}/host`,hostToken:'test-only'}}),
+   fetch:(async(url)=>new Response(JSON.stringify(String(url).includes('access_token') ? {access_token:'test-only'} : {id:7,login:'owner',active:true}))) as typeof fetch,
+  }});
+  await web.start();const base=`http://127.0.0.1:${web.address().port}`;
+  let logout:Promise<Response>|undefined;
+  try {
+   const login=await fetch(base+'/auth/login',{redirect:'manual'});
+   const state=new URL(login.headers.get('location')!).searchParams.get('state');
+   const callback=await fetch(base+`/auth/callback?state=${state}&code=x`,{redirect:'manual',headers:{cookie:login.headers.get('set-cookie')!.split(';')[0]}});
+   const cookie=callback.headers.get('set-cookie')!.split(';')[0];
+   logout=fetch(base+'/auth/logout',{method:'POST',headers:{cookie,origin:'http://coffee.test'}});
+   await revoking;
+   expect((await fetch(base+'/api/me',{headers:{cookie}})).status).toBe(401);
+   expect((await logout).status).toBe(204);
+  }finally {
+   release();await logout;await web.close();await new Promise<void>(resolve=>host.close(()=>resolve()));
+  }
+ });
  it('uses PKCE/state and HttpOnly sessions; denies absent routes, revoked routes and foreign origins',async()=> {
   let routes:Record<string,UserRoute>={'7':{hostUrl:'ws://127.0.0.1:1/host',hostToken:'vm-only-secret'}};
   let challenge='';

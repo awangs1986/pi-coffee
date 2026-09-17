@@ -2,14 +2,14 @@ import { Workspaces } from "../src/host/workspaces.js";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { WebSocket } from "ws";
 import { TransferServer } from "../src/host/transfer.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HistoryEntry, ImageInput } from "../src/shared/protocol.js";
 import { decodeServerFrame, encodeFrame, type ServerFrame } from "../src/shared/protocol.js";
 import { HostServer } from "../src/host/server.js";
-import type { PiSession, PiSessionFactory } from "../src/host/pi-adapter.js";
+import { RpcPiSessionFactory, type PiSession, type PiSessionFactory } from "../src/host/pi-adapter.js";
 
 class FakePiSession implements PiSession {
   private readonly listeners = new Set<(event: unknown) => void>();
@@ -375,6 +375,27 @@ describe("Host WebSocket seam", () => {
     second.close();
   });
 
+  it.each([{ known: true, active: 1 }, { known: false, active: 0 }])("keeps a disconnected parent alive until background work is known idle: %j", async (background) => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory, idleTimeoutMs: 30 });
+    await server.start();
+    const socket = await connect(server.address().port);
+    const frames = new FrameQueue(socket);
+    socket.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await frames.next();
+    const pi = factory.sessions.get(opened.sessionId)!;
+    pi.background = background;
+    socket.close();
+    await once(socket, "close");
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(pi.stopped).toBe(false);
+    pi.background = { known: true, active: 0 };
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(pi.stopped).toBe(true);
+  });
+
   it("joins a busy run with steer/follow_up and falls back to a plain prompt when idle", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "127.0.0.1", factory });
@@ -635,5 +656,34 @@ describe("Host WebSocket seam", () => {
       expect(await ws.lookup(conversation.id)).toBeUndefined();
     }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
   });
+
+  it("persists interruption after a real RPC process dies and reopens without replaying its run",async()=>{
+    const root=mkdtempSync(join(tmpdir(),"coffee-host-crash-"));
+    const workspaces=new Workspaces(join(root,"projects"));
+    const project=await workspaces.createProject("demo"),conversation=await workspaces.createConversation(project.id);
+    const factory=new RpcPiSessionFactory({cliPath:resolve("test/fixtures/fake-pi-rpc.mjs"),sessionDir:join(root,"sessions"),cwd:conversation.cwd});
+    server=new HostServer({port:0,host:"127.0.0.1",factory,workspaces});await server.start();
+    try {
+      const socket=await connect(server.address().port),frames=new FrameQueue(socket);
+      socket.send(encodeFrame({v:1,type:"open",sessionId:conversation.id}));
+      expect(await frames.next()).toMatchObject({type:"opened"});await frames.next();
+      socket.send(encodeFrame({v:1,type:"prompt",requestId:"crash",text:"crash: after acceptance"}));
+      expect(await frames.next()).toMatchObject({type:"ack"});
+      expect(await frames.next()).toMatchObject({type:"event",event:{type:"agent_start"}});
+      expect(await frames.next()).toMatchObject({type:"error",code:"pi_interrupted",fatal:true});
+      await expect.poll(async()=> (await workspaces.list()).conversations.find(c=>c.id===conversation.id)?.runState).toBe("interrupted");
+      expect((await new Workspaces(join(root,"projects")).lookup(conversation.id))?.runState).toBe("interrupted");
+      socket.close();await once(socket,"close");
+      const reopened=await connect(server.address().port),next=new FrameQueue(reopened);
+      reopened.send(encodeFrame({v:1,type:"open",sessionId:conversation.id}));
+      expect(await next.next()).toMatchObject({type:"opened",state:{isStreaming:false}});
+      expect(await next.next()).toMatchObject({type:"history"});
+      reopened.send(encodeFrame({v:1,type:"prompt",requestId:"explicit",text:"retry explicitly"}));
+      expect(await next.next()).toMatchObject({type:"ack",requestId:"explicit"});
+      for(let i=0;i<4;i++)await next.next();
+      await expect.poll(async()=> (await workspaces.lookup(conversation.id))?.runState).toBe("idle");
+      reopened.close();
+    }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+  },10_000);
 
 });

@@ -98,6 +98,44 @@ describe("TransferServer (LocalSend v2)", () => {
     expect([400, 413]).toContain(overrun.status);
   });
 
+  it("preserves both files when overlapping upload batches use the same name", async () => {
+    const { base, token } = await start();
+    const batches = await Promise.all(["one", "two"].map(() =>
+      prepare(base, token, { f: { fileName: "notes.txt", size: 3 } })));
+    for (const [index, batch] of batches.entries()) {
+      const { sessionId, files } = batch.body;
+      expect((await fetch(`${base}/upload?sessionId=${sessionId}&fileId=f&token=${files.f}`, {
+        method: "POST", body: ["one", "two"][index],
+      })).status).toBe(200);
+    }
+    const inbox = join(workdir, server!.inboxFor("sess-1"));
+    expect(readdirSync(inbox).map(name => readFileSync(join(inbox, name), "utf8")).sort()).toEqual(["one", "two"]);
+  });
+
+  it("rejects reusing a completed file grant while another file in the batch is pending", async () => {
+    const { base, token } = await start();
+    const { body: { sessionId, files } } = await prepare(base, token, {
+      f: { fileName: "notes.txt", size: 3 },
+      pending: { fileName: "later.txt", size: 3 },
+    });
+    const url = `${base}/upload?sessionId=${sessionId}&fileId=f&token=${files.f}`;
+    expect((await fetch(url, { method: "POST", body: "one" })).status).toBe(200);
+    expect((await fetch(url, { method: "POST", body: "two" })).status).toBe(409);
+    expect(readFileSync(join(workdir, server!.inboxFor("sess-1"), "notes.txt"), "utf8")).toBe("one");
+  });
+
+  it("does not overwrite a file created after upload preparation", async () => {
+    const { base, token } = await start();
+    const { body: { sessionId, files } } = await prepare(base, token, { f: { fileName: "notes.txt", size: 3 } });
+    const inbox = join(workdir, server!.inboxFor("sess-1"));
+    writeFileSync(join(inbox, "notes.txt"), "user work");
+    expect((await fetch(`${base}/upload?sessionId=${sessionId}&fileId=f&token=${files.f}`, {
+      method: "POST", body: "one",
+    })).status).toBe(200);
+    expect(readFileSync(join(inbox, "notes.txt"), "utf8")).toBe("user work");
+    expect(readdirSync(inbox).map(name => readFileSync(join(inbox, name), "utf8")).sort()).toEqual(["one", "user work"]);
+  });
+
   it("cancel removes partial state, and plain LocalSend clients land in the shared inbox", async () => {
     const { base, token } = await start();
     const prepared = await prepare(base, token, { f: { id: "f", fileName: "later.txt", size: 5 } });

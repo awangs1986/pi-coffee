@@ -73,8 +73,8 @@ export class WebServer {
         const timer = setInterval(async () => {
           if(checking) return; checking = true;
           try { if (!await this.identity!.authorize(request)) {
-            if(route) await this.hostApi(route,"/api/revoke-files","POST",{}).catch(()=>undefined);
             bridge.close();
+            if(route) await this.hostApi(route,"/api/revoke-files","POST",{}).catch(()=>undefined);
           } } finally { checking=false; }
         }, 5000);
         timer.unref(); socket.once("close", () => clearInterval(timer));
@@ -136,7 +136,10 @@ export class WebServer {
     }
     if(path === "/auth/logout" && request.method === "POST" && this.identity?.originAllowed(request)) {
       const session=await this.identity.authorize(request);
-      if(session) await this.hostApi(session.route,"/api/revoke-files","POST",{}).catch(()=>undefined);
+      // End the local login before contacting a VM that may be unavailable.
+      await this.identity.handle(request,response);
+      if(session) void this.hostApi(session.route,"/api/revoke-files","POST",{}).catch(()=>undefined);
+      return;
     }
     if (this.identity && await this.identity.handle(request, response)) return;
     if(path === "/api/workspace") {
