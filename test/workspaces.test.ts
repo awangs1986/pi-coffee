@@ -52,6 +52,28 @@ describe('VM project lifecycle using native Git',()=>{
  });
 });
 
+describe('worktree change review',()=>{
+ it('exposes committed, dirty and untracked changes plus diff checks without changing Git state',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'coffee-changes-'));
+  try{
+   const ws=new Workspaces(root),p=await ws.createProject('demo'),c=await ws.createConversation(p.id);
+   await writeFile(join(c.cwd,'notes.txt'),'hello review');
+   await writeFile(join(c.cwd,'.env'),'PRIVATE=1');
+   let review=await ws.changes(c.id);
+   expect(review.files.map(file=>file.path)).toContain('notes.txt');
+   expect(review.patch).toContain('+hello review');
+   expect(review.checks[0]).toMatchObject({command:'git diff --check',ok:true});
+   await writeFile(join(c.cwd,'tracked.txt'),'clean\n');await git(c.cwd,['add','tracked.txt','.env']);await git(c.cwd,['commit','-m','tracked']);
+   await writeFile(join(c.cwd,'tracked.txt'),'clean\ntrail  \n');
+   review=await ws.changes(c.id);
+   const tracked=review.files.find((file:{path:string;status:string})=>file.path==='tracked.txt');
+   expect(tracked?.status).toBe('A');expect(review.checks[0].ok).toBe(false);expect(review.checks[0].output).toContain('trailing whitespace');
+   expect(review.patch).not.toContain('PRIVATE=1');
+   expect((await git(c.cwd,['status','--porcelain'])).stdout).toContain('?? notes.txt');
+  }finally{await rm(root,{recursive:true,force:true});}
+ });
+});
+
 describe('workspace interruption and import boundaries',()=>{
  it('marks an unfinished run interrupted on Host reconstruction without replaying it',async()=>{
   const root=await mkdtemp(join(tmpdir(),'coffee-interrupted-'));

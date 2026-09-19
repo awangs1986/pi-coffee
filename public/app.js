@@ -3,20 +3,28 @@
 // local value is which conversation this browser last displayed.
 import {
   renderMarkdown, activityGroup, assistantNode, el, fillToolCard, formatBytes, installCopyHandlers,
-  noteNode, relativeTime, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
+  noteNode, relativeTime, renderPatchText, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
 } from './render.js';
 
 import { compactionNotice, isContextError } from './context-status.js';
 
 const ACTIVE_KEY = 'pi-coffee.active.v2';
+const THEME_KEY = 'pi-coffee.theme.v1';
 const $ = (selector) => document.querySelector(selector);
 const ui = {
   app: $('#app'), thread: $('#thread'), scroller: $('#scroller'), toBottom: $('#to-bottom'),
-  prompt: $('#prompt'), send: $('#send'), stop: $('#stop'), status: $('#status'), dot: $('#dot'),
+  brandBtn: $('#brand-menu-btn'), brandMenu: $('#brand-menu'), themeToggle: $('#theme-toggle'), themeLabel: $('#theme-toggle-label'),
+  prompt: $('#prompt'), send: $('#send'), stop: $('#stop'), status: $('#status'), dot: $('#dot'), connBanner: $('#conn-banner'),
+  composer: $('#composer'), composerWrap: $('.composer-wrap'),
   title: $('#title'), topbarState: $('#topbar-state'), stats: $('#stats'), sessionMeta: $('#session-meta'),
   sessionList: $('#session-list'), search: $('#search'), queue: $('#queue'), slash: $('#slash'),
   attachments: $('#attachments'), attach: $('#attach'), file: $('#file'), hint: $('#hint'),
+  agentBtn: $('#agent-menu-btn'), agentMenu: $('#agent-menu'),
+  agentRows: { source: $('#agent-source-row'), model: $('#agent-model-row'), thinking: $('#agent-thinking-row') },
+  agentPanes: { source: $('#agent-source-pane'), model: $('#agent-model-pane'), thinking: $('#agent-thinking-pane') },
+  agentValues: { source: $('#agent-source-value'), model: $('#agent-model-value'), thinking: $('#agent-thinking-value') },
   modelSource: $('#model-source'), model: $('#model'), thinking: $('#thinking'), modeWrap: $('#mode-wrap'), mode: $('#mode'),
+  projectSelect: $('#project-select'), startBranch: $('#start-branch'), projectManage: $('.project-manage'),
   modal: $('#modal'), modalTitle: $('#modal-title'), modalText: $('#modal-text'), modalInput: $('#modal-input'),
   modalOk: $('#modal-ok'), modalCancel: $('#modal-cancel'), toast: $('#toast'),
   extStatus: $('#ext-status'), widgets: $('#widgets'),
@@ -41,8 +49,13 @@ let lastTool, thinkingNode;
 let lastUserText = '';
 let attachments = [];          // small inline images: { type, mimeType, data }
 let uploads = [];              // files transferred straight to the User VM (ADR-0009)
+let uploadLog = [];            // completed uploads for the current conversation: { name, size, path }
 let workspaceState = null, showArchived = false, workspaceRequestSeq = 0;
 let transfer = null;           // { url, scope, token, inbox, maxFileBytes, maxBatchBytes } from the Host
+let workspaceChanges = null;   // aggregate worktree status from `/api/workspace` action `changes`
+let selectedChangedPath = null, diffWrapped = true;
+let workspaceDetailOpen = false; // true while a Diff/Checks document replaces the change list
+let lastChangeCardSignature = '';
 let filesAwaitingTransfer = []; // picked before the Session/transfer endpoint was known
 let renderTimer = null;
 
@@ -61,6 +74,151 @@ function send(frame) {
   return true;
 }
 function requestId(prefix) { return prefix + '-' + Date.now() + '-' + (++requestNumber); }
+function isMobileSidebar() { return window.matchMedia('(max-width: 820px)').matches; }
+function applyTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* private-mode storage can fail */ }
+  ui.themeToggle?.setAttribute('aria-pressed', String(next === 'dark'));
+  if (ui.themeLabel) ui.themeLabel.textContent = next === 'dark' ? '浅色模式' : '深色模式';
+}
+function closeBrandMenu() {
+  ui.brandMenu?.classList.add('hidden');
+  ui.brandBtn?.setAttribute('aria-expanded', 'false');
+}
+function toggleBrandMenu() {
+  const open = ui.brandMenu?.classList.contains('hidden');
+  if (!open) { closeBrandMenu(); return; }
+  ui.brandMenu.classList.remove('hidden');
+  ui.brandBtn?.setAttribute('aria-expanded', 'true');
+}
+
+// ---------- Agent settings menu ----------
+const modelControlsLocked = () => !!modelPending || !connected || !opened;
+function sourceLabel(source) {
+  return source === 'relay' ? 'Relay' : 'Native';
+}
+function selectedModelInfo() {
+  if (!models) return null;
+  return models.models.find((m) => m.provider === models.current?.provider && m.id === models.current?.id) || models.current || null;
+}
+function closeAgentPanes() {
+  for (const pane of Object.values(ui.agentPanes)) pane.classList.add('hidden');
+  for (const row of Object.values(ui.agentRows)) row.setAttribute('aria-expanded', 'false');
+}
+function closeAgentMenu() {
+  ui.agentMenu?.classList.add('hidden');
+  ui.agentBtn?.setAttribute('aria-expanded', 'false');
+  closeAgentPanes();
+}
+function toggleAgentMenu() {
+  if (!ui.agentMenu || ui.agentBtn.disabled) return;
+  const open = ui.agentMenu.classList.contains('hidden');
+  closeBrandMenu();
+  if (!open) { closeAgentMenu(); return; }
+  renderAgentSettings();
+  ui.agentMenu.classList.remove('hidden');
+  ui.agentBtn.setAttribute('aria-expanded', 'true');
+  setTimeout(() => ui.agentRows.model.focus(), 0);
+}
+function openAgentPane(kind) {
+  closeAgentPanes();
+  const pane = ui.agentPanes[kind];
+  if (!pane) return;
+  renderAgentPane(kind);
+  pane.classList.remove('hidden');
+  ui.agentRows[kind].setAttribute('aria-expanded', 'true');
+}
+function agentOption({ label, meta = '', selected = false, onClick }) {
+  const button = el('button', 'agent-option' + (selected ? ' selected' : ''));
+  button.type = 'button';
+  button.setAttribute('role', 'menuitemradio');
+  button.setAttribute('aria-checked', String(selected));
+  button.append(el('span', 'agent-option-label', label));
+  if (meta) button.append(el('span', 'agent-option-meta', meta));
+  if (selected) button.append(el('span', 'agent-option-check', '✓'));
+  button.addEventListener('click', onClick);
+  return button;
+}
+function renderAgentPane(kind) {
+  const pane = ui.agentPanes[kind];
+  pane.replaceChildren();
+  if (!models) return;
+  const current = selectedModelInfo();
+  if (kind === 'source') {
+    const sources = [...new Set(models.models.map((m) => m.source || 'native'))];
+    for (const source of sources) {
+      const available = models.models.filter((m) => (m.source || 'native') === source).length;
+      pane.append(agentOption({
+        label: sourceLabel(source),
+        meta: `${available} 个模型`,
+        selected: (models.current?.source || current?.source || 'native') === source,
+        onClick: () => {
+          closeAgentMenu();
+          const next = models.models.find((m) => (m.source || 'native') === source);
+          if (next && (models.current?.source || current?.source || 'native') !== source) chooseModel(next.provider, next.id);
+        },
+      }));
+    }
+    return;
+  }
+  if (kind === 'model') {
+    const bySource = new Map();
+    for (const model of models.models) {
+      const source = model.source || 'native';
+      if (!bySource.has(source)) bySource.set(source, []);
+      bySource.get(source).push(model);
+    }
+    for (const [source, sourceModels] of bySource) {
+      pane.append(el('div', 'agent-pane-label', sourceLabel(source)));
+      for (const model of sourceModels) {
+        const selected = current?.provider === model.provider && current?.id === model.id;
+        pane.append(agentOption({
+          label: model.id,
+          meta: model.provider,
+          selected,
+          onClick: () => { closeAgentMenu(); if (!selected) chooseModel(model.provider, model.id); },
+        }));
+      }
+    }
+    return;
+  }
+  const levels = models.thinkingLevels || [];
+  for (const level of levels) {
+    pane.append(agentOption({
+      label: level,
+      selected: models.thinkingLevel === level,
+      onClick: () => {
+        closeAgentMenu();
+        ui.thinking.value = level;
+        send({ v: 1, type: 'set_thinking', requestId: requestId('thinking'), level });
+      },
+    }));
+  }
+}
+function renderAgentSettings() {
+  if (!models || !ui.agentBtn) return;
+  const current = selectedModelInfo();
+  const source = models.current?.source || current?.source || 'native';
+  ui.agentValues.source.textContent = sourceLabel(source);
+  ui.agentValues.model.textContent = models.current ? models.current.id : '—';
+  ui.agentValues.model.title = models.current ? `${models.current.provider}/${models.current.id}` : '';
+  const levels = models.thinkingLevels || [];
+  ui.agentRows.thinking.classList.toggle('hidden', levels.length === 0);
+  ui.agentValues.thinking.textContent = models.thinkingLevel || levels[0] || '—';
+  ui.agentBtn.dataset.state = `${source} · ${models.current ? models.current.id : 'no model'} · ${models.thinkingLevel || 'default'}`;
+  ui.agentBtn.title = `Agent · ${sourceLabel(source)} · ${models.current ? models.current.provider + '/' + models.current.id : '未选择模型'} · 思考 ${models.thinkingLevel || '默认'}`;
+  ui.agentBtn.disabled = modelControlsLocked() || !models;
+  for (const kind of ['source', 'model', 'thinking']) renderAgentPane(kind);
+}
+function openSidebar() {
+  if (isMobileSidebar()) ui.app.classList.add('side-open');
+  ui.app.classList.remove('side-collapsed');
+}
+function collapseSidebar() {
+  if (isMobileSidebar()) ui.app.classList.remove('side-open');
+  else ui.app.classList.add('side-collapsed');
+}
 
 // ---------- modal ----------
 function askModal({ title, text, input, okLabel = '确定', danger = false }) {
@@ -96,6 +254,7 @@ function resetThread() {
   openTools.clear();
   lastTool = undefined;
   thinkingNode = undefined;
+  uploadLog = [];
 }
 
 const CHIPS = ['列出当前目录的文件', '解释这个仓库的结构', '写一个 Python 脚本统计文件行数'];
@@ -295,7 +454,21 @@ function openSessionMenu(session, anchor) {
   menuNode.style.top = rect.bottom + 4 + 'px';
   menuNode.style.left = Math.min(rect.left, window.innerWidth - 160) + 'px';
 }
-document.addEventListener('click', (event) => { if (menuNode && !menuNode.contains(event.target)) closeMenu(); });
+ui.brandBtn?.addEventListener('click', toggleBrandMenu);
+ui.themeToggle?.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+ui.agentBtn?.addEventListener('click', toggleAgentMenu);
+ui.agentRows.source?.addEventListener('click', () => openAgentPane('source'));
+ui.agentRows.model?.addEventListener('click', () => openAgentPane('model'));
+ui.agentRows.thinking?.addEventListener('click', () => openAgentPane('thinking'));
+ui.agentMenu?.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') { event.stopPropagation(); closeAgentMenu(); ui.agentBtn.focus(); }
+});
+document.addEventListener('click', (event) => {
+  if (menuNode && !menuNode.contains(event.target)) closeMenu();
+  if (!event.target.closest('.brand-wrap')) closeBrandMenu();
+  if (!event.target.closest('.agent-menu-wrap')) closeAgentMenu();
+  if (ui.projectManage?.open && !ui.projectManage.contains(event.target)) ui.projectManage.open = false;
+});
 
 async function renameSession(session) {
   const name = await askModal({ title: '重命名对话', input: session.name || session.preview || '', okLabel: '保存' });
@@ -421,6 +594,9 @@ function setConnection(text, kind) {
   ui.status.textContent = text;
   ui.dot.className = 'dot' + (kind ? ' ' + kind : '');
   connected = kind === 'ready' || kind === 'busy';
+  // The footer dot is too subtle: the center column must also announce a lost link.
+  ui.connBanner.classList.toggle('hidden', connected);
+  if (!connected) ui.connBanner.textContent = text || '连接已断开，正在自动重连…';
   refreshComposer();
 }
 function setStreaming(active) {
@@ -442,16 +618,37 @@ function setStreaming(active) {
 function refreshComposer() {
   const hasText = ui.prompt.value.trim().length > 0 || attachments.length > 0 || completedUploads().length > 0;
   ui.send.disabled = !connected || !hasText || uploadsBusy() || !!modelPending;
-  ui.model.disabled=ui.modelSource.disabled=!!modelPending || !connected || !opened;
-  if (uploadsBusy()) ui.send.title = '等待文件传输完成';
+  ui.model.disabled = ui.modelSource.disabled = ui.thinking.disabled = modelControlsLocked();
+  if (ui.agentBtn) ui.agentBtn.disabled = modelControlsLocked() || !models;
+  renderProjectContext();
   ui.stop.classList.toggle('hidden', !(connected && streaming));
   ui.modeWrap.classList.toggle('hidden', !(connected && streaming));
-  ui.send.title = streaming ? (ui.mode.value === 'steer' ? '插话：在当前工具调用后打断' : '排队：等这轮结束后发送') : '发送';
-  ui.hint.textContent = streaming ? '运行中 · Enter 将消息' + (ui.mode.value === 'steer' ? '插话' : '排队') : 'Enter 发送 · Shift+Enter 换行';
+  ui.send.title = uploadsBusy() ? '等待文件传输完成' : streaming ? (ui.mode.value === 'steer' ? '插话：在当前工具调用后打断' : '排队：等这轮结束后发送') : '发送';
+  ui.hint.textContent = streaming ? '运行中 · Enter ' + (ui.mode.value === 'steer' ? '插话' : '排队') : 'Enter 发送 · Shift+Enter 换行';
   if (connected) {
     ui.status.textContent = streaming ? 'Pi 正在工作…' : '已连接';
     ui.dot.className = 'dot ' + (streaming ? 'busy' : 'ready');
   }
+}
+
+function renderProjectContext() {
+  if (!ui.projectSelect || !ui.startBranch) return;
+  const conversation = workspaceState?.conversations.find((c) => c.id === activeId);
+  const activeProject = workspaceState?.projects.find((p) => p.id === conversation?.projectId);
+  const lockedToConversation = Boolean(conversation);
+  if (conversation) {
+    if ([...ui.projectSelect.options].some((option) => option.value === conversation.projectId)) ui.projectSelect.value = conversation.projectId;
+    ui.startBranch.value = conversation.branch || '';
+  } else if (!ui.startBranch.value) {
+    const project = workspaceState?.projects.find((p) => p.id === ui.projectSelect.value);
+    if (project?.branch) ui.startBranch.placeholder = project.branch;
+  }
+  ui.projectSelect.disabled = lockedToConversation;
+  ui.startBranch.disabled = lockedToConversation;
+  ui.projectSelect.title = activeProject ? activeProject.path : 'Gitea 仓库';
+  ui.startBranch.title = conversation ? `当前对话固定使用 ${conversation.branch}；不会迁移已有 worktree` : '新对话起始分支';
+  ui.projectSelect.classList.toggle('locked', lockedToConversation);
+  ui.startBranch.classList.toggle('locked', lockedToConversation);
 }
 
 function connect() {
@@ -487,10 +684,10 @@ async function openSession(id) {
   if (pendingOpenId) return;            // an open is already in flight on this socket
   if (opened) { connect(); return; }    // one socket owns one Session: start over
   if(!id && workspaceState) {
-    const projectId=$('#project-select').value;
-    if(!projectId) {toast('请先创建或选择项目');queuedPrompt=null;return;}
+    const projectId=ui.projectSelect.value;
+    if(!projectId) {toast('请先在底部选择 Gitea 仓库，或打开「管理」创建项目');queuedPrompt=null;return;}
     pendingOpenId='creating';
-    try {const c=await workspaceApi({action:'conversation',projectId,branch:$('#start-branch').value.trim() || undefined});id=c.id;await loadWorkspace();}
+    try {const c=await workspaceApi({action:'conversation',projectId,branch:ui.startBranch.value.trim() || undefined});id=c.id;activeId=id;renderProjectContext();await loadWorkspace();}
     catch(e) {pendingOpenId=null;queuedPrompt=null;toast(e.message);return;}
   }
   pendingOpenId = id || 'new';
@@ -521,6 +718,7 @@ function handleFrame(frame, ws) {
       resetThread();
       clearExtensionUi();
       resetTransfers();
+      workspaceChanges=null;selectedChangedPath=null;lastChangeCardSignature='';if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();renderProjectContext();
       streaming = false;
       setStreaming(Boolean(frame.state && frame.state.isStreaming));
       renderHeader();
@@ -548,10 +746,11 @@ function handleFrame(frame, ws) {
       renderPlugins(Array.isArray(frame.extensions) ? frame.extensions : []);
       return;
     case 'transfer':
-      setTimeout(()=>{if(workspaceState) {refreshFiles().catch(e=>toast(e.message));void refreshArtifactCards();}},0);
+      setTimeout(()=>{if(workspaceState) {renderWorkspaceList();void refreshArtifactCards();void refreshWorkspaceChanges(false).catch(()=>undefined);}},0);
       if (frame.sessionId !== activeId) return;
       transfer = frame;
       refreshToolDownloadLinks();
+      renderUploadLogCard(); // relink rows with the fresh token
       if (filesAwaitingTransfer.length) { const queued = filesAwaitingTransfer; filesAwaitingTransfer = []; void uploadFiles(queued); }
       return;
     case 'ack':
@@ -631,6 +830,7 @@ function handleEvent(event) {
     // Any dialog still open was resolved by Pi (timeout/default); drop it.
     if (uiCurrent || uiQueue.length) { uiQueue.length = 0; closeUiDialog(); }
     send({ v: 1, type: 'get_stats' });
+    void refreshWorkspaceChanges(false).then(() => maybeRenderChangesCard()).catch(() => undefined);
   }
 }
 function customMessageText(content) {
@@ -819,7 +1019,7 @@ function renderPlugins(list) {
     }
   }
 }
-ui.pluginsBtn.addEventListener('click', openPlugins);
+ui.pluginsBtn.addEventListener('click', () => { closeBrandMenu(); openPlugins(); });
 ui.pluginsClose.addEventListener('click', closePlugins);
 ui.pluginsModal.addEventListener('click', (e) => { if (e.target === ui.pluginsModal) closePlugins(); });
 
@@ -839,18 +1039,25 @@ function renderQueue(event) {
 // ---------- models ----------
 function renderModels() {
   if (!models) return;
-  const current=models.models.find(m=>m.provider===models.current?.provider && m.id===models.current?.id);
-  const source=models.current?.source || current?.source || 'native';ui.modelSource.value=source;
-  for(const option of ui.modelSource.options)option.disabled=!models.models.some(m=>(m.source || 'native')===option.value);
+  const current = models.models.find((m) => m.provider === models.current?.provider && m.id === models.current?.id);
+  const source = models.current?.source || current?.source || 'native';
+  ui.modelSource.value = source;
+  for (const option of ui.modelSource.options) option.disabled = !models.models.some((m) => (m.source || 'native') === option.value);
   ui.model.innerHTML = '';
   for (const m of models.models || []) {
-    if((m.source || 'native')!==source)continue;
+    if ((m.source || 'native') !== source) continue;
     const option = document.createElement('option');
     option.value = m.provider + '/' + m.id;
     option.textContent = m.id + ' · ' + m.provider;
     ui.model.appendChild(option);
   }
-  if(models.current && !current){const option=document.createElement('option');option.value=models.current.provider+'/'+models.current.id;option.textContent=models.current.id+'（当前不可用，请检查 VM 登录/配置）';option.disabled=true;ui.model.appendChild(option);}
+  if (models.current && !current) {
+    const option = document.createElement('option');
+    option.value = models.current.provider + '/' + models.current.id;
+    option.textContent = models.current.id + '（当前不可用，请检查 VM 登录/配置）';
+    option.disabled = true;
+    ui.model.appendChild(option);
+  }
   if (models.current) ui.model.value = models.current.provider + '/' + models.current.id;
   ui.thinking.innerHTML = '';
   for (const level of models.thinkingLevels || []) {
@@ -860,6 +1067,7 @@ function renderModels() {
     ui.thinking.appendChild(option);
   }
   ui.thinking.value = models.thinkingLevel || '';
+  renderAgentSettings();
 }
 ui.model.addEventListener('change', () => {
   const [provider, ...rest] = ui.model.value.split('/');
@@ -1014,6 +1222,8 @@ function handleTransferEvent(event) {
     u.path = event.path; u.name = event.fileName || u.name; u.sha256 = event.sha256; u.received = u.size;
     if (u.state !== 'cancelled') u.state = 'done';
     renderAttachments(); refreshComposer();
+    // Keep a transcript-side aggregate so uploads stay discoverable after the rail rolls on.
+    if (!uploadLog.some((f) => f.path === u.path)) { uploadLog.push({ name: u.name, size: u.size, path: u.path }); renderUploadLogCard(); }
     return;
   }
   if (event.type === 'transfer_failed' && u.state !== 'cancelled') { u.state = 'failed'; u.error = event.message || '传输失败'; renderAttachments(); refreshComposer(); }
@@ -1022,6 +1232,20 @@ function handleTransferEvent(event) {
 function downloadUrl(path) {
   if (!transfer || !path) return null;
   return `${transfer.url}/api/localsend/v2/download?scope=${encodeURIComponent(transfer.scope)}&token=${encodeURIComponent(transfer.token)}&fileId=${encodeURIComponent(path)}`;
+}
+function renderUploadLogCard() {
+  let card = $('#upload-log');
+  if (!uploadLog.length) { card?.remove(); return; }
+  if (!card) { card = el('section', 'upload-log'); card.id = 'upload-log'; card.append(el('h3', '', '已上传文件')); ui.thread.append(card); }
+  for (const child of [...card.querySelectorAll('.upload-log-row')]) child.remove();
+  for (const f of uploadLog.slice(0, 20)) {
+    const href = downloadUrl(f.path);
+    const row = el('div', 'upload-log-row');
+    row.append(el('span', 'upload-log-name', f.name + ' · ' + formatBytes(f.size)));
+    if (href) { const a = el('a', '', '下载'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; row.append(a); }
+    card.append(row);
+  }
+  if (uploadLog.length > 20) card.append(el('p', 'workspace-note', `其余 ${uploadLog.length - 20} 个文件仍在工作区可用。`));
 }
 
 function refreshToolDownloadLinks() {
@@ -1136,8 +1360,13 @@ for (const type of ['dragleave', 'drop']) document.addEventListener(type, (e) =>
 // ---------- composer ----------
 function autoGrow() {
   ui.prompt.style.height = 'auto';
-  ui.prompt.style.height = Math.min(ui.prompt.scrollHeight, 220) + 'px';
+  ui.prompt.style.height = Math.min(ui.prompt.scrollHeight, 336) + 'px';
 }
+function syncToBottomPosition() {
+  const height = ui.composerWrap?.getBoundingClientRect().height || 150;
+  ui.app.style.setProperty('--composer-offset', Math.ceil(height + 18) + 'px');
+}
+if (globalThis.ResizeObserver && ui.composerWrap) new ResizeObserver(syncToBottomPosition).observe(ui.composerWrap);
 ui.prompt.addEventListener('input', () => {
   autoGrow();
   refreshComposer();
@@ -1220,19 +1449,25 @@ function switchSession(id) {
   localStorage.setItem(ACTIVE_KEY, id);
   streaming = false;
   statsCache = null;
+  selectedChangedPath = null;
+  lastChangeCardSignature = '';
   resetThread();
+  renderProjectContext();
   renderHeader();
   renderSessionList();
   connect();
 }
 function newSession(focus = true) {
-  prepareNew=focus && !!workspaceState && !!$('#project-select').value;
+  prepareNew=focus && !!workspaceState && !!ui.projectSelect.value;
   activeId = null;
   localStorage.removeItem(ACTIVE_KEY);
   streaming = false;
   statsCache = null;
+  selectedChangedPath = null;
+  lastChangeCardSignature = '';
   resetThread();
   renderHero();
+  renderProjectContext();
   renderHeader();
   renderSessionList();
   connect();
@@ -1241,8 +1476,8 @@ function newSession(focus = true) {
 
 // ---------- sidebar / global ----------
 $('#new-task').addEventListener('click', () => { newSession(); closeSidebarOnMobile(); });
-$('#open-side').addEventListener('click', () => ui.app.classList.add('side-open'));
-$('#close-side').addEventListener('click', () => ui.app.classList.remove('side-open'));
+$('#open-side').addEventListener('click', openSidebar);
+$('#close-side').addEventListener('click', collapseSidebar);
 function closeSidebarOnMobile() { ui.app.classList.remove('side-open'); }
 ui.search.addEventListener('input', renderSessionList);
 ui.scroller.addEventListener('scroll', () => ui.toBottom.classList.toggle('hidden', nearBottom()));
@@ -1254,7 +1489,11 @@ document.addEventListener('keydown', (event) => {
     if (!ui.pluginsModal.classList.contains('hidden')) { closePlugins(); return; }
     if (!ui.modal.classList.contains('hidden')) { ui.modalCancel.click(); return; }
     if (menuNode) { closeMenu(); return; }
+    if (ui.brandMenu && !ui.brandMenu.classList.contains('hidden')) { closeBrandMenu(); return; }
+    if (ui.agentMenu && !ui.agentMenu.classList.contains('hidden')) { closeAgentMenu(); return; }
+    if (ui.projectManage?.open) { ui.projectManage.open = false; return; }
     if (!ui.slash.classList.contains('hidden')) { ui.slash.classList.add('hidden'); return; }
+    if (workspaceDetailOpen) { closeWorkspaceDetail(); return; }
     closeSidebarOnMobile();
     if (streaming && opened && document.activeElement !== ui.prompt) { send({ v: 1, type: 'abort' }); pushNote('已请求停止当前任务。'); }
   }
@@ -1265,12 +1504,15 @@ document.addEventListener('visibilitychange', () => {
 installCopyHandlers(ui.thread);
 
 // ---------- boot ----------
+applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+if (window.matchMedia('(min-width: 1100px)').matches) setWorkspaceOpen(true);
 resetThread();
 renderHero();
 renderHeader();
 renderSessionList();
 autoGrow();
 refreshComposer();
+syncToBottomPosition();
 connect();
 
 
@@ -1279,29 +1521,39 @@ async function workspaceApi(value) {
   const r=await fetch('/api/workspace',value ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(value)} : {});
   const data=await r.json();if(!r.ok)throw new Error(data.error || '工作区请求失败');return data;
 }
+function setWorkspaceOpen(open) {
+  ui.app.classList.toggle('files-open', open);
+  $('#workspace-panel').classList.toggle('hidden', !open);
+}
 async function loadWorkspace() {
   const seq=++workspaceRequestSeq;
   try {
+    const hadWorkspace = Boolean(workspaceState);
     const data=await workspaceApi();if(seq!==workspaceRequestSeq)return;workspaceState=data;
     $('#project-controls').classList.remove('hidden');$('#files-toggle').classList.remove('hidden');$('#merge-workspace').classList.remove('hidden');
-    const select=$('#project-select'), old=select.value;select.replaceChildren();
+    if (!hadWorkspace && window.matchMedia('(min-width: 1100px)').matches) setWorkspaceOpen(true);
+    const select=ui.projectSelect, old=select.value;select.replaceChildren();
     const all=document.createElement("option");all.value="";all.textContent="全部项目 / 旧对话";select.append(all);
     for(const p of data.projects){const o=document.createElement('option');o.value=p.id;o.textContent=p.name;select.append(o);}
     if(data.projects.some(p=>p.id===old))select.value=old;
+    renderProjectContext();
     renderSessionList();
-    if(activeId && data.conversations.some(c=>c.id===activeId)) {const id=activeId;const grant=await workspaceApi({action:"files",id});if(activeId===id){transfer=grant;bindWorkspaceArtifacts();void refreshArtifactCards();}}
+    const hasActive=activeId && data.conversations.some(c=>c.id===activeId);
+    if(hasActive) {const id=activeId;const grant=await workspaceApi({action:"files",id});if(activeId===id){transfer=grant;bindWorkspaceArtifacts();void refreshArtifactCards();void refreshWorkspaceChanges(false).then(()=>maybeRenderChangesCard()).catch(()=>undefined);}}
+    else {workspaceChanges=null;selectedChangedPath=null;if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();}
   } catch(e) {if(workspaceState)toast(e.message);}
 }
-$('#project-select').addEventListener('change',()=>{showArchived=false;renderSessionList();});
-$('#show-archive').addEventListener('click',()=>{showArchived=true;renderSessionList();});
-$('#show-active').addEventListener('click',()=>{showArchived=false;renderSessionList();});
-$('#project-discover').addEventListener('click',async()=> {try{await workspaceApi({action:'discover'});await loadWorkspace();}catch(e){toast(e.message);}});
+ui.projectSelect.addEventListener('change',()=>{showArchived=false;renderProjectContext();renderSessionList();});
+$('#show-archive').addEventListener('click',()=>{ui.projectManage.open=false;showArchived=true;renderSessionList();});
+$('#show-active').addEventListener('click',()=>{ui.projectManage.open=false;showArchived=false;renderSessionList();});
+$('#project-discover').addEventListener('click',async()=> {ui.projectManage.open=false;try{await workspaceApi({action:'discover'});await loadWorkspace();}catch(e){toast(e.message);}});
 $('#project-add').addEventListener('click',async()=> {
+  ui.projectManage.open=false;
   const name=await askModal({title:'新建项目',text:'使用英文字母、数字、短横线或下划线。已存在的目录不会被覆盖。',input:'',okLabel:'下一步'});if(!name)return;
   const source=await askModal({title:'项目来源',text:'留空创建空 Git 项目；填写 HTTP(S)/SSH Git URL 克隆。导入 ZIP 请填写 zip:文件名（先在现有对话上传）。',input:'',okLabel:'创建'});if(source===null)return;
   try {
     const data=source.startsWith('zip:') ? {action:'import',name,scope:activeId,file:source.slice(4)} : {action:'project',name,url:source || undefined};
-    const p=await workspaceApi(data);await loadWorkspace();$('#project-select').value=p.id;showArchived=false;renderSessionList();toast('项目已创建');
+    const p=await workspaceApi(data);await loadWorkspace();ui.projectSelect.value=p.id;showArchived=false;renderProjectContext();renderSessionList();toast('项目已创建');
   } catch(e){toast(e.message);}
 });
 $('#merge-workspace').addEventListener('click',async()=> {
@@ -1313,37 +1565,241 @@ $('#merge-workspace').addEventListener('click',async()=> {
     const r=await workspaceApi({action:'merge',id:activeId,token:proposal.token});toast(r.ok ? '合并完成' : r.message);
   }catch(e){toast(e.message);}
 });
-let fileDirectory='';
 function fileEndpoint(route,path) {
   if(!transfer)throw new Error('请先打开对话以获取 VM 文件授权');
   const u=new URL('/api/localsend/v2/'+route,transfer.url);u.search=new URLSearchParams({scope:transfer.scope,token:transfer.token,...(path===undefined?{}:{path})});return u.href;
 }
-$('#files-toggle').addEventListener('click',()=>{ui.app.classList.toggle('files-open');$('#workspace-panel').classList.toggle('hidden');refreshFiles().catch(e=>toast(e.message));});
-$('#files-close').addEventListener('click',()=>{ui.app.classList.remove('files-open');$('#workspace-panel').classList.add('hidden');});
-$('#files-refresh').addEventListener('click',()=>refreshFiles().catch(e=>toast(e.message)));
-$('#files-tree').addEventListener('click',()=>{fileDirectory='';refreshFiles().catch(e=>toast(e.message));});
-$('#files-uploads').addEventListener('click',async()=> {
- try {const r=await fetch(fileEndpoint('prepare-download'));const data=await r.json();if(!r.ok)throw new Error(data.message);const list=$('#file-list');list.replaceChildren();$('#file-path').textContent='上传记录';
- for(const f of Object.values(data.files || {})) {const a=el('a','file-row',f.fileName+' · '+formatBytes(f.size));const u=new URL(fileEndpoint('download'));u.searchParams.set('fileId',f.id);a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';list.append(a);}
- }catch(e){toast(e.message);}
-});
-async function refreshFiles() {
- if(!workspaceState || !transfer)return;
- const id=activeId;const r=await fetch(fileEndpoint('tree',fileDirectory));const data=await r.json();if(activeId!==id)return;
- if(!r.ok)throw new Error(data.message || '文件读取失败');
- const list=$('#file-list');list.replaceChildren();$('#file-path').textContent='/'+fileDirectory;
- if(fileDirectory){const up=el('button','file-row','.. 上一级');up.onclick=()=>{fileDirectory=fileDirectory.split('/').slice(0,-1).join('/');refreshFiles().catch(e=>toast(e.message));};list.append(up);}
- for(const f of data.entries) {const row=el('button','file-row',(f.directory?'▸ ':'')+f.name);row.onclick=()=>{const path=[fileDirectory,f.name].filter(Boolean).join('/');if(f.directory){fileDirectory=path;refreshFiles().catch(e=>toast(e.message));}else previewFile(path);};list.append(row);}
- if(data.truncated)list.append(el('p','','目录已限制为 1000 项'));
+function renderWorkspaceSummary(data=workspaceChanges) {
+  const node=$('#workspace-summary');if(!node)return;
+  if(!data || !data.files.length){node.replaceChildren();return;}
+  const add=data.files.reduce((sum,file)=>sum+(typeof file.additions==='number' ? file.additions : 0),0);
+  const del=data.files.reduce((sum,file)=>sum+(typeof file.deletions==='number' ? file.deletions : 0),0);
+  node.replaceChildren(el('span','wt-add','+'+add),el('span','wt-del','−'+del));
 }
-function previewFile(path) {
- const preview=$('#artifact-preview');preview.replaceChildren();const url=fileEndpoint('preview',path);
- const title=el('div','artifact-title',path);const download=el('a','btn small','下载');download.href=fileEndpoint('workspace-download',path);download.target='_blank';download.rel='noopener noreferrer';title.append(download);preview.append(title);
- const image=/\.(png|jpe?g|gif|webp|svg)$/i.test(path);
- if(image) {const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener noreferrer';const img=document.createElement('img');img.src=url;img.alt=path;a.append(img);preview.append(a);}
- else if(/\.pdf$/i.test(path)){const frame=document.createElement('iframe');frame.src=url;frame.title=path;frame.setAttribute('sandbox','');preview.append(frame);}
- else fetch(url).then(async r=>{if(!r.ok)throw new Error('预览不可用，请下载');if(!/^(text\/|application\/json)/i.test(r.headers.get('content-type') || ''))throw new Error('此格式不支持文本预览，请下载');const text=await r.text();if(/\.md$/i.test(path)){const body=el('div','markdown');body.innerHTML=renderMarkdown(text);preview.append(body);}else preview.append(el('pre','file-text',text));}).catch(e=>preview.append(el('p','',e.message)));
+async function refreshWorkspaceChanges(announce=true) {
+  if(!workspaceState || !activeId || !workspaceState.conversations.some(c=>c.id===activeId)){workspaceChanges=null;selectedChangedPath=null;renderWorkspaceSummary();renderWorkspaceList();return null;}
+  if(announce)toast('正在读取 Diff 与 Checks…');
+  workspaceChanges=await workspaceApi({action:'changes',id:activeId});
+  if(selectedChangedPath && !workspaceChanges.files.some((file) => file.path === selectedChangedPath)) selectedChangedPath=null;
+  renderWorkspaceSummary();
+  renderWorkspaceList();
+  return workspaceChanges;
 }
+function changeFileStats(file) {
+  return file.additions===null && file.deletions===null ? '未跟踪' : `+${file.additions ?? 0} −${file.deletions ?? 0}`;
+}
+function changedFileRow(file, { selected = false } = {}) {
+  const code=file.status==='?' ? 'U' : String(file.status).toUpperCase();
+  const row=el('button','file-row workspace-change-row' + (selected ? ' selected' : ''));
+  row.type='button';
+  row.title=`查看 ${file.path} 的 Diff`;
+  row.setAttribute('aria-current',selected ? 'true' : 'false');
+  const status=el('span','workspace-change-status '+code.toLowerCase(),code);
+  const path=el('span','workspace-change-path',file.path);path.title=file.path;
+  const stats=el('span','workspace-change-stats',changeFileStats(file));
+  row.append(status,path,stats);
+  return row;
+}
+function changedFilesCard(data) {
+  const add=data.files.reduce((sum,file)=>sum+(typeof file.additions==='number' ? file.additions : 0),0);
+  const del=data.files.reduce((sum,file)=>sum+(typeof file.deletions==='number' ? file.deletions : 0),0);
+  const card=el('section','changes-card');
+  card.setAttribute('aria-label','本轮工作树变更');
+  const head=el('div','changes-card-head');
+  head.append(
+    el('strong','changes-card-title',`已编辑 ${data.files.length} 个文件`),
+    el('span','changes-card-stats',`+${add} −${del}`),
+  );
+  card.append(head);
+  const list=el('div','changes-card-list');
+  for(const file of data.files) {
+    const row=changedFileRow(file,{selected:selectedChangedPath===file.path});
+    row.addEventListener('click',()=>showWorkspaceReview('diff',file.path));
+    list.append(row);
+  }
+  card.append(list);
+  if(data.files.length>3) {
+    const more=el('button','changes-card-more',`展开其余 ${data.files.length - 3} 个文件`);
+    more.type='button';
+    more.addEventListener('click',()=>{const expanded=card.classList.toggle('expanded');more.textContent=expanded ? '收起文件列表' : `展开其余 ${data.files.length - 3} 个文件`;});
+    card.append(more);
+  }
+  const actions=el('div','changes-card-actions');
+  const review=el('button','btn small','Review changes');
+  review.type='button';review.addEventListener('click',()=>showWorkspaceReview('diff'));
+  actions.append(review);
+  card.append(actions);
+  return card;
+}
+function maybeRenderChangesCard(data=workspaceChanges) {
+  if(!data || streaming || !data.files.length) return;
+  const signature=activeId + ':' + data.target + ':' + data.files.map((file) => [file.path,file.status,file.additions,file.deletions].join(':')).join('|');
+  if(signature===lastChangeCardSignature) return;
+  lastChangeCardSignature=signature;
+  appendNode(changedFilesCard(data));
+}
+function patchForFile(patch,path) {
+  if(!patch || !path) return '';
+  const sections=patch.split(/(?=^diff --git )/m).filter(Boolean);
+  for(const section of sections) {
+    let target=section.match(/^diff --git [^\n]* b\/(.+)$/m)?.[1] || section.match(/^\+\+\+ b\/(.+)$/m)?.[1];
+    if(target?.startsWith('"') && target.endsWith('"'))target=target.slice(1,-1).replace(/\\(["\\])/g,'$1');
+    if(target===path)return section;
+  }
+  return '';
+}
+function middleTruncate(path,max=24) {
+  if(path.length<=max)return path;
+  const base=path.split('/').pop() || path;
+  const head=(path.split('/')[0] || '').slice(0,12);
+  let out=(head && base!==path) ? head+'…'+base : base;
+  if(out.length>max){const keep=Math.floor((max-1)/2);out=out.slice(0,keep)+'…'+out.slice(-(max-1-keep));}
+  return out;
+}
+function renderWorkspaceList(data=workspaceChanges) {
+  const node=$('#workspace-list');if(!node)return;
+  node.replaceChildren();
+  if(!workspaceState || !activeId || !workspaceState.conversations.some(c=>c.id===activeId)){node.append(el('p','workspace-empty','打开项目对话以查看变更。'));return;}
+  if(!data){node.append(el('p','workspace-empty','正在读取变更…'));return;}
+  if(!data.files.length){node.append(el('p','workspace-empty','没有变更。'));return;}
+  for(const file of data.files) {
+    const row=el('button','wt-file'+(selectedChangedPath===file.path ? ' selected' : ''));
+    row.type='button';
+    row.title=file.path;row.setAttribute('aria-label',`查看 ${file.path} 的 Diff`);
+    const stats=el('span','wt-file-stats');
+    if(typeof file.additions==='number' && file.additions>0)stats.append(el('span','wt-add','+'+file.additions));
+    if(typeof file.deletions==='number' && file.deletions>0)stats.append(el('span','wt-del','−'+file.deletions));
+    if(!stats.children.length)stats.append(el('span','wt-new',file.status==='?' ? '未跟踪' : '±0'));
+    row.append(el('span','wt-file-name',middleTruncate(file.path)),stats);
+    row.addEventListener('click',()=>showWorkspaceReview('diff',file.path));
+    node.append(row);
+  }
+}
+function setReviewTab(tab) {
+  for(const [id,name] of [['files-diff','diff'],['files-checks','checks']]) {
+    const active=Boolean(tab) && tab===name;
+    $('#'+id).classList.toggle('active',active);
+    $('#'+id).setAttribute('aria-selected',String(active));
+  }
+}
+function closeWorkspaceDetail() {
+  workspaceDetailOpen=false;
+  selectedChangedPath=null;
+  $('#workspace-panel').classList.remove('detail-open');
+  $('#workspace-detail').classList.add('hidden');
+  setReviewTab('diff');
+  renderWorkspaceList();
+}
+function reviewHead(label,{wrapToggle=true}={}) {
+  const head=el('div','wt-detail-head');
+  const back=el('button','btn small','‹ 返回');back.type='button';back.title='返回变更文件列表';
+  back.addEventListener('click',closeWorkspaceDetail);
+  head.append(back,el('span','wt-detail-title',label));
+  if(wrapToggle) {
+    const wrap=el('button','btn small',diffWrapped ? '折行' : '换行关');
+    wrap.type='button';wrap.title='切换 Diff 换行';wrap.setAttribute('aria-pressed',String(diffWrapped));
+    wrap.addEventListener('click',()=>{diffWrapped=!diffWrapped;renderWorkspaceDiff(workspaceChanges);});
+    head.append(wrap);
+  }
+  return head;
+}
+function renderWorkspaceDiff(data, path=selectedChangedPath) {
+  selectedChangedPath=path && data.files.some((file) => file.path===path) ? path : null;
+  const detail=$('#workspace-detail');detail.replaceChildren();
+  detail.append(reviewHead(selectedChangedPath || '全部变更'));
+  const meta=el('div','workspace-diff-meta');
+  meta.append(el('span','','branch '+data.branch),el('span','','base '+data.base.slice(0,12)),el('span','','target '+data.target.slice(0,12)));
+  detail.append(meta);
+  const file=data.files.find((item) => item.path===selectedChangedPath);
+  detail.append(el('pre','workspace-stat',selectedChangedPath ? file ? `${file.path}\n${changeFileStats(file)}` : selectedChangedPath : data.stat));
+  const patch=selectedChangedPath ? patchForFile(data.patch,selectedChangedPath) : data.patch;
+  const body=el('div','workspace-patch' + (diffWrapped ? ' wrapped' : ' unwrapped'));
+  body.innerHTML=patch ? renderPatchText(patch) : selectedChangedPath ? '<div class="workspace-empty">该文件没有可直接显示的文本 Diff；可能是二进制、超大小或被安全边界排除。</div>' : '<div class="workspace-empty">没有已跟踪或未跟踪的文本变更。</div>';
+  detail.append(body);
+  if(data.truncated)detail.append(el('p','workspace-warning','Diff 过大，仅显示前 150 KB；请在 VM 使用 git diff 查看完整内容。'));
+}
+function renderWorkspaceChecks(data) {
+  const detail=$('#workspace-detail');detail.replaceChildren();
+  detail.append(reviewHead('Checks · '+data.branch,{wrapToggle:false}));
+  for(const check of data.checks) {
+    const card=el('div','workspace-check '+(check.ok ? 'ok' : 'failed'));
+    const head=el('div','workspace-check-head');
+    head.append(el('span','workspace-check-icon',check.ok ? '✓' : '!'),el('strong','',check.command),el('span','workspace-check-state',check.ok ? '通过' : '发现问题'));
+    card.append(head,el('pre','workspace-check-output',check.output || (check.ok ? 'clean' : '无输出')));
+    detail.append(card);
+  }
+  detail.append(el('p','workspace-note','当前 Checks 是工作树的本地 git diff --check；不会自动运行测试或远程 CI。'));
+}
+async function showWorkspacePreview(path) {
+  if(!workspaceState || !transfer || !activeId){toast('请先打开项目对话');return;}
+  workspaceDetailOpen=true;
+  setWorkspaceOpen(true);
+  setReviewTab('');
+  $('#workspace-panel').classList.add('detail-open');
+  const detail=$('#workspace-detail');detail.classList.remove('hidden');
+  detail.replaceChildren();
+  detail.append(reviewHead('预览 · '+middleTruncate(path),{wrapToggle:false}));
+  const actions=el('div','workspace-preview-actions');
+  const open=el('a','btn small','外部打开');open.href=fileEndpoint('preview',path);open.target='_blank';open.rel='noopener noreferrer';
+  const download=el('a','btn small','下载');download.href=fileEndpoint('workspace-download',path);download.target='_blank';download.rel='noopener noreferrer';
+  actions.append(open,download);detail.append(actions);
+  const url=fileEndpoint('preview',path);
+  if(/\.(png|jpe?g|gif|webp|svg)$/i.test(path)) {
+    const img=document.createElement('img');img.src=url;img.alt=path;img.loading='lazy';
+    img.onerror=()=>detail.append(el('p','workspace-warning','图片加载失败，请外部打开或下载。'));
+    detail.append(img);return;
+  }
+  if(/\.pdf$/i.test(path)) {
+    const frame=document.createElement('iframe');frame.src=url;frame.title=path;frame.referrerPolicy='no-referrer';frame.setAttribute('sandbox','');
+    frame.onerror=()=>detail.append(el('p','workspace-warning','沙箱内无法渲染 PDF，请外部打开或下载。'));
+    detail.append(frame,el('p','workspace-note','PDF 在沙箱中预览；需要完整查看时请外部打开或下载。'));return;
+  }
+  try {
+    const r=await fetch(url);
+    if(!r.ok)throw new Error('预览不可用，请下载');
+    if(!/^(text\/|application\/json)/i.test(r.headers.get('content-type') || ''))throw new Error('此格式不支持文本预览，请下载');
+    const text=await r.text();
+    if(selectedChangedPath!==null)selectedChangedPath=null;
+    if(/\.md$/i.test(path)){const body=el('div','markdown');body.innerHTML=renderMarkdown(text);detail.append(body);bindWorkspaceArtifacts();}
+    else detail.append(el('pre','file-text',text));
+  } catch(e){detail.append(el('p','workspace-warning',e.message));}
+}
+async function showWorkspaceReview(tab,path=null) {
+  if(!workspaceState || !activeId){toast('请先打开项目对话');return;}
+  if(tab==='diff')selectedChangedPath=path;else selectedChangedPath=null;
+  workspaceDetailOpen=true;
+  setWorkspaceOpen(true);
+  setReviewTab(tab);
+  $('#workspace-panel').classList.add('detail-open');
+  const detail=$('#workspace-detail');detail.classList.remove('hidden');
+  detail.replaceChildren(el('p','workspace-empty','正在读取 Diff / Checks…'));
+  try {
+    const data=await refreshWorkspaceChanges(false);
+    if(!data)return;
+    if(tab==='checks')renderWorkspaceChecks(data);
+    else renderWorkspaceDiff(data,path);
+  }
+  catch(e){detail.replaceChildren(el('p','workspace-empty',e.message));toast(e.message);}
+}
+async function downloadWorkspacePatch() {
+  if(!workspaceState || !activeId){toast('请先打开项目对话');return;}
+  const data=workspaceChanges || await refreshWorkspaceChanges(false);
+  if(!data)return;
+  if(!data.patch){toast('没有可下载的文本变更');return;}
+  const blob=new Blob([data.patch],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=((data.projectId || 'workspace')+'-'+(data.branch || 'changes')+'.patch').replace(/[^\w.-]+/g,'-');
+  document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  if(data.truncated)toast('补丁仅含前 150 KB；完整内容请在 VM 使用 git diff 导出。');
+}
+$('#files-toggle').addEventListener('click',()=>{const open=!ui.app.classList.contains('files-open');setWorkspaceOpen(open);if(open){renderWorkspaceList();void refreshWorkspaceChanges(false).catch(e=>toast(e.message));}});
+$('#files-close').addEventListener('click',()=>setWorkspaceOpen(false));
+$('#files-diff').addEventListener('click',closeWorkspaceDetail);
+$('#files-checks').addEventListener('click',()=>{showWorkspaceReview('checks').catch(e=>toast(e.message));});
+$('#view-all-changes').addEventListener('click',()=>{showWorkspaceReview('diff').catch(e=>toast(e.message));});
+$('#wt-download').addEventListener('click',()=>{void downloadWorkspacePatch().catch(e=>toast(e.message));});
 void loadWorkspace();
 setInterval(()=>{if(!document.hidden || uploadsBusy())void loadWorkspace();},5000);
 fetch('/api/me').then(r=>r.ok?r.json():null).then(user=>{if(!user)return;const account=el('button','foot-btn',user.login+' · 退出');account.onclick=async()=>{await fetch('/auth/logout',{method:'POST'});localStorage.removeItem(ACTIVE_KEY);location.href='/auth/login';};$('.sidebar-foot').append(account);}).catch(()=>{});
@@ -1374,7 +1830,7 @@ async function refreshArtifactCards() {
     const card=el('div','generated-card');card.append(el('span','',file.path));
     if(!file.available)card.append(el('span','', '文件已移除或不可访问'));
     else {
-      const open=el('a','','打开');open.href=fileEndpoint('preview',file.path);open.target='_blank';open.rel='noopener noreferrer';
+      const open=el('a','','打开');open.href=fileEndpoint('preview',file.path);open.target='_blank';open.rel='noopener noreferrer';open.addEventListener('click',(e)=>{e.preventDefault();void showWorkspacePreview(file.path);});
       const download=el('a','','下载');download.href=fileEndpoint('workspace-download',file.path);download.target='_blank';download.rel='noopener noreferrer';card.append(open,download);
       if(/\.(png|jpe?g|gif|webp|svg)$/i.test(file.path)){const img=document.createElement('img');img.src=open.href;img.alt=file.path;img.onerror=()=>{img.alt='预览不可用：'+file.path;};const link=open.cloneNode(false);link.append(img);card.append(link);}
     }

@@ -648,6 +648,7 @@ describe("Host WebSocket seam", () => {
     const post=(action:string,extra={})=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:"POST",headers:{authorization:"Bearer lifecycle","content-type":"application/json"},body:JSON.stringify({action,id:conversation.id,...extra})});
     try {
       expect((await post("archive")).status).toBe(409);expect(pi.stopped).toBe(false);
+      const review=await post("changes");expect(review.status).toBe(200);expect((await review.json() as {sessionId:string}).sessionId).toBe(conversation.id);expect(pi.stopped).toBe(false);
       expect((await post("merge_preview")).status).toBe(409);
       pi.background={known:false,active:0};expect((await post("archive")).status).toBe(409);expect(pi.stopped).toBe(false);
       pi.background={known:true,active:0};expect((await post("archive")).status).toBe(200);expect(pi.stopped).toBe(true);
