@@ -1,121 +1,103 @@
-# PI Coffee — GitHub 代码审查交接
+# Handoff — Work 系统提示词与 Pi Agent 规格
 
-更新日期：2026-09-17（Asia/Hong_Kong）
+生成时间：2026-09-20 · 分支 `arena/01a0bae2-pi-coffee` · 基线提交 `1d644785ea6508670f6712dc4e62fa3c2d2ecfa3`
 
-## Windows 真机复核与跨平台修复（2026-09-17，Europe/Paris）
+> 本文件按 `mattpocock/skills@c55ee46` 的 `skills/productivity/handoff` 技能格式生成。该技能默认写入系统临时目录；本次按 owner 明确要求改为随分支提交，仓库内路径为 `handoff.md`。其余约定（引用已有产物、不重复正文、含 suggested skills、脱敏）均遵守。
+>
+> **交接焦点：系统提示词是未完成工作。** 下一会话最重要的任务是行为验证与模式迁移，不是继续润色文案。
 
-在一台 Windows 11 真机的 fresh checkout 上完成了安装、构建、测试、Chrome 工作台和真实原生 Pi 模型链路复核。初始结果为 131 项通过、24 项失败；失败集中在 POSIX 路径/权限假设、Python 启动器、浏览器静态目录 URL 转换，以及明确依赖 Linux `/proc`、`fcntl`、POSIX 信号的子 Agent admission 验收。
+---
 
-- 已修复产品代码中的 Git 项目路径比较和 ZIP Python 启动器，并把测试夹具改成跨平台路径、失败和 symlink 场景。
-- Windows 最终 `npm run check`：构建成功，143 项通过，13 项 Linux User VM 专属测试明确跳过；Linux 最终仍为 29 个文件、156 项全部通过。
-- Windows Chrome 工作台 smoke 通过；修复了 `URL.pathname` 不能直接作为 Windows 静态资源路径的问题。
-- Windows 上关闭 Linux 专属子 Agent admission 后，使用本机原生 Pi 登录完成真实模型 smoke：流式回复、断线重连、Host 历史恢复和同会话第二轮均通过。没有保存认证材料或模型正文。
-- 使用临时 Gitea OAuth 应用完成真实 PKCE 登录、cookie 属性、固定路由撤销、重新登录和 logout 验收，并修复 PowerShell UTF-8 BOM 路由文件解析；临时应用、token 配置和浏览器会话已删除。
-- Windows `smoke:web` 已实际验证 Web Search、context-fold 和 Harness；`smoke:subagents` 以结构化结果标明 Linux native admission 不适用。Linux 上两项仍完整通过。
-- Linux 上 `smoke:subagents`、`smoke:web`、Chrome 工作台 smoke 全部通过；`npm audit` 为 0 漏洞。
-- 证据与平台边界见 [Windows 真机验收记录](docs/reviews/windows-real-machine-acceptance-20260917.md)。真实双 Linux User VM、多用户并发及完整故障矩阵仍属于 P5，不能因这次 Windows 复核标为完成。
+## 1. 一句话现状
 
-## 本轮质量审核修复（2026-09-16，Europe/Paris）
+Work 正文（`src/harness/prompts/software-development.md`）已完成两轮源码级对照与加减法，并通过文本契约测试；**但它只被证明"写对了"，从未被证明"模型会照做"，且 Chat/Work 两个模式在产品层面根本还没有实现。**
 
-已按本文件基线审核 `arena/01a0a607-pi-coffee@1d33508` 并在本地工作分支修复。详见 [审核报告、修复与待验收边界](docs/reviews/completion-quality-20260916.md)。以下原交接的提交前测试与已知问题是历史记录；与本段冲突时，以本段和审核报告为准。
+## 2. 本会话做了什么（细节见引用文档，此处不重复）
 
-- 修复断线闲置回收中断后台工作、Git 队列失败传播、detached HEAD 未合并成果删除、手工发现空仓库不能新建对话、同名上传覆盖和完成凭证重用、VM 撤销端点卡住导致退出延迟、Pi 异常退出永久 busy，以及 390px 输入栏溢出。
-- Vitest 锁定至 **4.1.11**，fresh `npm ci` 成功，`npm audit` **0 漏洞**。3.2.7 已不能消除当前 mocker advisory，未采用 `audit fix --force`。
-- 最终 `npm run check`：构建成功，**29 个测试文件、155 项通过**；`smoke:subagents` 与 `smoke:web` 均 `ok: true`。
-- 本轮实际重新执行了真实 Chrome 工作台 smoke：SVG/Markdown 可见、来源切换、归档恢复、390px 无横向溢出、无 pageerror。仍使用假 Pi；不等于 P5。
-- Pi 故障测试实际 SIGKILL 本地 RPC fixture，验证中断落盘、重连无旧轮次重放、显式重新发送成功；不是完整实机故障矩阵。
-- **P5 仍未执行**，跨 cwd/手工后台写入及原交接列出的恢复边界仍待验收。Gitea 本轮不可达，未关闭或更新 Issue。owner 于 2026-09-17 要求将修复和 [fix.md](fix.md) 一起提交并推送至 `arena/01a0a607-pi-coffee`；实际提交与远端状态以 Git 历史为准，不更新 `main`。
+| 产物 | 路径 |
+|---|---|
+| Pi Agent 主 SPEC（PA-001..010、PA-Q01..06、PA-AC01..09、决策沿革） | `docs/spec/pi-agent.md` |
+| Work 提示词 SPEC（WP-001..010、与 Pi 原生分层、WP-AC01..12） | `docs/spec/harness-prompt.md` |
+| 对照评审（Claude Code 与 Codex 两份参照、采纳/拒绝清单、限制） | `docs/reviews/work-prompt-20260920.md` |
+| 正文本体（6,185 字节 / 892 词，预算上限 6,400） | `src/harness/prompts/software-development.md` |
+| renderer（`work` 为默认，旧名保留兼容） | `src/harness/prompt.ts` |
+| 契约测试（含项目中立守卫 + 正向对照） | `test/harness-prompt.test.ts`、`test/harness-extension.test.ts` |
 
-## 1. 审查入口与提交范围
+本会话确认的四条设计原则：**插件扩展并保留 Pi 升级能力（PA-001）**、**只有 Chat/Work 两个模式且 Chat 连原生系统提示词都不要（PA-002/003）**、**在 Pi 原生提示词上做适量加法而非重写（PA-009）**、**通用正文必须项目中立（PA-010）**。
 
-- 仓库：`awangs1986/pi-coffee`
-- 工作分支：`arena/01a0a607-pi-coffee`
-- 比较基线：`fd20b6c8f266bc9a1e27de51687d327a16a09394`（Initial commit）
-- 本交接随当前工作快照一起提交。审查提交 SHA 请以 GitHub 分支 HEAD 为准；不在文件中填写自身提交哈希。
-- **基线只跟踪 README.md**。因此本次 diff 包含此前工作区已有的整套实现、Pi 增强层、部署模板、测试和文档，不只是最后一轮 P0–P4 的增量；不要将所有新增文件都理解为最后一轮重写。
-- 根目录 `pelican-cycling.svg/png` 是已有示例产物，按 owner“全部工作提交”的要求一并保留；不是运行依赖。
-- 凭据模式扫描命中的 `test/fixtures/tls/test-key.pem` 是现有 TLS 自动测试所需的自签名 fixture（CN=`pi-coffee-test`），不是生产凭据；绝不能在部署中使用。扫描仅为启发式检查，不代替安全审计。
-- `node_modules`、`dist`、环境凭据、会话目录、测试日志、浏览器二进制不纳入提交。vendor JS 在构建时复制，不手工提交。
-- 不向 main 推送、不自动合并。此分支用于代码质量审查，而不是宣告发布验收完成。
+关键事实：Pi 原生 `buildSystemPrompt` 已提供身份、激活工具列表（含 `promptSnippet`）、Guidelines（含各工具 `promptGuidelines` + 简洁/列路径）、`<project_context>` 项目指令。**新增规则前必须先读原生内容，重复即视为"多"。**
 
-## 2. 当前状态
+## 3. 未完成工作（按优先级）
 
-**P0–P4 的主要本地功能路径已接通；不能把 AC-01～12 全部标成通过。P5 双 VM 实机验收未执行。**
+### 3.1 系统提示词：只做了文本层，行为层空白 ⚠️
 
-| 范围 | 实现与入口 |
-| --- | --- |
-| P0 身份/路由/来源 | `src/web/identity.ts`：Gitea OAuth、PKCE/state、内存会话和固定用户 VM 路由；`src/web/server.ts` HTTP/WS 授权；显式 Native/Relay 来源选择，不自动回退 |
-| P1 项目/对话工作区 | `src/host/workspaces.ts`：发现手工 clone、URL clone、空项目、ZIP 导入；独立 worktree/branch/cwd；元数据及旧历史兼容 |
-| P2 本地合并 | proposal/diff/确认、一次性 token、HEAD 和脏状态复查、项目锁、保留 Git 原生冲突；不自动 turn-end commit/merge |
-| P3 文件/产物 | `src/host/transfer.ts`：VM 直连的 scoped 上传、文件树、预览和下载；实际文件产物索引；SVG/图片/Markdown/文本/PDF |
-| P4 生命周期 | 归档恢复、仅归档页确认删除、删除失败重试、运行意图和中断标记、服务器权威状态；后台/排队子任务未静默或状态未知时拒绝操作 |
-| UI | `public/`：左导航、中聊天、右文件/产物、小屏布局；采用 Arena 风格工作台布局，没有取得 owner 当前 Arena 截图，不是像素级复刻 |
-| Pi 增强基础 | 保留原 Pi core/login；通用开发提示词、Simple/Lean 不启用子 Agent、Full 原生子 Agent、3/root 与 5/VM admission、搜索结果压缩、离线本地上下文恢复 |
+- **WP-AC04～12 一条都没跑。** 九个行为样例（范围判断、工具发现、失败处置、上下文节制、验证真实性、授权边界、审查报告方式、意外状态、收尾）已在 SPEC 中定义，**没有任何真实模型数据**。
+- **测试通过 ≠ 提示词有效。** `test/harness-prompt.test.ts` 是字符串断言，`test/harness-extension.test.ts` 是 FakePi 接线测试。真实结论只能来自：同一模型、同一工具、同一仓库初态下跑任务，记录实际工具序列/修改/验证结果，并统计**违反**（规则被打破）与**无效**（规则从未触发）两类。
+- **"无效"清单是删减依据。** owner 的原则是"宁少勿错"：跑完应产出一张"该加哪条、该删哪条"的清单，而不是继续加规则。
+- **不要在没有证据前继续扩写正文。** 预算上限上调过一次（6,000→6,400）是因为新增了 WP-009/010；再次上调需要新的失败样例。
 
-权威需求与边界：
+### 3.2 Chat 模式：产品设计已定，实现为零
 
-1. [产品 P0–P5 排序及 AC](docs/development/product-priorities-20260916.md)
-2. [多用户工作台 SPEC](docs/spec/multi-user-vm.md)
-3. [本轮实现记录、配置与限制](docs/development/p0-p4-implementation-20260916.md)
-4. `AGENTS.md`（仓库工作规范）
+- 需要**完全不向 provider 发送任何系统指令**（连 Pi 原生 Base 都不要），且只有 4 个基础工具 + Web 搜索。
+- 当前代码是旧 `simple`/`lean`/`full` 接线，`before_agent_start` 会把 Work 正文追加到 Pi Base；**旧 `simple` 不等于 Chat**。
+- 验收方法写在 `docs/spec/pi-agent.md` PA-AC03：必须抓取**发送前的真实 provider 请求**，覆盖新建/恢复/切模型/插件加载；不能只测 renderer 返回空串。注意 Pi 的 `--system-prompt` 是**整体替换**（PA-Q02 未决）。
+- 工具 schema 与系统提示词是不同输入，不要为"零提示词"删掉工具定义。
 
-旧 handoff 已保存到 `docs/development/handoff-before-review-20260917.md`，仅作历史参考；旧 backlog、CONTEXT 或部署长文中的未更新状态，不应覆盖以上入口。
+### 3.3 待确认项（owner 未拍板，不得自行补全）
 
-## 3. 本次提交前验证
+- **PA-Q01**：Chat 的 4 个基础工具确切名称；Work 约 11 个工具的完整名单。**不要为凑数增加工具，也不要把旧 9/11 当目标。**
+- **PA-Q02**：Work 正文替换还是追加 Pi Base。
+- **PA-Q03**：模式默认值、切换入口、持久化字段、旧会话/旧命令迁移。
+- **PA-Q04**：现有搜索/子 Agent/`recall_folded` 策略如何分配到两个模式。
+- **PA-Q05**：上下文统计的 provider 数据来源、误差容限、触发阈值、媒体计量。
+- **PA-Q06**：哪些规则该下沉为工具的 `promptGuidelines`（随工具激活才出现），哪些留在正文。
 
-2026-09-17 在本次提交前重新执行：
+### 3.4 上下文问题：仅部分缓解，未解决
 
-| 命令 | 结果 |
-| --- | --- |
-| `npm ci` | 成功；依赖审计发现 2 项漏洞，见下节 |
-| `npm run check` | build 成功；**29 个测试文件、144 项通过** |
-| `npm run smoke:subagents` | 通过，`ok: true` |
-| `npm run smoke:web` | 通过，`ok: true` |
+owner 的原始痛点（几轮就满、统计与实际占用偏差、不该进上下文的内容进了上下文）**没有被本会话修复**。现有保护（入口 12000 字节归档、短搜索摘要、context-fold、最终 payload 保守估算）是既有实现，属于"已实现基线"，不是"问题已解决"。领域文档：`docs/spec/context-recovery.md`，验收：`docs/spec/pi-agent.md` PA-AC06。
 
-上一轮 Chromium smoke 已通过：首次消息前切换来源、项目对话、SVG/Markdown、归档恢复、390px 窄屏、无 pageerror。**本轮没有重新执行浏览器测试**：之前的临时 Chromium/共享库不在当前恢复环境中。仓库保留可复现脚本，不将上一轮结果冒充本次执行。
+## 4. 下一会话建议顺序
 
-```bash
-npm ci
-npm run check
-npm run smoke:subagents
-npm run smoke:web
-npx playwright install chromium
-npm run smoke:workspace-browser
-# 已有 Chromium 时可设置 PLAYWRIGHT_EXECUTABLE_PATH
-```
+1. **先读** `docs/spec/pi-agent.md` 与 `docs/spec/harness-prompt.md`（这是当前权威），再读 `docs/reviews/work-prompt-20260920.md` 了解取舍理由。
+2. **跑 WP-AC04～12 行为样例**，产出一份带真实工具序列的证据文件；据此得出增删清单。这是唯一能把"结构对齐"变成"实际好用"的动作。
+3. **再与 owner 确认 PA-Q01/Q02**（工具名单 + 替换/追加），然后才动手做 Chat/Work 运行时迁移。
+4. 迁移必须先在公共 seam 写失败测试（仓库规则：red → green，`npm run check`）。
 
-要求 Node >=22.19；Linux 用户 VM；Git 与 Python3（ZIP 安全导入、fcntl admission）。
+## 5. 坑与约束
 
-注意：路由测试使用假 Gitea；浏览器使用假 Pi；部分 RPC 测试使用真实 Pi/原生子 Agent，但模型为本地 fixture。以上均不是实际供应商、真实 Gitea 或双 VM 发布证据。
+- **不要**把旧 `simple` 当 Chat，或把旧 `full` 当 Work；不要在提示词改动里顺手迁移模式，也不要在迁移里偷偷删除旧数据。
+- **不要**把项目专属内容（本产品名称、本仓库路径/命令、工单/ADR 编号、前端偏好）写进通用正文——这正是 V3 的历史缺陷。已有类别级守卫与正向对照测试；改名不能绕过。
+- **不要**照搬 Codex 的 `update_plan`/apply_patch/输出格式细则（我们没那些工具），也不要把 Codex 的 Frontend 设计规则写进通用正文（应进项目 AGENTS.md）。
+- **不要**把测试通过或 stub 通过当作模型质量或部署验收；不要在文档里写"已验收"。
+- **不要**在没有 owner 确认的情况下把未决项写成决定。
+- 参考的第三方提示词文本抓在 `.scratch/`（已被 `.gitignore` 忽略，**不在提交里**）。需要时按第 7 节 SHA 重新获取，勿另找版本。
+- 内网 Gitea（`testpc:3000`）在当前沙箱**DNS 不可解析**，本会话所有 Issue 同步、状态更新、关闭动作**均未执行**，属待办。
+- 已知无害告警：构建时 `public/vendor-marked.js`、`public/vendor-purify.js` 的 sourcemap ENOENT。
 
-## 4. 已知问题与审查优先级
+## 6. 验证状态（精确表述）
 
-### 优先审查，不得略过
+- 已执行：`npm run check` 通过，**31 个测试文件 / 183 项测试**；`npm run smoke:subagents`、`npm run smoke:web` 在提示词改动轮通过（均为 `ok: true`）。
+- 未执行：真实供应商模型调用、真实 Serper 搜索、浏览器端、目标部署 VM（单机与双 VM 均未做）、Chat 零系统提示词的 payload 抓取。
+- 覆盖范围：本地集成测试使用**真实 Pi CLI/子进程**配合**本地假模型/Relay 服务**，因此不等同于线上行为。
+- 提示词行为质量：**零数据**。
 
-1. **依赖审计未修复**：本轮 `npm audit` 报告 `vitest` critical、`@vitest/mocker` moderate（开发依赖），涉及 Vitest UI server 和 mock 路径访问。建议评估锁定升级至审计建议的 Vitest 3.2.7 后重跑测试。本轮按提交快照请求未额外升级依赖，未运行 `audit fix --force`。不要将 Vitest UI/dev server 暴露到公网。
-2. **后台生命周期不是任意写入者的隔离内核**：已接 native status/capacity、带进程 birth identity 的 queued/running launcher、历史 async 引用。真实测试证明 native capacity 在 accepted→runner 启动窗口可能为零，不能单独用于删除许可。跨对话显式指定其他 cwd、手工后台 shell、跨目录写入仍依赖“不并发写同一工作区”的约定；完整跨 cwd 关联未完成。
-3. **P5 未做**：真实 Gitea OAuth/撤销、Native 登录刷新、Relay 切换、两台目标 VM、2 用户×3 活跃对话、断线/重启/故障矩阵尚待执行。
-4. **状态/崩溃恢复**：每项目根仅支持一个 Host；锁 marker 遗留需要人工检查后清理。失败 clone/import 保留目录；物理 worktree 删除与元数据保存之间的崩溃窗口仍需演练。旧归档没有 quiesced 标记时，需恢复并重新归档后删除。
-5. **文件边界与 UX**：ZIP 首次导入需已有对话上传入口，可先建空项目；自动产物索引、候选扫描和界面卡片有上限。需继续验证长上传撤销、PDF、SVG 新标签页安全和目标设备表现。
-6. **文档一致性**：当前新增配置示例与实现记录优先；历史 README/runbook/backlog 中的一 Web 对一 VM、mandatory Relay、旧执行排序等描述需在发布前系统核对。
+## 7. 外部参照（复现用）
 
-### 建议代码阅读顺序
+| 参照 | 版本 | 取用方式 |
+|---|---|---|
+| Pi 原生系统提示词 | `@earendil-works/pi-coding-agent@0.84.4` | 从安装包编译产物中的 `buildSystemPrompt` 提取（非 Markdown 源） |
+| `openai/codex` | `5ee2bdf1e0e04064bc427ae31a49a01e8f7064df` | `codex-rs/core/gpt-5.2-codex_prompt.md`（7,589 B）、`gpt_5_codex_prompt.md`（6,647 B）、`gpt_5_2_prompt.md`（21,652 B） |
+| `claude-code-best/claude-code` | `77a7934e15d69da13879112ed7db695c9ee7a52a` | `src/constants/prompts.ts`、`systemPromptSections.ts`、`packages/builtin-tools/src/tools/**/prompt.ts` |
+| handoff 技能模板 | `mattpocock/skills@c55ee46073ed923f86ce59a5eb3b6d895095d1b7` | `skills/productivity/handoff/SKILL.md` |
 
-- 安全：`src/web/identity.ts` → `src/web/server.ts` → `src/host/server.ts` → `src/host/transfer.ts`。
-- 状态与并发：`src/host/workspaces.ts` → `src/host/session.ts` → `src/host/pi-adapter.ts`。
-- 子任务：`src/subagents/native-adapter.ts`、`workspace-jobs.ts`、`admission.ts`、`launch.py`；重点检查 acceptance 窗口、状态丢失、PID 重用、Simple/Lean→Full→Simple。
-- UI：`public/app.js`、`render.js`、`app.css`；重点检查异步刷新、模型切换确认、多窗口和归档后重连。
-- 验证：`test/identity.test.ts`、`workspace-routing.test.ts`、`workspaces.test.ts`、`workspace-transfer.test.ts`、`workspace-jobs.test.ts`、`host-server.test.ts`、`subagent-rpc.test.ts`；浏览器脚本 `scripts/smoke-workspace-browser.mjs`。
+两个外部仓库都是**第三方/反编译重建**性质，不等同官方最新部署；本会话只在源码层对照，未运行它们。
 
-## 5. 部署注意事项
+## 8. Suggested skills
 
-- 多用户公网绑定需身份配置；不能使用 `PI_COFFEE_ALLOW_UNAUTHENTICATED=1` 作为生产捷径。
-- `PI_COFFEE_ROUTES_FILE` 用 Gitea 数字用户 ID → 独立 Host URL/token，权限 0600；不提交真实文件。
-- 每个用户 VM 配 `PI_COFFEE_PROJECT_ROOT` 和原生 Pi agent/session 目录；在同一 VM 用户终端完成原生登录。
-- Relay 是可选来源，`PI_COFFEE_RELAY_PROVIDERS` 明确列出 provider ID，默认 `cpa`；不自动 fallback。
-- 产品模式不开放匿名 LocalSend。文件字节浏览器直达 VM，Web 仅做身份/聊天控制面，不持久化平台聊天或文件正文。
-- 使用 `deploy/server/web.env.example`、`deploy/uservm/host.env.example` 和实现记录；只替换本地配置中的占位符，不把密钥写入 Git。
+若下一会话运行在带 Skill 工具的环境，建议按序调用：
 
-## 6. 下一位接手者
+1. **`productivity/handoff`**（本次模板）— 会话结束时再次生成交接，保持 `handoff.md` 新鲜。
+2. **`productivity/pr-description`（如存在同类技能）** — 若要把本分支开成 PR，用它生成 PR 描述；本分支已按仓库习惯写好中文 conventional commit，可直接复用。
+3. 行为评测若无现成技能，按 `docs/spec/harness-prompt.md` 的 WP-AC 表格手工执行即可——**不要**为此发明新的技能或工具，owner 的"非必要不增加"同样约束流程。
 
-先读本交接并复跑检查，再按上面的优先级审查；不要重建已有基础，也不要因“每个阶段都有代码”就标 DONE。优先处理依赖安全及跨 cwd/故障边界，之后在真实双 VM 上按 SPEC 留证。继续在工作分支提交修正，不直接更新 main。
+> 注：本仓库是 PI Coffee 自身，未安装 Pi 的 Skill 扩展；上述技能是给**外部 agent 会话**（如 Arena/Claude Code/Codex）使用的建议，不代表仓库运行时依赖。
