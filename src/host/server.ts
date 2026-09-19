@@ -101,7 +101,7 @@ export class HostServer {
       const input=await readJson(req);
       // Reject mutating lifecycle operations while the parent is streaming. External commands remain trusted VM operations.
       const target=input.action==="merge" ? ws.proposalSession(input.token) : input.id;
-      if(target && input.action!=="files") {
+      if(target && !["files","changes"].includes(input.action)) {
         if(this.lifecycleLocks.has(target) || this.registry.get(target)?.isBusy)throw new Error("Stop the source conversation before changing its lifecycle");
         this.lifecycleLocks.add(target);locked=target;
       }
@@ -124,6 +124,7 @@ export class HostServer {
           if(!this.transfer || !await ws.lookup(input.id))throw new Error("Unknown workspace or file service unavailable");
           result={url:this.transfer.publicUrl(),scope:input.id,token:this.transfer.issueToken(input.id),inbox:this.transfer.inboxFor(input.id),maxFileBytes:this.transfer.limits.maxFileBytes,maxBatchBytes:this.transfer.limits.maxBatchBytes};break;
         }
+        case "changes": result=await ws.changes(input.id);break;
         case "discover": result=await ws.discover();break;
         case "project": result=await ws.createProject(input.name,input.url);break;
         case "import": {

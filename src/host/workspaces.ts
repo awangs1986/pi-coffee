@@ -10,10 +10,16 @@ export interface Conversation { id: string; projectId: string; cwd: string; bran
 interface Artifact { path:string; modifiedAt:string; size:number; available:boolean }
 const privateName=(name:string)=> /^(\.git|\.pi|\.coffee|\.ssh|\.aws|\.env(?:\..*)?|\.npmrc|\.netrc|auth\.json|credentials(?:\..*)?)$/i.test(name);
 const pythonCommand=process.platform === "win32" ? "python" : "python3";
+const LF=String.fromCharCode(10),BACKSLASH=String.fromCharCode(92);
 const samePath=(left:string,right:string)=> {
   const normalized=(value:string)=>normalize(resolve(value));
   const [a,b]=[normalized(left),normalized(right)];
   return process.platform === "win32" ? a.toLowerCase()===b.toLowerCase() : a===b;
+};
+const displayPath=(path:string)=> {
+  if(!path || path.startsWith('/') || path.startsWith(BACKSLASH+BACKSLASH) || path.split('').some(char=>char.charCodeAt(0)<32))return false;
+  const parts=path.split('/').flatMap(part=>part.split(BACKSLASH));
+  return !parts.some(part=>part==='..' || privateName(part));
 };
 interface State { version: 1; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[] }
 interface Proposal { token: string; sessionId: string; source: string; target: string; diff: string; expires: number }
@@ -63,7 +69,21 @@ export class Workspaces {
     try {return await next;} finally {if(this.tails.get(name)===next)this.tails.delete(name);}
   }
   private conversationLock(id:string) { return 'project:'+this.conversation(id).projectId; }
-  private git(cwd:string,args:string[]) { return exec('git',['-c','core.hooksPath=/dev/null',...args],{cwd,timeout:120000,maxBuffer:2*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}}).then(r=>args.includes("-z") ? r.stdout : r.stdout.trim()); }
+  private git(cwd:string,args:string[],maxBuffer=2*1024*1024) { return exec('git',['-c','core.hooksPath=/dev/null',...args],{cwd,timeout:120000,maxBuffer,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}}).then(r=>args.includes("-z") ? r.stdout : r.stdout.trim()); }
+  private async gitBounded(cwd:string,args:string[],maxBuffer:number):Promise<string> {
+    try {return await this.git(cwd,args,maxBuffer);}
+    catch(error) {const stdout=(error as {stdout?:string}).stdout;if(typeof stdout==='string')return stdout;throw error;}
+  }
+  private async gitResult(cwd:string,args:string[],maxBuffer=2*1024*1024):Promise<{code:number;stdout:string;stderr:string}> {
+    try {
+      const r=await exec('git',['-c','core.hooksPath=/dev/null',...args],{cwd,timeout:120000,maxBuffer,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}});
+      return {code:0,stdout:String(r.stdout),stderr:String(r.stderr)};
+    } catch(error) {
+      const e=error as NodeJS.ErrnoException & {stdout?:string;stderr?:string};
+      if(typeof e.code==='number')return {code:e.code,stdout:String(e.stdout ?? ''),stderr:String(e.stderr ?? e.message)};
+      throw error;
+    }
+  }
   private project(id:string) { const p=this.state.projects.find(p=>p.id===id);if(!p)throw new Error('Unknown project');return p; }
   private conversation(id:string) { const c=this.state.conversations.find(c=>c.id===id);if(!c)throw new Error('Unknown workspace');return c; }
   async list() { await this.load();await this.saveTail;return structuredClone(this.state); }
@@ -138,6 +158,77 @@ export class Workspaces {
     const values=new Set(this.state.legacyArchived ?? []);if(archived)values.add(id);else values.delete(id);this.state.legacyArchived=[...values];await this.save();return {id,archived,legacy:true};
   },()=>'legacy:'+id);}
   async archive(id:string, archived:boolean, quiesced=false) {return this.mutate(async()=> {const c=this.conversation(id);if(c.workspaceRemoved)throw new Error("Deletion partially completed; retry permanent deletion");c.archived=archived;c.quiesced=archived && quiesced;await this.save();return c;},()=>this.conversationLock(id));}
+  /** Read-only change view for the browser worktree panel: committed + working-tree changes against the project default branch. */
+  async changes(id:string) {
+    await this.load();
+    const c=this.conversation(id),p=this.project(c.projectId);
+    if(c.workspaceRemoved)throw new Error('Workspace has been removed');
+    const source=await this.git(c.cwd,['rev-parse','HEAD']);
+    const target=await this.git(p.path,['rev-parse','HEAD']);
+    const base=await this.git(p.path,['merge-base',target,source]);
+    const statusRaw=await this.git(c.cwd,['status','--porcelain=v1','-z','--untracked-files=all']).catch(()=> '');
+    const nameStatusRaw=await this.git(c.cwd,['diff','--no-ext-diff','--no-textconv','--name-status','--no-renames','-z',base,'--']);
+    const numstatRaw=await this.git(c.cwd,['diff','--no-ext-diff','--no-textconv','--numstat','--no-renames','-z',base,'--']);
+    const files=new Map<string,{path:string;status:string;additions:number|null;deletions:number|null}>();
+    const nameParts=nameStatusRaw.split('\0').filter(Boolean);
+    for(let index=0;index+1<nameParts.length;index+=2) {
+      const path=String(nameParts[index+1]);if(!displayPath(path))continue;
+      const letter=String(nameParts[index])[0] ?? 'M';
+      files.set(path,{path,status:letter,additions:null,deletions:null});
+    }
+    for(const row of numstatRaw.split('\0').filter(Boolean)) {
+      const [add,del,...pathParts]=row.split('\t');const path=pathParts.join('\t');if(!displayPath(path))continue;
+      const entry=files.get(path) ?? {path,status:'M',additions:null,deletions:null};
+      entry.additions=add==='-' ? null : Number(add);entry.deletions=del==='-' ? null : Number(del);files.set(path,entry);
+    }
+    const untracked:string[]=[];
+    for(const row of statusRaw.split('\0').filter(Boolean)) {
+      if(!row.startsWith('?? '))continue;
+      const path=row.slice(3);if(displayPath(path)){untracked.push(path);files.set(path,{path,status:'?',additions:null,deletions:null});}
+    }
+    const untrackedSet=new Set(untracked);
+    const trackedPaths=[...files.keys()].filter(path=>!untrackedSet.has(path));
+    const patchParts:string[]=[],statParts:string[]=[],checkOutputs:string[]=[];
+    let checkCode=0;
+    // Never pass an empty pathspec: a sensitive tracked file was filtered above,
+    // and an unscoped diff would leak it back into the review payload.
+    for(let index=0;index<trackedPaths.length;index+=250) {
+      const paths=trackedPaths.slice(index,index+250);
+      patchParts.push(await this.gitBounded(c.cwd,['diff','--no-ext-diff','--no-textconv',base,'--',...paths],8*1024*1024));
+      statParts.push(await this.git(c.cwd,['diff','--no-ext-diff','--stat','--no-renames',base,'--',...paths]).catch(()=> ''));
+      const result=await this.gitResult(c.cwd,['diff','--no-ext-diff','--check',base,'--',...paths]);
+      if(result.code!==0){checkCode=result.code;checkOutputs.push(result.stdout || result.stderr);}
+    }
+    let patch=patchParts.filter(Boolean).join('\n');
+    const untrackedPatches:string[]=[];
+    for(const path of untracked.slice(0,100)) {
+      const text=await this.untrackedPatch(id,path);if(text)untrackedPatches.push(text);
+    }
+    if(untrackedPatches.length)patch=(patch ? patch+'\n' : '')+untrackedPatches.join('\n');
+    const stat=statParts.filter(Boolean).join('\n');
+    const limit=150000;
+    return {
+      sessionId:id,projectId:c.projectId,branch:c.branch,source,target,base,
+      files:[...files.values()].sort((a,b)=>a.path.localeCompare(b.path)),
+      stat:stat || 'no changes',
+      patch:patch.slice(0,limit),truncated:patch.length>limit,
+      checks:[{
+        command:'git diff --check',ok:checkCode===0,exitCode:checkCode,
+        output:(checkOutputs.join('\n') || 'clean').slice(0,20000),
+      }],
+    };
+  }
+  private async untrackedPatch(id:string,path:string):Promise<string|undefined> {
+    let full:string,info:Awaited<ReturnType<typeof stat>>;
+    try {full=await this.file(id,path);info=await stat(full);} catch {return undefined;}
+    if(!info.isFile() || info.size>256*1024)return undefined;
+    const content=await readFile(full,'utf8').catch(()=> undefined);if(content===undefined || content.includes('\0'))return undefined;
+    const withoutTrailingNewline=content.endsWith('\n') ? content.slice(0,-1) : content;
+    const lines=withoutTrailingNewline.length ? withoutTrailingNewline.split('\n') : [];
+    const additions=lines.map(line=>'+'+line).join('\n');
+    const hunk=lines.length===0 ? '@@ -0,0 +0,0 @@' : `@@ -0,0 +1,${lines.length} @@`;
+    return ['diff --git a/'+path+' b/'+path,'new file mode 100644','index 0000000..0000000','--- /dev/null','+++ b/'+path,hunk,additions].join(LF)+(content.endsWith(LF) || lines.length===0 ? '' : LF+BACKSLASH+' No newline at end of file');
+  }
   async prepareMerge(id:string) {return this.mutate(async()=> {
     const c=this.conversation(id),p=this.project(c.projectId);
     if(c.archived)throw new Error('Restore the conversation first');
