@@ -67,34 +67,38 @@ The Relay must not add a second model protocol, buffer an entire stream, or writ
 
 The future Deployment Skill is idempotent: install the pinned Pi package, PI Coffee Host, and systemd configuration; accept a one-time Enrollment Token; exchange it for a revocable Host identity; and emit a deployment report. It is a 0.1 deliverable, not required for the local MVP.
 
-## Harness prompt baseline
+## Pi Agent design — current, maintained contract
 
-The current V3 prompt result is the content baseline for PI Coffee. Per the maintainer's provenance note, V3 went through three prompt evolutions: a current Claude Code prompt extraction/material pass, a Pi-specific adaptation, and a stabilization pass. PI Coffee derives two Pi-native profiles from that result: `lean` for the stable behavioral core and `full` for the self-contained engineering/TDD guidance layer.
+The owner-confirmed Agent decisions live in the [Pi Agent main SPEC](../spec/pi-agent.md), with stable PA requirement IDs, rationale, open questions, implementation status and acceptance criteria. The [Work prompt SPEC](../spec/harness-prompt.md) owns the WP behavior rules and prompt maintenance process; dated reviews provide evidence, not a second contract.
 
-The prompt is appended to Pi's native Base Prompt and is guidance only. It must describe only tools and Host behavior that are actually available in the current session. It must not invent execution controls, identity, permissions, sandboxing, automatic gates, or rollback. The canonical fixtures and renderer are documented in [`docs/spec/harness-prompt.md`](../spec/harness-prompt.md) and tracked by Gitea Issue [#14](http://testpc:3000/awangs/pi-coffee/issues/14).
+The 2026-09-20 decisions supersede the old V3-derived Lean/Full and Simple/Full product-mode design. The target has only Chat and Work. Chat has no system prompt, including Pi's native default; Work has a complete development prompt. Exact tool inventories and migration details remain explicitly unresolved in the main SPEC. Agent extensions must remain plugins around the unmodified Pi, with an upgradeable upstream and a restrained tool surface.
+
+The checkout still uses legacy mode routing and appends the Work body to Pi Base. This is implementation status, not a decision to preserve that behavior in Chat. Gitea synchronization for the new decisions is pending connectivity; no external ticket acceptance is asserted.
 
 ## Explicit deferrals
 
 V5 feature migration is a later, separately ticketed phase. No current 0.1 ticket is permission to copy V5 implementation or revive its sandbox/worktree design. The first priority is a reliable web conversation seam.
 
-## `pi-subagents` integration baseline
+## `pi-subagents` compatibility implementation
 
-The Agent Host loads the locked upstream `pi-subagents@0.63.0` Pi extension and
-its shipped resource directories through a small local Adapter. The upstream
-Module owns delegation and child-run orchestration; PI Coffee owns only the
-extension-loading Seam. `subagent` and `bg_wait` remain optional tools exposed
-through Harness `search_tools`, so the frozen V5 Simple/Full tables remain 8/10.
+This section describes the legacy runtime, not the new Chat/Work policy. Allocation to the new modes remains PA-Q04 in the main SPEC.
+
+The Agent Host loads the locked upstream `pi-subagents@0.63.0` extension and
+its resources through local adapters. The upstream module owns the executor;
+local plugin adapters handle loading, model policy, admission and bounded
+parent-facing output. `subagent` and `bg_wait` remain optional tools exposed
+through Harness `search_tools`, outside the legacy 8/10 base tool counts.
 `PI_COFFEE_SUBAGENTS=off` is the scoped rollback switch and
 `PI_COFFEE_EXTENSIONS=off` disables all extension loading. Real User VM child
 execution and browser observability require a separate acceptance ticket.
 
-## Harness plugin baseline
+## Harness compatibility implementation
 
-The first V5 migration slice is the native Pi Harness extension. It pins the
-Gitea V5 reference at `awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f`
-and preserves the two base tables exactly: Simple has 8 tools and Full has 10.
-The extension combines those tables with the V3-derived Lean/Full prompt
-fixtures. Because the agreed execution boundary is the owner-managed User VM,
-the adapter does not revive V5 Guard, permission tiers, managed snapshots,
-Devloop gates, or completion labels. Unsupported V5 operations report their
-status explicitly and are handled in later, separately ticketed slices.
+The existing native Pi Harness retains the historical V5 tool-table reference
+`awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f`: Simple has 8 base tools
+and Full has 10, with registered recovery and optional tools accounted for
+separately. It now reads one Work body, not two Lean/Full fixtures. These tables
+are compatibility behavior, not the new Work inventory or a reason to inject
+instructions into Chat. VM isolation remains the execution boundary; Guard,
+permission tiers, managed snapshots and enforced development gates are not
+reintroduced. See the [compatibility SPEC](../spec/harness-plugin.md).
