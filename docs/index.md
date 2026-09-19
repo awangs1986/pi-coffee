@@ -1,5 +1,7 @@
 # PI Coffee documentation map
 
+> **2026-09-19 已确认的架构更新**：[统一网关 ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md) 与 [主 SPEC §2／§7](./spec/multi-user-vm.md)：统一 HTTPS 入口，聊天／文件经轻量网关转发，用户 VM 仅私网开放，复用原生 Pi；浏览器缓存及草稿按已确认访谈策略。文件网关尚待开发，不代表现有直连运行代码已切换。与下方历史文档冲突时以此次更新为准。
+
 > **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
 
 > **2026-09-16 最终决定与任务索引**：所有模式共用通用软件开发提示词；VM 是隔离边界，不新增 sandbox/内核。Simple/Lean 完全不使用子 Agent、直接搜索；Full 默认研究子任务，3/主对话、5/VM、独立模型。搜索历史只保留短摘要和证据索引；本地恢复失败不静默回退模型摘要。以下旧模式/范围描述如有冲突，以当日五份主 SPEC 和任务表为准。 [P0–P5 决策与未完工作](./development/plan-20260916.md)。

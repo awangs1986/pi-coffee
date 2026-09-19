@@ -1,5 +1,7 @@
 # PI Coffee MVP protocol
 
+> **2026-09-19 目标拓扑变更，尚待实现**：见 [ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md)。默认只对外提供统一 HTTPS 入口，聊天和文件流由网关转到私网 VM；VM 不再要求浏览器直达。本文中的直连 Transfer 地址、双浏览器侧 TLS 和逐 VM 端口开放说明描述旧实现，不应据此配置新公网部署。当前代码／模板尚未完成文件网关，不能只关闭 VM 文件端口就声称迁移成功。网关与 Host 保持独立生命周期；文件流不在入口落盘。
+
 The Browser and Host use the same versioned JSON frame vocabulary. The Web Server validates the Browser frame and forwards it; it does not reinterpret Pi events and keeps no conversation state.
 
 ## Connection sequence
