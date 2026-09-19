@@ -14,8 +14,8 @@ const marked = new Marked({
   renderer: {
     code({ text, lang }) {
       const l = normalizeLang((lang || '').split(/\s+/)[0]);
-      const label = (lang || '').split(/\s+/)[0] || '';
-      return '<div class="codeblock"><div class="codeblock-head"><span class="codeblock-lang">' + esc(label || 'text') + '</span><button type="button" class="codeblock-copy" data-copy>复制</button></div><pre><code class="lang-' + esc(l || 'text') + '">' + highlight(text, l) + '</code></pre></div>';
+      const label = (lang || '').split(/\s+/)[0] || 'text';
+      return `<div class="codeblock"><div class="codeblock-head"><span class="codeblock-lang">${esc(label)}</span><button type="button" class="codeblock-copy" data-copy>复制</button></div><pre><code class="lang-${esc(l || 'text')}" data-language="${esc(label)}">${highlight(text, l)}</code></pre></div>`;
     },
     image({ href, text }) {
       if(/^(https?:|data:image\/(png|jpeg|gif|webp);base64,)/i.test(href || '')) return '<a href="'+esc(href)+'" target="_blank" rel="noopener noreferrer"><img src="'+esc(href)+'" alt="'+esc(text)+'"></a>';
@@ -40,7 +40,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 
 const PURIFY = {
   USE_PROFILES: { html: true },
-  ADD_ATTR: ['target', 'data-copy'],
+  ADD_ATTR: ['target', 'data-copy', 'data-language', 'data-workspace-path', 'data-workspace-download'],
   FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form', 'input', 'svg', 'math'],
 };
 
@@ -141,17 +141,18 @@ function renderDiffOps(ops) {
   }).join('') + '</div>';
 }
 
-function renderPatchText(patch) {
+export function renderPatchText(patch, { cursor = false } = {}) {
   const lines = String(patch).split('\n');
   let add = 0, del = 0;
   const rows = lines.map((line) => {
-    if (line.startsWith('+++') || line.startsWith('---')) return '<div class="diff-row meta">' + esc(line) + '</div>';
-    if (line.startsWith('@@')) return '<div class="diff-row gap">' + esc(line) + '</div>';
-    if (line.startsWith('+')) { add++; return '<div class="diff-row add"><span class="sign">+</span><span class="text">' + esc(line.slice(1)) + '</span></div>'; }
-    if (line.startsWith('-')) { del++; return '<div class="diff-row del"><span class="sign">-</span><span class="text">' + esc(line.slice(1)) + '</span></div>'; }
-    return '<div class="diff-row ctx"><span class="sign"> </span><span class="text">' + esc(line.startsWith(' ') ? line.slice(1) : line) + '</span></div>';
+    const row = (cls, cells) => `<div class="diff-row ${cls}">${cells}</div>`;
+    if (line.startsWith('+++') || line.startsWith('---')) return row('meta', `<span class="sign">${cursor ? ' ' : ''}</span><span class="text">${esc(line)}</span>`);
+    if (line.startsWith('@@')) return row('gap', `<span class="sign">${cursor ? ' ' : ''}</span><span class="text">${esc(line)}</span>`);
+    if (line.startsWith('+')) { add++; return row('add', `<span class="sign">${cursor ? ' ' : '+'}${cursor ? '<span class="cursor-add">+</span>' : ''}</span><span class="text">${esc(line.slice(1))}</span>`); }
+    if (line.startsWith('-')) { del++; return row('del', `<span class="sign">${cursor ? '- ' : '-'}${cursor ? '<span class="cursor-space"> </span>' : ''}</span><span class="text">${esc(line.slice(1))}</span>`); }
+    return row('ctx', `<span class="sign">${cursor ? '　' : ' '}</span><span class="text">${esc(line.startsWith(' ') ? line.slice(1) : line)}</span>`);
   });
-  return '<div class="diff-stats"><span class="add">+' + add + '</span> <span class="del">−' + del + '</span></div><div class="diff">' + rows.join('') + '</div>';
+  return `<div class="diff-stats">${cursor ? '<span class="add">+</span><span class="del">-</span> ' : ''}<span class="add">+${add}</span> <span class="del">−${del}</span></div><div class="diff">${rows.join('')}</div>`;
 }
 
 /** Body HTML for a tool card, chosen by tool type. */
@@ -207,6 +208,7 @@ export function fileChips(files) {
   for (const file of files) {
     const chip = el(file.href ? 'a' : 'span', 'file-chip');
     if (file.href) { chip.href = file.href; chip.target = '_blank'; chip.rel = 'noopener'; chip.title = '下载 ' + file.name; }
+    else if (file.uploadPath) { chip.dataset.uploadPath = file.uploadPath; chip.title = file.uploadPath; }
     chip.innerHTML = '<span class="file-ico">📄</span><span class="file-name"></span><span class="file-size"></span>';
     chip.querySelector('.file-name').textContent = file.name;
     chip.querySelector('.file-size').textContent = formatBytes(file.size);
@@ -312,10 +314,5 @@ export function timeGroup(iso) {
   if (!Number.isFinite(t.getTime())) return '更早';
   const now = new Date();
   const start = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((start(now) - start(t)) / 86400000);
-  if (days <= 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 7) return '最近 7 天';
-  if (days < 30) return '最近 30 天';
-  return '更早';
+  return start(t) === start(now) ? '今天' : '更早';
 }
