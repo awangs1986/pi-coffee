@@ -2,7 +2,7 @@
 
 > **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
 
-> **2026-09-16 最终决定与任务索引**：所有模式共用通用软件开发提示词；VM 是隔离边界，不新增 sandbox/内核。Simple/Lean 完全不使用子 Agent、直接搜索；Full 默认研究子任务，3/主对话、5/VM、独立模型。搜索历史只保留短摘要和证据索引；本地恢复失败不静默回退模型摘要。以下旧模式/范围描述如有冲突，以当日五份主 SPEC 和任务表为准。 [P0–P5 决策与未完工作](./docs/development/plan-20260916.md)。
+> **Pi Agent 当前规格入口**：[主 SPEC](./docs/spec/pi-agent.md)统一维护 PA 决定、Chat/Work、未决项、实现状态与验收；[Work 专项 SPEC](./docs/spec/harness-prompt.md)维护 WP 规则。下方 2026-09-02/03 的模式、工具表和完成记录是历史切片；被替代的设计不得重新作为当前要求。Gitea 本轮不可达，09-20 决定与本地证据待同步，不据此关闭远端工单。
 
 
 > 讨论汇总日期：2026-09-02\
@@ -43,6 +43,14 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `LATER` | 明确延后到 0.1 之后或另一个版本 |
 | `HOLD` | 明确不做，除非前提发生变化 |
 | `OPEN` | 需要补充一个具体工程选择；不能阻塞已确定的 MVP |
+| `SUPERSEDED` | 设计已由链接的新规格取代；保留追溯，不再作为目标要求。既有兼容实现是否保留另看源码与迁移计划 |
+
+## Pi Agent 持续维护入口（2026-09-20）
+
+- [PA 主规格](./docs/spec/pi-agent.md)：PA-001～008 已确认原则；PA-Q01～05 未决；PA-AC 验收与当前检出实现分别记录。
+- [WP 提示词规格](./docs/spec/harness-prompt.md)：唯一正文、稳定行为规则、工程预算与持续维护的验收样例。
+- 下一步只按已确认范围推进：模式/工具清单问题先逐项对齐；上下文统计与真实模型调用质量仍需代码/实测证据。Work 正文已做本地验证，不等于新模式已发布。
+- Gitea 同步待恢复；下方 `HARNESS-001/002` 等 `DONE` 是当时的切片记录，不表示 Chat/Work 已完成。不要在本 Backlog 复制一套主规格正文。
 
 ---
 
@@ -115,14 +123,14 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | ID | 状态 | 结论 | 交付影响 |
 |---|---|---|---|
 | `D-036` | `DECIDED` | Deployment Skill 做成自动化、幂等的 PI Agent 原生 Skill。 | 安装 Pi 后可把 Skill 提供给 Pi Agent，完成 Host/systemd/enrollment/report；Skill 不管理 VM。 |
-| `D-037` | `DECIDED` | 尽量使用 Pi Agent 原生插件/扩展 seam，模块化优先。 | Pi-specific 代码留在 adapter；Web、Host、Relay、身份和文件模块分层。 |
+| `D-037` | `DECIDED` | 2026-09-20 owner 明确：Agent 增强只通过原版 Pi 插件扩展，保留上游升级能力。 | 当前合同归 [PA-001](./docs/spec/pi-agent.md)；不维护内核分叉，Host/Web 保持窄接缝。 |
 | `D-038` | `DISCOVERY` | 可参考/folk `pi-web`，但不承诺直接套用。 | 先评估许可证、协议、维护成本和可删减部分；必要时大量改造或重写，不能牺牲 PI Coffee 窄 seam。见 `ARCH-001`。 |
 | `D-039` | `DECIDED` | 尽量复用 Gitea 上已有代码，但只复用兼容且可验证的模块。 | 不为“复用”把 V5 的 Guard、Worktree 或领域对象偷偷带入 MVP/0.1。 |
 | `D-040` | `DECIDED` | Rust 只在测出实际性能瓶颈后引入。 | 第一实现使用 Node/TypeScript；Rust 模块必须有基准、边界和回滚方案。 |
 | `D-041` | `LATER` | 除已明确登记的 Harness 基础表外，V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 每个后续迁移必须单独评审、单独验收；不得借 Harness ticket 偷渡其他模块。 |
-| `D-042` | `DECIDED` | 当前 V3 提示词（含三次演化后的结果）是 PI Coffee Harness 的内容基线；PI Coffee 只做面向原版 Pi 的语义修补，交付 `lean` 与 `full` 两个 profile。 | Prompt 必须保持语义准确、只描述实际可用能力，不产生不存在的执行副作用。以 V3-derived、Pi-native 的 fixture 为唯一正文来源；CCB 只作为行为参考。见 `HARNESS-001`。 |
-| `D-043` | `DECIDED` | 第一项 V5 Harness 迁移以 Gitea `awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f` 为冻结基线；Simple 固定 8 个工具，Full 固定 10 个工具，并通过原版 Pi extension seam 接入。 | 只移植工具表/接口和可在 User VM 诚实执行的行为；不恢复 V5 Guard、权限、managed snapshot、Devloop 或 Completion Label。见 `HARNESS-002`。 |
-| `D-044` | `DECIDED` | Web 搜索使用 PI Coffee 本地 `web_search` + Control Plane Serper Relay；官方 `pi-web-access` 只保留非冲突内容工具；搜索结论写入 User VM Markdown，后续 context 只保留指针和结论。 | Serper key 不得进入 User VM；子 Agent 通过官方 delegation event 调用；Web capability 不改变 Harness 8/10 基础表。见 `WEB-001`。 |
+| `D-042` | `SUPERSEDED` | 历史方案：以 V3 结果为基线派生 Lean/Full 两份提示词。 | 当前目标见 [PA-002/004 与 WP SPEC](./docs/spec/harness-prompt.md)：Chat/Work 与唯一 Work 正文；不以本条要求回读 V3。旧交付见 `HARNESS-001`。 |
+| `D-043` | `SUPERSEDED` | 历史工具表：冻结 V5 引用上的 Simple 8 / Full 10，经 Pi 插件适配。 | 代码仍有兼容实现，但目标模式与工具清单归 [PA-002/005、PA-Q01](./docs/spec/pi-agent.md)；不能把旧 8/10 当新设计。旧交付见 `HARNESS-002`。 |
+| `D-044` | `DECIDED` | 本地 Web 工具接 Serper Relay；有界完整证据先留 User VM，历史只保留摘要和索引。 | 实现/失败语义见 [Web SPEC](./docs/spec/web-search-plugin.md)；新模式工具/委派分配待 PA-Q01/04，旧基础表计数不是目标约束。 |
 
 ### 1.1 被替换的早期方案
 
@@ -282,13 +290,14 @@ MVP-001..005 (已完成)
 2. 一个变更尽量对应一个 active ticket；新增范围先更新本 Backlog 和 Issue。
 3. 在公共 seam 先写失败测试，再实现最小垂直切片；每次提交前运行 `npm run check`。
 4. 完成不是“代码能跑”就算：必须有测试/部署/故障证据、Issue 评论和 fresh clone 或目标 VM 验证。
-5. 产品决定变化时更新 `docs/product/decisions.md` 与相关 ADR；单纯状态变化更新 Gitea Issue，不复制出第二份规范。
+5. Agent 讨论决定与行为变更按 [PA 主规格](./docs/spec/pi-agent.md)和 [WP 规格](./docs/spec/harness-prompt.md)维护；同步理由、未决项、实现状态与验收依据。需要架构决定时更新 ADR；Gitea 管工单状态，离线时标待同步，不复制第二份主规格。
 6. 除已登记并验收的 `HARNESS-002` 基础工具表外，V5 相关想法只能进入本文件的 `LATER/HOLD` 区，直到 0.1 release gate 通过。
 
 ## 7. 讨论主题到交付物的追踪
 
 | 讨论主题 | 当前权威文档 | 当前 backlog |
 |---|---|---|
+| 原版 Pi 插件扩展、Chat/Work、Work 提示词、上下文与工具调用、持续维护 | [Pi Agent 主 SPEC](./docs/spec/pi-agent.md)、[Work SPEC](./docs/spec/harness-prompt.md) | PA-001～008；PA-Q/PA-AC 与 WP 验收，不以历史 DONE 代替 |
 | PI Coffee 命名、V5 冻结、从原版 Pi 做 MVP | [`docs/product/decisions.md`](./docs/product/decisions.md)、ADR-0001/0002 | `D-001..D-004`, `MVP-001..005` |
 | 超强服务器、Debian Web/Control Plane、Linux Mint User VM、手动快照 | [`docs/architecture/topology.md`](./docs/architecture/topology.md)、[`docs/deployment/runbook.md`](./docs/deployment/runbook.md) | `D-010..D-016`, `DEP-001`, `OPS-001` |
 | 上下文归属、隐私和唯一 key | ADR-0003、[`docs/product/decisions.md`](./docs/product/decisions.md) | `D-017..D-024`, `CP-001`, `SEC-001` |
@@ -298,7 +307,7 @@ MVP-001..005 (已完成)
 | 自动化 Deployment Skill、Pi 原生插件、模块化、Rust | [`docs/development/workflow.md`](./docs/development/workflow.md) | `D-036..D-040`, `DEP-001`, `ARCH-002`, `PERF-001/002` |
 | pi-web fork/改造/重写 | README、架构 seam 约束 | `D-038`, `ARCH-001`, `OPEN-009` |
 | V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001`, `HARNESS-003` |
-| V3 提示词修补为 Pi Lean/Full，并接入 V5 Harness 工具表 | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042..D-043`, `HARNESS-001..002` |
+| 历史 Lean/Full 提示词与 Simple/Full 工具表 | [Harness 兼容说明](./docs/spec/harness-plugin.md)与历史审计；设计已替代 | `D-042..D-043`（SUPERSEDED），`HARNESS-001..002` 历史切片 |
 | `pi-subagents` 上游扩展接入 Agent Host | [`docs/spec/subagents-plugin.md`](./docs/spec/subagents-plugin.md)、[`docs/research/pi-subagents-audit-20260903.md`](./docs/research/pi-subagents-audit-20260903.md) | `SUBAGENT-001..002`, `HARNESS-003` |
 | Web 搜索、Serper Relay、原生子 Agent 研究和 Markdown 封盘 | [`docs/spec/web-search-plugin.md`](./docs/spec/web-search-plugin.md)、[`docs/research/pi-web-access-audit-20260903.md`](./docs/research/pi-web-access-audit-20260903.md) | `D-044`, `WEB-001..002` |
 
@@ -320,3 +329,4 @@ MVP-001..005 (已完成)
 | 2026-09-03 | owner 决策 ADR-0009：文件传输采用 LocalSend v2，浏览器与 User VM 点对点，B 不经手字节；局域网、明文 HTTP、不考虑手机场景。交付 `FILE-001a`（Host TransferServer + 网页附件直传/进度/引用/下载），发版 `v0.1.0-mvp.3`。 |
 | 2026-09-03 | 交付 D（`SHELL-001a`）：Extension UI 对话框与即发即忘方法接到浏览器，挂起对话跨刷新重发；空会话不再进入共享列表，空闲回收时删除。发版 `v0.1.0-mvp.2`。 |
 | 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |
+| 2026-09-20 | 建立可持续维护的 Pi Agent 主 SPEC 与 WP 专项合同；标记 D-042/043 的旧模式设计已替代，D-037 升级为明确插件边界；保持工具清单等未决项，记录本地实现/验收差距。Gitea 不可达，尚未同步新决定或关闭工单。 |

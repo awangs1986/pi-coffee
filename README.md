@@ -1,6 +1,6 @@
 # PI Coffee
 
-> **2026-09-16 owner 更新**：通用软件开发提示词已统一（simple/lean/full 同正文）；VM 是执行隔离边界，不新增 sandbox/内核。搜索历史只保留精选摘要与索引，完整证据留在独立 VM artifact；默认不委派搜索子 Agent。恢复使用 context-fold 本地算法、常驻 recall_folded 和失败取消，不再静默回退模型摘要。当前合同见 `docs/spec/harness-prompt.md`、`docs/spec/web-search-plugin.md`、`docs/spec/context-recovery.md`（路径均相对仓库根）。通用 SUBAGENTS 设计待单独对齐；下文历史 Lean/Full、8/10 总数、agent_end 封存与 fail-open 描述由上述合同取代。
+> **Pi Agent 设计与维护入口**：[主 SPEC](./docs/spec/pi-agent.md) 是插件扩展、Chat/Work、工具克制、上下文与调用可靠性的持续维护依据；[Work 提示词 SPEC](./docs/spec/harness-prompt.md) 定义正文规则和验收。Chat 连 Pi 默认系统提示词也不要。**当前检出版本仍为旧模式接线**，下述 8/10 基础表不是已确认的新 Work 工具清单；模式迁移和 Chat 零系统提示词仍待实现。讨论决定、代码状态和验收证据分别记录，不以旧实现反推新设计。
 
 
 PI Coffee is the independent MVP track for using the original Pi coding agent from a web page.
@@ -19,7 +19,7 @@ Browser  ── WebSocket ──>  Web Server  ── WebSocket ──>  Host  �
 - Closing or refreshing the browser detaches the connection; it does not stop the Session.
 - Reconnecting with the Session ID and Cursor replays buffered Events.
 - The Web Server has no Pi implementation knowledge; the Pi-specific code is one adapter.
-- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The native Harness extension exposes the fixed 8/10 base tool tables with one universal software-development prompt; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. The native Web adapter uses the Control Plane Serper Relay and seals concluded research into User VM Markdown artifacts; official `pi-web-access@0.27.0` remains available for optional content/source tools. The local adapter for pinned `context-fold@0.4.0` provides model-free compaction and a local emergency recovery path; see the context-recovery specification for its failure behavior. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
+- PI Coffee does not include V5 Guard, permission approvals, managed snapshots, or Devloop enforcement. The current compatibility Harness exposes the legacy 8/10 base tool tables with the Work development prompt; its `git` adapter is limited to native status/diff and basic native worktree operations. The locked `pi-subagents@0.63.0` extension is loaded in the Agent Host as an optional delegation capability; its tools do not change the Harness 8/10 base counts. The native Web adapter uses the Control Plane Serper Relay and seals concluded research into User VM Markdown artifacts; official `pi-web-access@0.27.0` remains available for optional content/source tools. The local adapter for pinned `context-fold@0.4.0` provides model-free compaction and a local emergency recovery path; see the context-recovery specification for its failure behavior. Gitea integration, PI Coffee Task/Session orchestration, uploads, and image handling remain separate tickets.
 
 The Pi adapter uses the upstream package's documented RPC client and is pinned to `@earendil-works/pi-coding-agent@0.84.4` for this first slice. See the upstream [RPC documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md) for the underlying command/event semantics.
 
@@ -81,16 +81,17 @@ Settings:
 | `PI_COFFEE_WEB` | enabled | host | set to `off` to disable the PI Coffee Web adapter |
 | `PI_COFFEE_WEB_ACCESS` | enabled | host | set to `off` to disable the official pi-web-access adapter |
 | `PI_COFFEE_SUBAGENTS` | enabled | host | set to `off`/`0`/`false`/`no` to disable only the packaged pi-subagents extension |
-| `PI_COFFEE_CONTEXT_FOLD` | enabled | host | set to `off`/`0`/`false`/`no` to disable context-fold; Pi's native compaction remains available |
+| `PI_COFFEE_CONTEXT_FOLD` | enabled | host | set to `off`/`0`/`false`/`no` to disable the local context adapter; Web recovery refuses without its loaded-state marker |
 | `PI_COFFEE_PI_LENS` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to pi-lens; it is not loaded or made visible by default |
 | `PI_COFFEE_RPIV_TODO` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to rpiv-todo; its todo tool, command, and overlay are not loaded by default |
 | `PI_COFFEE_PI_MCP_ADAPTER` | disabled | host | set to `on`/`1`/`true`/`yes` to opt in to pi-mcp-adapter; its MCP proxy and runtime are not loaded by default |
 
-context-fold keeps the raw session ledger and only rewrites the per-request copy. Its default
-`CONTEXTFOLD_COMPACT=det` mode emits a deterministic summary for hard compaction. The plugin's
-own error handling deliberately returns control to Pi when folding or deterministic compaction
-fails, making native Pi compaction the fallback rather than a competing default. Advanced
-context-fold tuning remains available through its `CONTEXTFOLD_*` variables and `/context-fold` command.
+context-fold keeps the raw session ledger and folds the per-request copy. Its default
+`CONTEXTFOLD_COMPACT=det` mode produces a deterministic index for hard compaction. PI Coffee's
+local adapter cancels failed or disabled hard compaction instead of silently falling back to
+a model-generated summary. Web recovery also checks that this adapter is loaded. See the
+[context recovery contract](./docs/spec/context-recovery.md) for configuration and limitations;
+these protections do not constitute precise token accounting or completed real-provider acceptance.
 
 `pi-lens@4.1.3` is packaged for a future opt-in path only. PI Coffee does not proactively load
 it, initialize its LSP/diagnostic runtime, or add its tools to the model's visible tool set.
@@ -128,8 +129,8 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Web Server and browser shell](http://testpc:3000/awangs/pi-coffee/issues/4)
 - [End-to-end verification and runbook](http://testpc:3000/awangs/pi-coffee/issues/5)
 - [MVP → 0.1 handoff](http://testpc:3000/awangs/pi-coffee/issues/6)
-- [Harness Lean/Full prompt（V3-derived, Pi-native）](http://testpc:3000/awangs/pi-coffee/issues/14)
-- [Harness Pi plugin：V5 Simple/Full tools + prompt](http://testpc:3000/awangs/pi-coffee/issues/15)
+- [历史工单：Lean/Full prompt](http://testpc:3000/awangs/pi-coffee/issues/14)（当前设计见 Pi Agent 主 SPEC）
+- [历史工单：Simple/Full Harness 兼容工具表](http://testpc:3000/awangs/pi-coffee/issues/15)
 - [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
 - [pi-subagents 集成与 User VM 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/17)
 - [pi-subagents User VM/Web 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/18)

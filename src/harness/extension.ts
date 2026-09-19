@@ -80,8 +80,8 @@ export interface HarnessExtensionOptions {
 /**
  * PI Coffee's native Pi extension.
  *
- * One universal software-development prompt plus explicit tool selection.
- * Execution isolation belongs to the owning VM, not this extension.
+ * Work instructions with the existing legacy tool-mode routing. Chat/Work
+ * runtime separation is not implemented here yet. Isolation belongs to the VM.
  */
 export default function harnessExtension(pi: ExtensionAPI): void {
   createHarnessExtension()(pi);
@@ -99,7 +99,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   let catalog: CapabilityCatalog | undefined;
   let epoch: ExecutionEpoch | undefined;
   const startupDiagnostics: string[] = [];
-  const prompt = renderHarnessPrompt("simple");
+  const prompt = renderHarnessPrompt("work");
   const verifyState = createMemoryVerifyState();
   const run: NativeCommandRunner = (command, args, options) => pi.exec(command, args, options);
   const persistVerify = (cwd: string, state: VerifyWorkspaceState): void => {

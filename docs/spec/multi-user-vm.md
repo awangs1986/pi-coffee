@@ -7,13 +7,11 @@
 - 本文仅保存决策，不保存原始访谈、用户会话或凭据。
 - 第 21 项的整理解释：产品内置本地合并；远端 push/PR 交给 VM 中原版 Pi 调用 Git/平台 CLI 等工具，不新增产品 PR 管理器。Git 本身不是 PR API，远端操作仍需相应工具及授权。
 
-## 0. 本轮 Agent 精简补充（2026-09-16）
+## 0. Agent 设计的规格归属（2026-09-20）
 
-owner 后续确认：删除两套 Lean/Full 提示词，所有模式共用一份通用软件开发系统提示词；VM 是执行隔离边界，不引入 sandbox/内核。保留原生 Pi 和既有增强，不建立第二套压缩/权限/开发状态机。
+Agent 插件边界、Chat/Work、提示词、工具与上下文目标统一由 [Pi Agent 主 SPEC](./pi-agent.md)维护；Work 行为规则见[提示词 SPEC](./harness-prompt.md)。本文不再复制一份模式/工具政策，工作台正文的范围不因这次文档整理而改变。
 
-搜索完成即落盘独立证据文件，历史只接收短的精选结果摘要和来源索引，不保存完整结果转储；Simple/Lean 直接搜索；Full 默认由研究子任务实际搜索，而不是父搜索后再起摘要子任务。上下文与恢复合同见同目录 `harness-prompt.md`、`web-search-plugin.md`、`context-recovery.md`。
-
-**子 Agent 最终补充已确认并有本地实现**：仅 Full 使用；每根对话最多 3 个运行子 Pi、每 VM 最多 5 个，超额排队；独立模型、禁止递归、有界父端输出。Simple/Lean 完全不使用子任务；切换模式不强杀先前 Full 作业。详见 `subagents-plugin.md`。未授权新的子任务 worktree 策略。完整工作台仍待增量实现/实机验收，任务拆分见 [2026-09-16 P0–P5](../development/plan-20260916.md)。
+原 09-16 的 Agent 讨论和工具实现可在[历史交接](../development/plan-20260916.md)及[上下文](./context-recovery.md)、[搜索](./web-search-plugin.md)、[子 Agent](./subagents-plugin.md)专项 SPEC 追溯。当前仍有旧模式兼容代码，不等于新 Chat/Work 已实现；它们的工具/委派分配待 PA-Q01/04 确认。工作台排期仍以[产品 P0–P5](../development/product-priorities-20260916.md)为准。
 
 ## 1. 目标与适用范围
 

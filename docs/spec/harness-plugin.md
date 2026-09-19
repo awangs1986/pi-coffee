@@ -1,23 +1,23 @@
 # PI Coffee Harness Pi 插件
 
-> **2026-09-16 owner 更新**：通用软件开发提示词已统一（simple/lean/full 同正文）；VM 是执行隔离边界，不新增 sandbox/内核。搜索历史只保留精选摘要与索引，完整证据留在独立 VM artifact；默认不委派搜索子 Agent。恢复使用 context-fold 本地算法、常驻 recall_folded 和失败取消，不再静默回退模型摘要。当前合同见 `docs/spec/harness-prompt.md`、`docs/spec/web-search-plugin.md`、`docs/spec/context-recovery.md`（路径均相对仓库根）。通用 SUBAGENTS 设计待单独对齐；下文历史 Lean/Full、8/10 总数、agent_end 封存与 fail-open 描述由上述合同取代。
+> **范围：兼容实现，不是目标模式设计**。本文说明当前旧 Harness 工具表与原生适配。产品模式及维护依据已移至 [Pi Agent 主 SPEC](./pi-agent.md)；Work 正文见[提示词 SPEC](./harness-prompt.md)。不能将这里的 Simple/Full 或 8/10 直接等同于 Chat/Work；新工具清单和迁移规则仍待确认。
 
 
-状态：已实现（PI Coffee `main`）。这是对冻结 V5 Harness 工具表的 Pi-native 适配，不是对 V5 运行时的复制。
+状态：当前检出版本保留此兼容实现。下述冻结 V5 工具表仅为历史接口参考，不是运行时依赖或新产品模式要求。
 
 ## 基线和计数
 
-本插件以 Gitea `awangs/picode` 的最新 V5 `origin/main` 提交
-`778a3d534ba41f331210037a8c791bdfc0dabe7f` 为基线。V5 的 `/harness` 只有两张基础工具表：
+本兼容工具表的历史参考是 Gitea `awangs/picode` 提交
+`778a3d534ba41f331210037a8c791bdfc0dabe7f`；当前旧 `/harness` 接线有两张基础工具表：
 
 | 模式 | 基础工具 | 数量 |
 |---|---|---:|
 | `simple` | `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, `search_tools` | **8** |
 | `full` | Simple 的 8 个 + `git`, `verify` | **10** |
 
-`src/harness/mode.ts` 是 PI Coffee 内部唯一的工具表来源。插件在启动时会把期望表过滤到 Pi 实际注册的工具；缺少必需工具时不会声称模式已就绪。启用后续可选插件可能使“有效激活工具数”高于基础数，但不会改变这两张 V5 基础表。
+`src/harness/mode.ts` 是 PI Coffee 内部唯一的工具表来源。插件在启动时会把期望表过滤到 Pi 实际注册的工具；缺少必需工具时不会声称模式已就绪。若注册了 `recall_folded`，当前兼容实现默认总数为 9/11；按需激活的可选能力另计。这不是新 Work 模式工具清单的确认。
 
-V5 的 `capabilities`、`context`、`handoff`、`kernel` 及 Web 能力不是这两张 Harness 基础表的一部分，后续逐项另立工单。
+历史 V5 模块不因该表而自动进入当前范围；已实现的能力发现、上下文、Web 接入以对应源码和专项 SPEC 为准，新增能力遵循主规格 PA-005。
 
 ## Pi 接缝
 
@@ -26,7 +26,7 @@ V5 的 `capabilities`、`context`、`handoff`、`kernel` 及 Web 能力不是这
 - 注册 `search_tools`、`git`、`verify` 三个自定义工具；Simple 启动时只激活 `search_tools`，Full 再激活 `git` 和 `verify`。
 - 注册 `/harness` 和 `/verify` 命令。
 - 从会话的 custom entries 恢复模式和验证 profile；状态只在 User VM 的 Pi session 中持久化。
-- 在 `before_agent_start` 把现有的 V3-derived `lean`/`full` fixture 追加到 Pi Base Prompt，并用 `<pi_coffee_harness>` 边界去重。动态工具列表只作为运行时事实追加，不改写稳定 prompt 正文。
+- 在 `before_agent_start` 将 `renderHarnessPrompt("work")` 读取的唯一 Work 正文追加到 Pi Base Prompt，并用 `<pi_coffee_harness>` 边界去重。动态工具列表只作为运行时事实追加，不改写稳定 prompt 正文。
 - `standard` 映射为 Full + quick profile，`tdd` 映射为 Full + advisory tdd profile；没有第三套工具表。
 
 Host 的 `RpcPiSessionFactory` 支持 `extensions`，`main` 默认加载编译后的

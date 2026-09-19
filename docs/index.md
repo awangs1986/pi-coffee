@@ -1,52 +1,51 @@
 # PI Coffee documentation map
 
-> **2026-09-19 已确认的架构更新**：[统一网关 ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md) 与 [主 SPEC §2／§7](./spec/multi-user-vm.md)：统一 HTTPS 入口，聊天／文件经轻量网关转发，用户 VM 仅私网开放，复用原生 Pi；浏览器缓存及草稿按已确认访谈策略。文件网关尚待开发，不代表现有直连运行代码已切换。与下方历史文档冲突时以此次更新为准。
+> **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。旧模式描述属于历史/兼容实现，不能反推新设计；Chat 零系统提示词和模式迁移尚未在当前检出版本实现。
 
-> **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
+> **2026-09-19 架构更新**：[统一网关 ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md) 与 [工作台主 SPEC](./spec/multi-user-vm.md)：统一 HTTPS 入口，聊天/文件经轻量网关转发，用户 VM 仅私网开放，复用原生 Pi。文件网关仍待开发，不代表现有直连运行代码已经切换。
 
-> **2026-09-16 最终决定与任务索引**：所有模式共用通用软件开发提示词；VM 是隔离边界，不新增 sandbox/内核。Simple/Lean 完全不使用子 Agent、直接搜索；Full 默认研究子任务，3/主对话、5/VM、独立模型。搜索历史只保留短摘要和证据索引；本地恢复失败不静默回退模型摘要。以下旧模式/范围描述如有冲突，以当日五份主 SPEC 和任务表为准。 [P0–P5 决策与未完工作](./development/plan-20260916.md)。
+> **工作台产品排期**：[P0–P5](./development/product-priorities-20260916.md) 仅覆盖 Pi Agent 讨论之前的工作台产品 SPEC，与 Agent 改进分开维护。
 
+This index links to maintained contracts and clearly dated evidence. It is not another copy of their requirements.
 
-This is the handoff index for the independent PI Coffee repository. It is deliberately short; each linked document is the single source for one kind of knowledge.
+## Start here
 
-## Read in this order
+1. [`AGENTS.md`](../AGENTS.md): repository guardrails, specification maintenance, and completion criterion.
+2. **Agent changes:** [`spec/pi-agent.md`](./spec/pi-agent.md), then the relevant specialist SPEC below. Owner decisions, current implementation and acceptance are separate states.
+3. [`BACKLOG.md`](../BACKLOG.md) and the corresponding [Gitea Issue](http://testpc:3000/awangs/pi-coffee/issues): scope, dependencies and external ticket status. Record pending synchronization if unavailable.
+4. [`development/workflow.md`](./development/workflow.md): discussion → maintained SPEC → test/change → evidence/status loop.
+5. [`product/decisions.md`](./product/decisions.md): product decisions and links to the current Agent contract.
 
-1. [`AGENTS.md`](../AGENTS.md): repository guardrails and completion rule.
-2. [`../BACKLOG.md`](../BACKLOG.md): the complete discussion-derived backlog and traceability map ([Gitea Issue #13](http://testpc:3000/awangs/pi-coffee/issues/13)).
-3. [`product/decisions.md`](./product/decisions.md): decisions carried over from the design conversation, with their MVP/0.1 status.
-4. [`spec/mvp.md`](./spec/mvp.md): the implemented first vertical slice and its evidence.
-5. [`spec/0.1.md`](./spec/0.1.md): the next release contract and ticket order.
-6. [`architecture/topology.md`](./architecture/topology.md): Host, Web Server, Control Plane, User VM, and data ownership.
-7. [`protocol.md`](./protocol.md): the current browser ↔ Web Server ↔ Host frame contract.
-8. [`deployment/runbook.md`](./deployment/runbook.md): local smoke run and target VM deployment.
-9. [`development/workflow.md`](./development/workflow.md): test, review, and Gitea workflow.
-10. [`development/handoff-import.md`](./development/handoff-import.md): import the temporary source attachment if the remote branch is still empty.
-11. [`development/wiki-publish.md`](./development/wiki-publish.md): owner procedure for mirroring these pages into Gitea Wiki.
-12. [`spec/harness-prompt.md`](./spec/harness-prompt.md): the single universal Pi-native software-development prompt contract.
-13. [`spec/harness-plugin.md`](./spec/harness-plugin.md): V5 8/10 tool tables, Pi extension wiring, and User VM-native adapters.
-14. [`spec/subagents-plugin.md`](./spec/subagents-plugin.md): locked `pi-subagents` integration, optional-tool semantics, and rollback switches.
-15. [`spec/web-search-plugin.md`](./spec/web-search-plugin.md): Relay-backed Serper search, native subagent delegation, and Markdown research closure.
+## Maintained Agent specifications
 
-## Research notes
+- [`pi-agent.md`](./spec/pi-agent.md): PA decisions, rationale, open questions, implementation gaps, acceptance matrix and revision history.
+- [`harness-prompt.md`](./spec/harness-prompt.md): WP rules, Work prompt source, engineering budget, public extension seam and model behavior evaluation cases.
+- [`context-recovery.md`](./spec/context-recovery.md): context ingress limits, local compaction, conservative request budgeting and failure behavior; new-mode allocation follows the main SPEC.
+- [`web-search-plugin.md`](./spec/web-search-plugin.md): Relay-backed search, bounded history and evidence artifacts; legacy dispatch is labeled separately from target modes.
+- [`subagents-plugin.md`](./spec/subagents-plugin.md): upstream executor adapter, admission/model/output contracts; does not decide the new mode mapping.
+- [`harness-plugin.md`](./spec/harness-plugin.md): **compatibility implementation**, including old tool tables and native Git/Verify adapters; not the target Chat/Work design.
 
-- [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): V3 prompt provenance/content audit, V5 harness mapping, and the proposed PI Coffee `/harness` boundary.
-- [`pi-subagents-audit-20260903.md`](./research/pi-subagents-audit-20260903.md): upstream source/version audit and Pi 0.84.4 loading evidence.
-- [`spec/web-shell-roadmap.md`](./spec/web-shell-roadmap.md): what the Codex-style browser shell has (A/B/C) and what is still missing (D/E/F/G), with the order to build it.
-- [`pi-web-evaluation-20260903.md`](./research/pi-web-evaluation-20260903.md): `ARCH-001` evaluation of agegr/pi-web against the PI Coffee deployment shape and ADRs; recommends keeping the Host/Web seam and borrowing its extension-UI, native-session-history and reconnection designs.
-- [`pi-web-access-audit-20260903.md`](./research/pi-web-access-audit-20260903.md): official `pi-web-access@0.27.0` loading audit, tool conflict isolation, and Serper credential boundary.
-- [`handoff-completeness-audit-20260903.md`](./research/handoff-completeness-audit-20260903.md): coverage audit for today's design discussion and current implementation gaps.
-- [`gitea-full-audit-20260903.md`](./reviews/gitea-full-audit-20260903.md): current `main` code, Issues, PRs, validation evidence, risks, and release gates.
-- [`vm-smoke-evidence-20260903.md`](./reviews/vm-smoke-evidence-20260903.md): real Debian/Mint VM simulation evidence for Relay, Web, Host, Pi, streaming, reconnect, and credential boundaries.
-- Web delivery tickets: [WEB-001 / #23](http://testpc:3000/awangs/pi-coffee/issues/23) (code slice) and [WEB-002 / #24](http://testpc:3000/awangs/pi-coffee/issues/24) (real VM acceptance).
+## Product, protocol and operations
 
-## Authority order
+- [`spec/multi-user-vm.md`](./spec/multi-user-vm.md): workbench product contract; [`spec/web-shell-roadmap.md`](./spec/web-shell-roadmap.md): shell delivery history/roadmap.
+- [`spec/mvp.md`](./spec/mvp.md) and [`spec/0.1.md`](./spec/0.1.md): release slices and ticket ordering; their old Agent-mode descriptions do not override the current main SPEC.
+- [`architecture/topology.md`](./architecture/topology.md), [`adr/`](./adr/), [`protocol.md`](./protocol.md): topology, architectural decisions and transport contract.
+- [`deployment/runbook.md`](./deployment/runbook.md): deployment and probes; [`development/handoff-import.md`](./development/handoff-import.md): import recovery instructions; [`development/wiki-publish.md`](./development/wiki-publish.md): Wiki mirroring procedure.
 
-- Gitea Issues are authoritative for scope, status, dependencies, and acceptance comments: [awangs/pi-coffee/issues](http://testpc:3000/awangs/pi-coffee/issues).
-- ADRs are authoritative for hard-to-reverse architectural choices.
-- The checked-in code and tests are authoritative for behaviour that is already implemented.
-- The product and release specs are authoritative for planned behaviour not yet implemented.
-- The Picode V5 repository is not a PI Coffee work queue or source tree.
+## Dated research and evidence — not alternate current specifications
 
-## Current handoff state
+- [`work-prompt-20260920.md`](./reviews/work-prompt-20260920.md): pinned Codex and Claude Code references, Pi native prompt findings, adopted/rejected rules, subtraction of duplicated guidance, and explicit limitations.
+- [`plan-20260916.md`](./development/plan-20260916.md): **historical** Pi/tool handoff; its old mode decisions have been superseded, not silently carried forward.
+- [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): historical prompt provenance; not a requirement to inspect V3 or revive its design.
+- [`pi-subagents-audit-20260903.md`](./research/pi-subagents-audit-20260903.md) and [`pi-web-access-audit-20260903.md`](./research/pi-web-access-audit-20260903.md): pinned package integration evidence.
+- [`pi-web-evaluation-20260903.md`](./research/pi-web-evaluation-20260903.md): Host/Web seam evaluation; [`handoff-completeness-audit-20260903.md`](./research/handoff-completeness-audit-20260903.md): historical gap audit.
+- [`gitea-full-audit-20260903.md`](./reviews/gitea-full-audit-20260903.md) and [`vm-smoke-evidence-20260903.md`](./reviews/vm-smoke-evidence-20260903.md): results for those revisions/environments, not automatic acceptance of later changes.
+- Web delivery tickets: [WEB-001 / #23](http://testpc:3000/awangs/pi-coffee/issues/23) and [WEB-002 / #24](http://testpc:3000/awangs/pi-coffee/issues/24).
 
-The remote `main` contains the MVP in its deployment shape: Agent Host + original Pi for the User VM, Web Server + LLM Relay for the server, the Codex-style browser shell, systemd/env templates in `deploy/`, and a real-model evidence script (`scripts/smoke-real-model.mjs`). It also loads the locked `pi-subagents@0.63.0` extension and the native Web adapter; `scripts/smoke-subagents.mjs` verifies Web/subagent registration without a model key. A fresh clone passes `npm ci && npm run check`; the three-process path has been reproduced on a workstation across a LAN interface with the Host holding no upstream key. Installing it on the real server and User VM is the owner's step, driven by the task brief on [#5](http://testpc:3000/awangs/pi-coffee/issues/5); Relay evidence is on [#7](http://testpc:3000/awangs/pi-coffee/issues/7).
+## Authority and maintenance
+
+- Gitea manages Issue status, dependencies and acceptance comments; ADRs record architectural choices.
+- Maintained SPECs define confirmed/planned behavior. For Agent decisions start with `pi-agent.md`, not a dated report or an old entrypoint banner.
+- Code/tests in the checkout define implemented behavior. Evidence states the revision, commands, environment and unverified boundaries; a requirement or document being written does not mean it has shipped.
+- Change the canonical requirement and linked implementation/evidence status together. Keep unresolved proposals explicit, mark superseded rules, and update links instead of duplicating full contracts.
+- Wiki is a mirror, not a competing source. Frozen Picode V5 is not a work queue or implementation dependency.
