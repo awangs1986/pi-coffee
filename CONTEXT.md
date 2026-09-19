@@ -2,7 +2,7 @@
 
 > **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
 
-> **2026-09-16 最终决定与任务索引**：所有模式共用通用软件开发提示词；VM 是隔离边界，不新增 sandbox/内核。Simple/Lean 完全不使用子 Agent、直接搜索；Full 默认研究子任务，3/主对话、5/VM、独立模型。搜索历史只保留短摘要和证据索引；本地恢复失败不静默回退模型摘要。以下旧模式/范围描述如有冲突，以当日五份主 SPEC 和任务表为准。 [P0–P5 决策与未完工作](./docs/development/plan-20260916.md)。
+> **Pi Agent 当前设计**：从[主 SPEC](./docs/spec/pi-agent.md)开始，Work 正文见[专项 SPEC](./docs/spec/harness-prompt.md)。产品目标仅 Chat/Work，Chat 不保留任何系统提示词；当前代码仍为旧模式兼容实现。工具名单、迁移等未决项与验收状态在主 SPEC 维护；[09-16 计划](./docs/development/plan-20260916.md)仅作历史追溯，不再用其旧模式描述推断 owner 的最新决定。
 
 
 PI Coffee is the small, independent web product line for talking to the original Pi coding agent. It is the experimental MVP track; the existing Picode V5 repository remains a frozen reference and is not a source of work for this track.

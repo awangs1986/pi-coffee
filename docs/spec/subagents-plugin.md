@@ -1,8 +1,8 @@
 # 原生子 Agent：默认研究、独立模型、VM 并发准入
 
-更新：2026-09-16。当前模式策略：Simple/Lean 完全不使用子 Agent；以下委派功能仅限 Full。
+实现合同更新：2026-09-16；规格归属更新：2026-09-20。当前兼容代码仍为 Simple/Lean 禁用、Full 可用。目标模式由 [Pi Agent 主 SPEC](./pi-agent.md) PA-002 定义；这里的模式分配、3/5 准入等现有行为不能未经确认整体映射成 Work 政策，见 PA-Q04。本次未修改执行器或配额。
 
-## 产品合同
+## 当前兼容实现合同
 
 - **Simple/Lean** 不可激活 `subagent`/`bg_wait`，搜索直接执行并保留短摘要与证据索引，即使传入 `delegate=true` 也不启动子任务。原生子任务命令亦要求切到 Full。
 - **Full** 的 Web 搜索默认由 `coffee-research` 子 Pi 真正执行，必要时使用 `fetch_content`/`read` 核查来源。父 Agent 负责分解与综合，接收短结论、URL 和证据文件索引，不先搜索再委派摘要。

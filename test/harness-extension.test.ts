@@ -3,10 +3,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { Check } from "typebox/value";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import harnessExtension, { createHarnessExtension } from "../src/harness/extension.js";
 import { MemoryCapabilitySettingsStore } from "../src/capabilities/settings.js";
 import { FULL_TOOLS, SIMPLE_TOOLS } from "../src/harness/mode.js";
+import { renderHarnessPrompt } from "../src/harness/prompt.js";
 import { createWebExtension } from "../src/web/extension.js";
 
 type Handler = (event: unknown, context: unknown) => unknown;
@@ -194,7 +196,7 @@ describe("PI Coffee V5 harness extension", () => {
     expect(verifyState?.data.state.profile).toBe("none");
   });
 
-  it("injects the same universal prompt exactly once in every mode", async () => {
+  it("injects Work instructions once through legacy modes without replacing Pi's base", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
     sessions.push(cwd);
     const pi = new FakePi(cwd);
@@ -220,6 +222,14 @@ describe("PI Coffee V5 harness extension", () => {
     expect(full.systemPrompt).toContain("# Software development");
     expect(full.systemPrompt).not.toMatch(/V3|V5/);
     expect(full.systemPrompt.match(/# Software development/g)).toHaveLength(1);
+    expect(full.systemPrompt.startsWith("BASE SYSTEM\n\n")).toBe(true);
+    expect(full.systemPrompt).toContain(renderHarnessPrompt("work"));
+    expect(full.systemPrompt).toContain("Active harness mode: full.");
+    expect(full.systemPrompt).not.toContain("Active harness mode: simple.");
+    const repeated = (await pi.emit("before_agent_start", {
+      systemPrompt: full.systemPrompt,
+    })) as { systemPrompt: string };
+    expect(repeated.systemPrompt).toBe(full.systemPrompt);
   });
 
   it("keeps git and verify in the Harness table rather than the optional capability catalog", async () => {
@@ -323,6 +333,32 @@ describe("PI Coffee V5 harness extension", () => {
     const result = await pi.runTool("verify", { action: "run" });
     expect(result.content[0].text).toContain("overall: passed");
     expect(result.content[0].text).not.toContain("Completion Label");
+  });
+
+  it("executes the discovery example from the Work prompt without activating on search alone", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
+    sessions.push(cwd);
+    const pi = new FakePi(cwd);
+    createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
+    createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
+    await pi.emit("session_start", { type: "session_start", reason: "startup" });
+
+    const examples = [...renderHarnessPrompt("work").matchAll(/search_tools\((\{[^\n]*?\})\)/g)]
+      .map((match) => JSON.parse(match[1]));
+    expect(examples).toEqual([
+      { action: "search", query: "web" },
+      { action: "activate", capability_id: "web" },
+    ]);
+    const registeredNames = [...pi.tools.keys()];
+    for (const input of examples) expect(Check(pi.tools.get("search_tools")!.parameters, input)).toBe(true);
+    expect(pi.getActiveTools()).not.toContain("web_search");
+    const search = await pi.runTool("search_tools", examples[0]);
+    expect(search.details.hits.some((hit: { id: string }) => hit.id === examples[1].capability_id)).toBe(true);
+    expect(pi.getActiveTools()).not.toContain("web_search");
+    const activation = await pi.runTool("search_tools", examples[1]);
+    expect(activation.details).toMatchObject({ ok: true, effective: "next-model-request" });
+    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "web_search", "research_seal"]);
+    expect([...pi.tools.keys()]).toEqual(registeredNames);
   });
 
   it("discovers and activates the local Relay-backed web capability", async () => {
