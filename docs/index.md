@@ -35,6 +35,7 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 ## Dated research and evidence — not alternate current specifications
 
 - [`work-prompt-20260920.md`](./reviews/work-prompt-20260920.md): pinned Codex and Claude Code references, Pi native prompt findings, adopted/rejected rules, subtraction of duplicated guidance, and explicit limitations.
+- [`work-prompt-20260920-pi-claude-grok.md`](./reviews/work-prompt-20260920-pi-claude-grok.md): pinned Pi, Claude Code full and Grok Build cross-reference; adopted/rejected additions for the expanded generic Work prompt, current text-contract evidence and behavior gaps.
 - [`plan-20260916.md`](./development/plan-20260916.md): **historical** Pi/tool handoff; its old mode decisions have been superseded, not silently carried forward.
 - [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): historical prompt provenance; not a requirement to inspect V3 or revive its design.
 - [`pi-subagents-audit-20260903.md`](./research/pi-subagents-audit-20260903.md) and [`pi-web-access-audit-20260903.md`](./research/pi-web-access-audit-20260903.md): pinned package integration evidence.

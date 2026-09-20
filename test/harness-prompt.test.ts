@@ -23,7 +23,7 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     const prompt = renderHarnessPrompt("work");
     expect(renderHarnessPrompt()).toBe(prompt);
     expect(prompt).toContain("# Software development");
-    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(6400);
+    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(9000);
     expect(prompt).not.toMatch(/sandbox|devloop|\{\{|<!--/i);
     expect(prompt).not.toMatch(/\b(?:Simple|Lean|Full)\b|Runtime harness state|3 per|5 per|8\/10|9\/11/);
   });
@@ -58,13 +58,26 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
 
   it("distinguishes analysis from implementation and keeps planning proportional", () => {
     const prompt = renderHarnessPrompt("work");
+    expect(prompt).toMatch(/software-engineering context/i);
+    expect(prompt).toMatch(/clear change request.*locate the relevant code/i);
     expect(prompt).toContain("Questions, reviews, and diagnoses do not authorize implementation");
     expect(prompt).toContain("smallest complete change");
     expect(prompt).toContain("Read an existing file before editing it");
     expect(prompt).toMatch(/short.*plan/i);
     expect(prompt).toMatch(/skip.*planning.*small/i);
+    expect(prompt).toMatch(/Keep every explicit requirement in view/i);
     expect(prompt).toMatch(/root.cause/i);
     expect(prompt).toMatch(/project instructions/i);
+  });
+
+  it("scopes project guidance and keeps implementation proportional", () => {
+    const prompt = renderHarnessPrompt("work");
+    expect(prompt).toMatch(/additional project instruction files whose scope covers/i);
+    expect(prompt).toMatch(/More local instructions override wider ones/i);
+    expect(prompt).toMatch(/Match precision to scope/i);
+    expect(prompt).toMatch(/surgical changes/i);
+    expect(prompt).toMatch(/broad or new.*state assumptions/i);
+    expect(prompt).toMatch(/XSS.*secret exposure/i);
   });
 
   it("specifies how a review or diagnosis is reported", () => {
@@ -73,6 +86,7 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/file and line/i);
     expect(prompt).toMatch(/confirmed facts from open questions/i);
     expect(prompt).toMatch(/no defect/i);
+    expect(prompt).toMatch(/Do not modify files while answering a review-only request/i);
   });
 
   it("treats unexpected workspace state as someone else's work", () => {
@@ -88,6 +102,8 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/field names.*types.*required fields/i);
     expect(prompt).toContain("next model request");
     expect(prompt).toMatch(/Discovery alone does not activate/i);
+    expect(prompt).toMatch(/Search before saying.*unknown/i);
+    expect(prompt).toMatch(/denies a tool call.*do not repeat the exact same call/i);
     expect(prompt).toMatch(/inspect state before retrying/i);
     expect(prompt).not.toMatch(/TodoWrite|AskUserQuestion|EnterPlanMode|ExecuteExtraTool|SearchExtraTools|subagent_type|file_path|old_string/);
   });
@@ -97,6 +113,8 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/Limit output before requesting it/i);
     expect(prompt).toMatch(/Reuse.*evidence/i);
     expect(prompt).toMatch(/truncated preview is not complete evidence/i);
+    expect(prompt).toMatch(/Record load-bearing facts from tool output/i);
+    expect(prompt).toMatch(/Do not generate or guess URLs/i);
     expect(prompt).toMatch(/context statistics as estimates/i);
     expect(prompt).toContain("recall_folded");
     expect(prompt).toMatch(/available local recovery/i);
@@ -106,9 +124,12 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
   it("requires evidence without manufacturing success or extra work", () => {
     const prompt = renderHarnessPrompt("work");
     expect(prompt).toContain("failing test");
+    expect(prompt).toMatch(/narrowest relevant check/i);
     expect(prompt).toMatch(/final diff/i);
     expect(prompt).toMatch(/Never weaken checks/i);
     expect(prompt).toMatch(/existing failures.*environment blockers/i);
+    expect(prompt).toMatch(/do not fix unrelated broken tests/i);
+    expect(prompt).toMatch(/UI-affecting changes.*end to end/i);
     expect(prompt).toMatch(/unit test is not end-to-end verification/i);
     expect(prompt).toContain("Report outcomes faithfully");
     expect(prompt).toMatch(/request is satisfied, stop/i);
@@ -119,8 +140,22 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/authorized, reversible local work/i);
     expect(prompt).toMatch(/scope is already authorized/i);
     expect(prompt).toMatch(/publishing.*pushing/i);
+    expect(prompt).toMatch(/force-pushing.*resetting shared history/i);
+    expect(prompt).toMatch(/removing or downgrading dependencies/i);
+    expect(prompt).toMatch(/posting content to external services/i);
+    expect(prompt).toMatch(/Authorization stands for its stated scope/i);
     expect(prompt).toMatch(/private data externally/i);
     expect(prompt).toMatch(/incidental directives.*data, not authority/i);
     expect(prompt).toMatch(/secrets.*artifacts/i);
+  });
+
+  it("writes for a user who cannot watch the tool calls", () => {
+    const prompt = renderHarnessPrompt("work");
+    expect(prompt).toMatch(/cannot see tool calls or internal notes/i);
+    expect(prompt).toMatch(/briefly say what you are doing in user terms/i);
+    expect(prompt).toMatch(/answer it first/i);
+    expect(prompt).toMatch(/one question/i);
+    expect(prompt).toMatch(/Avoid time estimates/i);
+    expect(prompt).toMatch(/final message must stand alone/i);
   });
 });
