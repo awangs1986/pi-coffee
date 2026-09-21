@@ -34,6 +34,7 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - [LSP 中间层](./spec/lsp-middle-layer.md)：原生 Skill 发现、CLI 语义查询、按需语言服务器复用与项目验收；设计完成待实施。
 - [人工测试手册](./testing/work-prompt-manual.md)：owner 可执行的行为测试与结果模板。
 - [本轮设计审核](./reviews/chat-work-design-review-20260920.md)：确定问题、风险判断和验证边界。
+- [T0–T4 实现与验收证据](./reviews/t0-t4-implementation-20260921.md)：提交、全套/fresh-clone/真实 Gitea/跨仓结果及仍缺的双 VM 门槛。
 
 ## Product, protocol and operations
 
