@@ -1,5 +1,8 @@
 # PI Coffee Server documentation
 
+- [VM 完整权限与 Gitea 工作区决策](./adr/0012-owner-privileges-and-gitea-checkouts.md)
+- [T0–T4 联合交付](./development/t0-t4-gitea-workspaces.md)：设计已确认，Server 承担 T3 并参与 T4。
+
 - [`host-interface.md`](./host-interface.md): external seam with the Agent Runtime and compatibility rules.
 - [`architecture/topology.md`](./architecture/topology.md): deployment topology and data ownership.
 - [`spec/multi-user-vm.md`](./spec/multi-user-vm.md): confirmed workbench product behavior.

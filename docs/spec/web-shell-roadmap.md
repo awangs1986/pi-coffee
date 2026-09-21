@@ -1,5 +1,7 @@
 # Web Shell 路线图：像一个简化版 Codex
 
+> 工作区相关目标由 [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 和 [T0–T4](../development/t0-t4-gitea-workspaces.md) 接管：独立 Checkout、同步状态与真实 Gitea PR 替代本地合并；下方已交付记录仅证明当时实现。
+
 > 目标（owner，2026-09-03）：Web 端做成一个简化版 Codex——美观、好用。\
 > 约束：所有计算在 Host（User VM）；聊天记录永久存 VM；每次打开 Web 都能看到历史（ADR-0008）；Web Server 零状态；一个标签页一个 Shell（D-025）。\
 > 本文是差距清单与排期。状态以 Gitea Issue 为准；本文件只做索引。
@@ -70,7 +72,7 @@
 - 模型 key 管理面板：D-020，key 只在 Control Plane
 - 多标签页模型：D-025
 - 浏览器缓存历史：ADR-0008
-- 会话 fork / 分支导航：Pi RPC 支持，但先等 `TASK-001` 定义 Task 语义，避免和 Task/worktree 概念打架
+- 会话 fork / 分支导航：Pi RPC 支持，但先等 `TASK-001` 定义 Task 语义，与当前 Conversation/Checkout 语义对齐
 
 ## 2. 排期建议
 

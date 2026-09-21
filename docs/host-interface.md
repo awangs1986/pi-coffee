@@ -21,3 +21,7 @@ can pass through this gateway unchanged. Cross-repository release order is:
 2. run this repository's smoke against that Host revision;
 3. deploy Server;
 4. remove old Host behavior only after every deployed Server has moved forward.
+
+## Planned workspace transition
+
+[ADR-0012](./adr/0012-owner-privileges-and-gitea-checkouts.md) keeps checkout/Git/Gitea code API operations in Host. Server displays Host-provided synchronization and PR state; OAuth credentials are not VM Git credentials. T1/T2 introduce additive workspace capabilities; T3 detects them before exposing new actions; T4 removes old local merge actions only after rollout and migration evidence. Any incompatible removal requires an explicit protocol compatibility decision. This document does not claim the new contract is already implemented.

@@ -18,7 +18,7 @@ Browser：Arena 式 Pi 网页客户端 + 本地历史缓存／草稿
       文件服务 文件服务 文件服务
         │        │        │
       原生 Pi  原生 Pi  原生 Pi
-      原生历史／认证／Git worktree／上传与产物／插件
+      原生历史／认证／Conversation Checkout/Gitea／上传与产物／插件
 
 可选管理员 Relay 独立提供模型／搜索服务；原生模型不依赖模型 Relay。
 ```
@@ -54,3 +54,5 @@ Browser：Arena 式 Pi 网页客户端 + 本地历史缓存／草稿
 ## 接口边界
 
 Pi-specific 代码保留在 PiSessionFactory/PiSession adapter；前端投影原生状态与历史，协议做有界传输。网关仅保留必要身份／路由／健康元数据，不新增工具执行器、子 Agent 调度或 Git 引擎。
+
+代码工作区与执行权限按 [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md)：Host 管理独立 clone/Git/Gitea 代码 API；Server 保留 OAuth/路由/透明转发。Gitea 保存已同步代码，Pi 原生会话与未版本化文件仍只在 VM。T0–T4 尚待实施。
