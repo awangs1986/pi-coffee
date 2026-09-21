@@ -1,12 +1,12 @@
 # PI Coffee Backlog
 
-> **当前新增决策（2026-09-21）**：[ADR-0012](./docs/adr/0012-owner-privileges-and-gitea-checkouts.md) 接受 VM owner + 无限制 sudo、Gitea 代码权威与每 Conversation 独立 clone；[T0–T4](./docs/development/t0-t4-gitea-workspaces.md) 的 Agent/Server 代码与本地公共接缝测试已落地，部署、双 VM 与故障矩阵仍待实机证据。替代以下历史工作区/本地合并条目时以该合同为准。
+> **当前新增决策（2026-09-21）**：[ADR-0012](./docs/adr/0012-owner-privileges-and-gitea-checkouts.md) 接受 VM owner + 无限制 sudo、Gitea 代码权威与每 Conversation 独立 clone；[T0–T4](./docs/development/t0-t4-gitea-workspaces.md) 的 Agent/Server 代码与 webserver + linux001 单用户目标机验收已落地，[真实证据](./docs/reviews/t0-t4-implementation-20260921.md)已记录。第二用户、第二 User VM、2 × 3 Conversation 与快照恢复仍待 T4。替代以下历史工作区/本地合并条目时以该合同为准。
 
 > **2026-09-21 仓库拆分**：本文件保留历史产品 Backlog，但当前仓库的执行范围只包括 Agent Runtime。Web UI、统一网关、身份、固定路由、Relay 和 Server 部署进入 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)；新工作按两个仓库各自 Issue 追踪。
 
 > **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
 
-> **Pi Agent 当前规格入口**：[主 SPEC](./docs/spec/pi-agent.md)统一维护 PA 决定、Chat/Work、未决项、实现状态与验收；[Work 专项 SPEC](./docs/spec/harness-prompt.md)维护 WP 规则。下方 2026-09-02/03 的模式、工具表和完成记录是历史切片；被替代的设计不得重新作为当前要求。Gitea 本轮不可达，09-20 决定与本地证据待同步，不据此关闭远端工单。
+> **Pi Agent 当前规格入口**：[主 SPEC](./docs/spec/pi-agent.md)统一维护 PA 决定、Chat/Work、未决项、实现状态与验收；[Work 专项 SPEC](./docs/spec/harness-prompt.md)维护 WP 规则。下方 2026-09-02/03 的模式、工具表和完成记录是历史切片；被替代的设计不得重新作为当前要求。Gitea 已同步本轮实现和目标机证据；T0–T4 的未满足项以 #33–#36 的最新验收评论为准。
 
 
 > 讨论汇总日期：2026-09-02\
