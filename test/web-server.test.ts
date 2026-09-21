@@ -15,6 +15,11 @@ class FakeHost {
 
   constructor(private readonly token = "host-token") {
     this.http = createServer((request, response) => {
+      if (request.url === "/healthz") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ ok: true, role: "host", protocolVersion: 1 }));
+        return;
+      }
       if (request.headers.authorization !== `Bearer ${this.token}`) {
         response.writeHead(401).end();
         return;

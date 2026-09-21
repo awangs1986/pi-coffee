@@ -8,13 +8,14 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-public.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json && node scripts/copy-public.mjs",
     "test": "vitest run",
     "check": "npm run build && npm test",
     "start": "npm run start:web",
     "start:web": "node dist/src/web/main.js",
     "start:relay": "node dist/src/relay/main.js",
-    "smoke:gitea-oauth": "npm run build && node scripts/smoke-gitea-oauth.mjs"
+    "smoke:gitea-oauth": "npm run build && node scripts/smoke-gitea-oauth.mjs",
+    "smoke:real-model": "node scripts/smoke-real-model.mjs"
   },
   "dependencies": {
     "ws": "8.21.3"

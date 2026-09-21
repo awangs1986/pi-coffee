@@ -31,6 +31,8 @@ export interface WebAddress {
   port: number;
 }
 
+const SUPPORTED_HOST_PROTOCOL = 1;
+
 /** Browser-facing HTTP and WebSocket server. */
 export class WebServer {
   private readonly host: string;
@@ -172,22 +174,39 @@ export class WebServer {
     return fetch(url,{method,headers:{authorization:`Bearer ${route.hostToken}`,"content-type":"application/json"},...(value===undefined ? {} : {body:JSON.stringify(value)}),signal:AbortSignal.timeout(125000),redirect:"error"});
   }
 
+  private async assertHostCompatibility(route: { hostUrl: string; hostToken: string }): Promise<void> {
+    const response = await this.hostApi(route, "/healthz", "GET");
+    if (!response.ok) throw new Error("Host health check failed");
+    const health = await response.json() as { protocolVersion?: unknown };
+    if (health.protocolVersion !== SUPPORTED_HOST_PROTOCOL) {
+      throw new Error(`Unsupported Host protocol version: ${String(health.protocolVersion)}`);
+    }
+  }
+
   private async handleUpgrade(request: IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): Promise<void> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     if (path !== "/ws") {
       socket.destroy();
       return;
     }
+    let route = { hostUrl: this.hostUrl, hostToken: this.hostToken ?? "" };
     if (this.identity) {
       if (!this.identity.originAllowed(request)) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; }
       const session = await this.identity.authorize(request);
       if (!session) { socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n"); return; }
+      route = session.route;
       try {
-        const readiness=await this.hostApi(session.route,"/api/workspace","GET");
+        const readiness=await this.hostApi(route,"/api/workspace","GET");
         await readiness.body?.cancel();
         if(!readiness.ok)throw new Error("VM workspace mode required");
       } catch {socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");return;}
       (request as IncomingMessage & { coffeeRoute?: unknown }).coffeeRoute = session.route;
+    }
+    try {
+      await this.assertHostCompatibility(route);
+    } catch {
+      socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+      return;
     }
     this.wsServer.handleUpgrade(request, socket, head, (websocket) => {
       this.wsServer.emit("connection", websocket, request);

@@ -2,8 +2,8 @@
 
 The canonical Interface is owned by the Agent Runtime repository:
 
-- [wire protocol](http://gitea:3000/awangs/pi-coffee/src/branch/codex/chat-work-design/docs/protocol.md)
-- [protocol implementation](http://gitea:3000/awangs/pi-coffee/src/branch/codex/chat-work-design/src/shared/protocol.ts)
+- [wire protocol](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/protocol.md)
+- [protocol implementation](http://gitea:3000/awangs/pi-coffee/src/branch/main/src/shared/protocol.ts)
 
 PI Coffee Server is a transparent Adapter at this seam:
 
