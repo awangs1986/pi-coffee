@@ -12,7 +12,7 @@ Group=REPLACE_WITH_VM_OWNER
 WorkingDirectory=/opt/pi-coffee
 EnvironmentFile=/etc/pi-coffee/host.env
 Environment=HOME=/home/REPLACE_WITH_VM_OWNER
-ExecStart=/usr/bin/node dist/src/main.js host
+ExecStart=/usr/bin/node dist/src/main.js
 Restart=on-failure
 RestartSec=2
 # Give Pi a real PATH: package managers, compilers and git live in the usual places.

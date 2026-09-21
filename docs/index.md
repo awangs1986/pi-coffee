@@ -1,8 +1,10 @@
-# PI Coffee documentation map
+# PI Coffee Agent Runtime documentation map
+
+> **2026-09-21 仓库拆分**：本仓库只维护 User VM Agent Runtime。浏览器 UI、Web gateway、Gitea identity、固定路由和 Relay 已迁至 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)。拆分决定见 [ADR-0011](./adr/0011-split-agent-runtime-and-server-repositories.md)。
 
 > **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。退役模式说明已从当前文档撤下，历史由 Git 追溯；Chat 零系统提示词和模式迁移尚未在当前检出版本实现。
 
-> **2026-09-19 架构更新**：[统一网关 ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md) 与 [工作台主 SPEC](./spec/multi-user-vm.md)：统一 HTTPS 入口，聊天/文件经轻量网关转发，用户 VM 仅私网开放，复用原生 Pi。文件网关仍待开发，不代表现有直连运行代码已经切换。
+> **Server 产品规格**：统一网关、工作台与 Web Shell 的正文已迁至 `pi-coffee-server`；本仓库的同名文档是迁移指针。Host Interface 仍以 [`protocol.md`](./protocol.md) 为准。
 
 > **工作台产品排期**：[P0–P5](./development/product-priorities-20260916.md) 仅覆盖 Pi Agent 讨论之前的工作台产品 SPEC，与 Agent 改进分开维护。
 
@@ -32,9 +34,9 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 
 ## Product, protocol and operations
 
-- [`spec/multi-user-vm.md`](./spec/multi-user-vm.md): workbench product contract; [`spec/web-shell-roadmap.md`](./spec/web-shell-roadmap.md): shell delivery history/roadmap.
+- [`spec/multi-user-vm.md`](./spec/multi-user-vm.md) and [`spec/web-shell-roadmap.md`](./spec/web-shell-roadmap.md): migration pointers to `pi-coffee-server`.
 - [`spec/mvp.md`](./spec/mvp.md) and [`spec/0.1.md`](./spec/0.1.md): release slices and ticket ordering; their old Agent-mode descriptions do not override the current main SPEC.
-- [`architecture/topology.md`](./architecture/topology.md), [`adr/`](./adr/), [`protocol.md`](./protocol.md): topology, architectural decisions and transport contract.
+- [`architecture/topology.md`](./architecture/topology.md), [`adr/`](./adr/), [`protocol.md`](./protocol.md): Agent-side topology, architectural decisions and canonical Host Interface.
 - [`deployment/runbook.md`](./deployment/runbook.md): deployment and probes; [`development/handoff-import.md`](./development/handoff-import.md): import recovery instructions; [`development/wiki-publish.md`](./development/wiki-publish.md): Wiki mirroring procedure.
 
 ## Dated research and evidence — not alternate current specifications

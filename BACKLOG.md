@@ -1,5 +1,7 @@
 # PI Coffee Backlog
 
+> **2026-09-21 仓库拆分**：本文件保留历史产品 Backlog，但当前仓库的执行范围只包括 Agent Runtime。Web UI、统一网关、身份、固定路由、Relay 和 Server 部署进入 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)；新工作按两个仓库各自 Issue 追踪。
+
 > **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
 
 > **Pi Agent 当前规格入口**：[主 SPEC](./docs/spec/pi-agent.md)统一维护 PA 决定、Chat/Work、未决项、实现状态与验收；[Work 专项 SPEC](./docs/spec/harness-prompt.md)维护 WP 规则。下方 2026-09-02/03 的模式、工具表和完成记录是历史切片；被替代的设计不得重新作为当前要求。Gitea 本轮不可达，09-20 决定与本地证据待同步，不据此关闭远端工单。

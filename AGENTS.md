@@ -1,25 +1,28 @@
-# PI Coffee handoff entrypoint
+# PI Coffee Agent Runtime handoff entrypoint
 
-PI Coffee is the independent product in this repository. The current Picode Gitea repository named V5 is a frozen reference; do not edit it, split it, or import its unfinished implementation while working here.
+This repository owns the User VM Agent Runtime. The browser shell, Gitea OAuth,
+fixed user routing and centralized Relay live in `awangs/pi-coffee-server`.
+The frozen Picode V5 repository remains reference-only.
 
 ## First read
 
-1. Read [`docs/index.md`](./docs/index.md) to choose the relevant branch of the documentation.
-2. Read [`BACKLOG.md`](./BACKLOG.md) for the discussion-derived scope, status, dependencies, open questions, and explicit non-goals.
-3. Read the linked Gitea Issue before changing scope: [PI Coffee map](http://testpc:3000/awangs/pi-coffee/issues/1).
-4. For Pi Agent design, read the living [`docs/spec/pi-agent.md`](./docs/spec/pi-agent.md) first, then the relevant specialist SPEC (Work prompt: [`harness-prompt.md`](./docs/spec/harness-prompt.md)). Its confirmed Chat/Work decisions supersede historical mode descriptions; code/tests still define what is actually implemented. Other release scope remains in [`docs/spec/0.1.md`](./docs/spec/0.1.md) and its ticket links.
+1. Read [`docs/index.md`](./docs/index.md).
+2. Read [`BACKLOG.md`](./BACKLOG.md) for scope and status.
+3. Read the linked Gitea Issue before changing scope.
+4. For Agent changes, read [`docs/spec/pi-agent.md`](./docs/spec/pi-agent.md) and the relevant specialist SPEC.
 
 ## Working rules
 
-- Keep the Pi adapter behind its small interface; the Host and Web Server must not import Pi internals directly.
-- Preserve the Host session lifetime across browser disconnects.
-- Use the red → green loop at the public seam for each change. Run `npm run check` before reporting completion.
-- Keep credentials, cookies, VM snapshots, and user transcripts out of commits and Issues.
-- Maintain the SPEC alongside discussions and changes: record confirmed decisions and rationale, unresolved questions, implementation status, and acceptance evidence under stable PA/WP IDs. Dated reviews do not replace the living contract; mark superseded statements and update entrypoints. See [`docs/development/workflow.md`](./docs/development/workflow.md).
-- Record scope/status changes in the corresponding Gitea Issue. If it is unreachable, record pending synchronization locally, not a claimed remote acceptance. Do not silently turn a planned 0.1 item into a V5 change.
-
-- Product mode documentation uses only Chat/Work. Retire superseded mode tables and commands into Git history; do not rename compatibility behavior as shipped Chat/Work. `test/documentation-modes.test.ts` guards Markdown terminology.
+- Keep Pi internals behind the Pi Adapter Interface; Host code consumes only that Interface.
+- Treat [`docs/protocol.md`](./docs/protocol.md) and `src/shared/protocol.ts` as the external Server ↔ Host seam.
+- Preserve Host session lifetime across browser and gateway disconnects.
+- Do not add browser UI, Gitea OAuth, public routing or centralized upstream credentials to this repository.
+- Preserve VM ownership of transcripts, contexts, worktrees, uploads and artifacts.
+- Use red → green at the public seam and run `npm run check` before reporting completion.
+- Keep credentials, cookies, VM snapshots and user transcripts out of commits and Issues.
+- Product mode documentation uses only Chat/Work; retired slash modes stay in Git history.
 
 ## Completion criterion
 
-A ticket is ready to close only when its acceptance evidence is recorded in the Issue and a fresh clone can run the documented check or deployment probe that demonstrates it.
+A ticket is ready to close only when its acceptance evidence is recorded in the
+Issue and a fresh clone can run the documented check or deployment probe.

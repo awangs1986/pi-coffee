@@ -1,56 +1,19 @@
-# PI Coffee 目标拓扑
+# PI Coffee Agent Runtime topology
 
-更新：2026-09-19。owner 已确认目标；统一文件网关及浏览器缓存仍待增量实现。历史实现及测试数量不代表新拓扑已部署。决策依据：[ADR-0010](../adr/0010-unified-web-gateway-private-user-vms.md)、[主 SPEC](../spec/multi-user-vm.md)。
+The complete product topology is maintained in
+[`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server/src/branch/main/docs/architecture/topology.md).
 
-## 默认部署
+This repository occupies the User VM side:
 
 ```text
-Browser：Arena 式 Pi 网页客户端 + 本地历史缓存／草稿
-                 │ HTTPS/WSS，同源聊天／文件入口
-                 ▼
-统一 Web／轻量网关（唯一公网应用入口）
-  静态页面 · Gitea OAuth · 固定用户路由 · 授权 · 流式转发
-                 │ 私网，服务间鉴权
-        ┌────────┼────────┐
-        ▼        ▼        ▼
-      VM-甲    VM-乙    VM-丙（以后新增）
-      Host     Host     Host
-      文件服务 文件服务 文件服务
-        │        │        │
-      原生 Pi  原生 Pi  原生 Pi
-      原生历史／认证／Git worktree／上传与产物／插件
-
-可选管理员 Relay 独立提供模型／搜索服务；原生模型不依赖模型 Relay。
+PI Coffee Server ──private WS/HTTP──> Agent Host ──RPC──> original Pi
+                                             │
+                                             ├── native sessions and context
+                                             ├── project worktrees and Git
+                                             ├── uploads and artifacts
+                                             └── extensions, tools, Skills and LSP
 ```
 
-默认不要求每 VM 再运行一个 WebServer；不为每 VM 开公网端口或证书。前置 TLS 反向代理可以与 Web 分进程，但属于同一统一入口，不新增用户数据平台。
-
-## 职责与数据归属
-
-- Web 是 Pi 用户界面与轻量网关，不是第二套 Agent。复用现有原生公共接口、Git 和上游插件，保留当前增强层。
-- Host 负责 Pi 会话生命周期、事件同步、工作区映射与必要操作保护；原生历史只由 VM 保存，不另建权威聊天数据库。
-- 聊天与文件字节经过入口但不在入口归档、日志记录正文或临时落盘；文件服务保留 VM 端安全接收／原子发布。
-- 浏览器缓存账号／环境隔离，只为加载体验。默认 200 MiB／20000 条；近 7 天成功发送过消息的至多 5 个未归档对话有限预取，冷缓存可释放。详细语义见主 SPEC §7.4。
-- 安装脚本负责可重复安装／升级及报告，管理员手工配置 VM 和路由。不做自动 VM 生命周期管理或网页管理后台。
-
-## 文件通道
-
-浏览器仅需访问统一入口。网关每请求检查身份与受控路由，向 VM 文件端点有界流式转发；VM 再检查 scope／路径。不得接受任意后端 URL，也不能把私网 VM 下载地址直接作为浏览器唯一可用入口。传输必须保留取消、大小限制、Range、下载头及安全预览策略。
-
-## 生命周期与失败语义
-
-| 事件 | 行为 |
-|---|---|
-| 浏览器关闭／断网 | 断开前已被 Host 接受的任务继续；未确认的请求不自动重放。 |
-| Web／网关重启 | 不停止 Host/Pi；恢复后重新鉴权、路由、同步。 |
-| 网关／私网文件流中断 | 明确报告失败／取消，不将不完整文件发布为成功，不自动重复上传。 |
-| Host／Pi／VM 重启 | 保留原生历史，未完成轮次标中断；不自动继续副作用。 |
-| Gitea 暂时不可达 | 不能无限期放行旧授权；按现有已记录的授权复查策略拒绝无法验证的连接，不因此停止 VM 任务。 |
-| 路由缺失／撤销 | 拒绝新访问、撤销既有访问，不回退到另一 VM。 |
-| Relay 不可达 | 明确错误，不切换账号／来源；原生模型链路独立。 |
-
-网关与 VM Host 必须独立生命周期。现有 `all` 便捷启动关闭时会统一关闭 Host/Pi，不作为生产连续性部署方案。无需为两三个用户提前建设网关集群。
-
-## 接口边界
-
-Pi-specific 代码保留在 PiSessionFactory/PiSession adapter；前端投影原生状态与历史，协议做有界传输。网关仅保留必要身份／路由／健康元数据，不新增工具执行器、子 Agent 调度或 Git 引擎。
+The Host and Server have independent lifetimes. The Host owns Agent execution
+and durable user content. The Server owns browser delivery, identity and fixed
+routing. The Interface between them is [`../protocol.md`](../protocol.md).
