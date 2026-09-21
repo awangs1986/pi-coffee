@@ -6,12 +6,6 @@ import { createServer as createHttpsServer } from "node:https";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import {
-  decodeClientFrame,
-  encodeFrame,
-  type ClientFrame,
-  type ServerFrame,
-} from "../shared/protocol.js";
 import { HostClient } from "./host-client.js";
 
 /** PEM material for the optional HTTPS route (internal CA); HTTP when omitted. */
@@ -211,7 +205,6 @@ class BrowserBridge {
   private readonly host: HostClient;
   private hostUnsubscribe?: () => void;
   private connected = false;
-  private opened = false;
   private closed = false;
   private messageQueue: Promise<void> = Promise.resolve();
   onClose: () => void = () => undefined;
@@ -221,12 +214,12 @@ class BrowserBridge {
     this.host = new HostClient({
       ...options,
       onUnavailable: (error) => {
-        this.send({ v: 1, type: "error", code: "host_unavailable", message: error.message });
+        this.sendGatewayError("host_unavailable", error.message);
         this.close();
       },
     });
-    browser.on("message", (data: RawData) => {
-      this.messageQueue = this.messageQueue.then(() => this.handleMessage(data)).catch(() => undefined);
+    browser.on("message", (data: RawData, isBinary: boolean) => {
+      this.messageQueue = this.messageQueue.then(() => this.handleMessage(data, isBinary)).catch(() => undefined);
     });
     browser.on("close", () => this.close());
     browser.on("error", () => this.close());
@@ -242,67 +235,30 @@ class BrowserBridge {
     this.onClose();
   }
 
-  private send(frame: ServerFrame): void {
+  private send(data: RawData | string, isBinary = false): void {
     if (this.closed || this.browser.readyState !== WebSocket.OPEN) return;
     try {
-      this.browser.send(encodeFrame(frame));
+      this.browser.send(data, { binary: isBinary });
     } catch {
       this.close();
     }
   }
 
-  private async handleMessage(data: RawData): Promise<void> {
+  private sendGatewayError(code: string, message: string): void {
+    this.send(JSON.stringify({ v: 1, type: "error", code, message }));
+  }
+
+  private async handleMessage(data: RawData, isBinary: boolean): Promise<void> {
     if (this.closed) return;
-    let frame: ClientFrame;
     try {
-      frame = decodeClientFrame(rawDataToBytes(data));
-    } catch (error) {
-      this.send({
-        v: 1,
-        type: "error",
-        code: error instanceof Error && "code" in error ? String(error.code) : "invalid_frame",
-        message: error instanceof Error ? error.message : "Invalid frame",
-        fatal: true,
-      });
-      this.browser.close(1008, "invalid frame");
-      return;
-    }
-
-    if (frame.type === "close") {
-      this.close();
-      return;
-    }
-    if (frame.type === "ping") {
-      this.send({ v: 1, type: "pong", nonce: frame.nonce });
-      return;
-    }
-    // Sidebar commands may arrive before a session is chosen; everything else
-    // needs an open Session on the Host.
-    const sidebarCommand = frame.type === "list_sessions" || frame.type === "delete_session" || frame.type === "rename_session";
-    if (frame.type !== "open" && !sidebarCommand && !this.opened) {
-      this.send({ v: 1, type: "error", code: "not_open", message: "Send open before other commands" });
-      return;
-    }
-
-    try {
-      if (frame.type === "open" && this.opened) {
-        this.send({ v: 1, type: "error", code: "already_open", message: "Connection is already open" });
-        return;
-      }
       if (!this.connected) {
         await this.host.connect();
-        this.hostUnsubscribe = this.host.onFrame((hostFrame) => this.send(hostFrame));
+        this.hostUnsubscribe = this.host.onFrame((hostData, hostBinary) => this.send(hostData, hostBinary));
         this.connected = true;
       }
-      if (frame.type === "open") this.opened = true;
-      this.host.send(frame);
+      this.host.send(data, isBinary);
     } catch (error) {
-      this.send({
-        v: 1,
-        type: "error",
-        code: "host_unavailable",
-        message: error instanceof Error ? error.message : "Host is unavailable",
-      });
+      this.sendGatewayError("host_unavailable", error instanceof Error ? error.message : "Host is unavailable");
     }
   }
 }
@@ -329,11 +285,4 @@ function resolveAsset(path: string): { file: string; contentType: string } | und
   const contentType = ASSET_TYPES[match[2]];
   if (contentType === undefined) return undefined;
   return { file: `${match[1]}.${match[2]}`, contentType };
-}
-
-function rawDataToBytes(data: RawData): Uint8Array {
-  if (typeof data === "string") return new TextEncoder().encode(data);
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (Array.isArray(data)) return Buffer.concat(data);
-  return data;
 }

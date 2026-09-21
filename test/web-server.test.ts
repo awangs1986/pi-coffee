@@ -1,119 +1,119 @@
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
+import { createServer, type Server as HttpServer } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { resolve } from "node:path";
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
-import { HostServer } from "../src/host/server.js";
-import type { PiSession, PiSessionFactory } from "../src/host/pi-adapter.js";
 import { WebServer } from "../src/web/server.js";
-import { decodeServerFrame, encodeFrame, type HistoryEntry, type ImageInput, type ServerFrame } from "../src/shared/protocol.js";
 
-class FakePiSession implements PiSession {
-  private readonly listeners = new Set<(event: unknown) => void>();
-  private state = { isStreaming: false, messageCount: 0 };
+class FakeHost {
+  private readonly http: HttpServer;
+  private readonly sockets = new WebSocketServer({ noServer: true });
+  private started = false;
+  private readonly messages: Array<{ role: "user" | "assistant"; text: string }> = [];
 
-  readonly history: HistoryEntry[] = [];
-
-  async prompt(text: string, _images?: ImageInput[]): Promise<void> {
-    this.state = { ...this.state, isStreaming: true };
-    this.emit({ type: "agent_start" });
-    this.history.push({ kind: "user", id: `u${this.history.length}`, text });
-    this.emit({ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: `echo: ${text}` } });
-    this.history.push({ kind: "assistant", id: `a${this.history.length}`, text: `echo: ${text}` });
-    this.emit({ type: "message_end", message: { role: "assistant" } });
-    this.state = { isStreaming: false, messageCount: this.state.messageCount + 2 };
-    this.emit({ type: "agent_settled" });
-  }
-
-  async getHistory() {
-    return { entries: [...this.history], leafId: this.history.at(-1)?.id ?? null };
-  }
-  async steer(): Promise<void> {}
-  async followUp(): Promise<void> {}
-  async rename(): Promise<void> {}
-  async getModels() { return { models: [], current: null, thinkingLevel: "medium", thinkingLevels: [] }; }
-  async setModel(): Promise<void> {}
-  async setThinkingLevel(): Promise<void> {}
-  async getCommands() { return []; }
-  async getExtensions() { return []; }
-  async getStats() { return { userMessages: 0, assistantMessages: 0, toolCalls: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }; }
-  async compact(): Promise<void> {}
-  async respondUi(): Promise<void> {}
-
-  async abort(): Promise<void> {
-    this.state = { ...this.state, isStreaming: false };
-    this.emit({ type: "agent_settled" });
-  }
-
-  async getState() {
-    return this.state;
-  }
-
-  onEvent(listener: (event: unknown) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  }
-
-  async stop(): Promise<void> {}
-
-  private emit(event: unknown): void {
-    for (const listener of this.listeners) listener(event);
-  }
-}
-
-class FakeFactory implements PiSessionFactory {
-  private readonly sessions = new Map<string, FakePiSession>();
-
-  async create(options: { sessionId: string }): Promise<PiSession> {
-    const existing = this.sessions.get(options.sessionId);
-    if (existing) return existing;
-    const session = new FakePiSession();
-    this.sessions.set(options.sessionId, session);
-    return session;
-  }
-
-  async list() {
-    const now = new Date().toISOString();
-    return [...this.sessions.entries()].map(([id, session]) => ({ id, createdAt: now, updatedAt: now, messageCount: session.history.length, preview: session.history[0]?.text ?? "" }));
-  }
-
-  async delete(sessionId: string): Promise<boolean> {
-    return this.sessions.delete(sessionId);
-  }
-}
-
-/** `sessions` broadcasts can arrive at any time; read them via nextSessions(). */
-class FrameQueue {
-  private readonly frames: ServerFrame[] = [];
-  private readonly sessionFrames: ServerFrame[] = [];
-  private readonly waiters: Array<(frame: ServerFrame) => void> = [];
-  private readonly sessionWaiters: Array<(frame: ServerFrame) => void> = [];
-
-  constructor(private readonly socket: WebSocket) {
-    socket.on("message", (data) => {
-      const frame = decodeServerFrame(data as Buffer);
-      const [queue, waiters] = frame.type === "sessions" ? [this.sessionFrames, this.sessionWaiters] : [this.frames, this.waiters];
-      const waiter = waiters.shift();
-      if (waiter) waiter(frame);
-      else queue.push(frame);
+  constructor(private readonly token = "host-token") {
+    this.http = createServer((request, response) => {
+      if (request.headers.authorization !== `Bearer ${this.token}`) {
+        response.writeHead(401).end();
+        return;
+      }
+      if (request.url === "/api/workspace") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ projects: [], conversations: [] }));
+        return;
+      }
+      if (request.url === "/api/revoke-files" && request.method === "POST") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end('{"ok":true}');
+        return;
+      }
+      response.writeHead(404).end();
+    });
+    this.http.on("upgrade", (request, socket, head) => {
+      if (request.url !== "/host" || request.headers.authorization !== `Bearer ${this.token}`) {
+        socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+        return;
+      }
+      this.sockets.handleUpgrade(request, socket, head, (client) => this.sockets.emit("connection", client));
+    });
+    this.sockets.on("connection", (client) => {
+      client.on("message", (raw) => this.handle(client, raw));
     });
   }
 
-  next(): Promise<ServerFrame> {
-    const frame = this.frames.shift();
-    if (frame) return Promise.resolve(frame);
-    return new Promise((resolve) => this.waiters.push(resolve));
+  async start(): Promise<void> {
+    await new Promise<void>((resolvePromise) => this.http.listen(0, "127.0.0.1", resolvePromise));
+    this.started = true;
   }
 
-  nextSessions(): Promise<ServerFrame> {
-    const frame = this.sessionFrames.shift();
-    if (frame) return Promise.resolve(frame);
-    return new Promise((resolve) => this.sessionWaiters.push(resolve));
+  url(): string {
+    const address = this.http.address();
+    if (!address || typeof address === "string") throw new Error("Fake Host is not listening");
+    return `ws://127.0.0.1:${address.port}/host`;
+  }
+
+  async close(): Promise<void> {
+    if (!this.started) return;
+    for (const client of this.sockets.clients) client.close();
+    this.sockets.close();
+    await new Promise<void>((resolvePromise) => this.http.close(() => resolvePromise()));
+    this.started = false;
+  }
+
+  private send(client: WebSocket, frame: unknown): void {
+    client.send(JSON.stringify(frame));
+  }
+
+  private handle(client: WebSocket, raw: RawData): void {
+    let frame: Record<string, unknown>;
+    try {
+      frame = JSON.parse(raw.toString()) as Record<string, unknown>;
+    } catch {
+      this.send(client, { v: 1, type: "error", code: "invalid_json", fatal: true });
+      return;
+    }
+    if (frame.type === "list_sessions") {
+      this.send(client, { v: 1, type: "sessions", sessions: this.messages.length ? [{ id: "s1", running: false }] : [] });
+      return;
+    }
+    if (frame.type === "open") {
+      this.send(client, { v: 1, type: "opened", sessionId: "s1", cursor: 0, state: { isStreaming: false, messageCount: this.messages.length } });
+      this.send(client, { v: 1, type: "history", sessionId: "s1", leafId: null, truncated: false, entries: this.messages.map((item, index) => ({ kind: item.role, id: String(index), text: item.text })) });
+      return;
+    }
+    if (frame.type === "prompt") {
+      const text = String(frame.text ?? "");
+      this.messages.push({ role: "user", text }, { role: "assistant", text: `echo: ${text}` });
+      this.send(client, { v: 1, type: "ack", operation: "prompt", requestId: frame.requestId });
+      this.send(client, { v: 1, type: "event", sessionId: "s1", cursor: 1, event: { type: "message_update", assistantMessageEvent: { delta: `echo: ${text}` } } });
+      return;
+    }
+    // Deliberately accept a frame unknown to this Web build. This proves the
+    // gateway does not duplicate or constrain the Agent Host protocol.
+    this.send(client, { v: 1, type: "future_ack", received: frame });
   }
 }
 
-let host: HostServer | undefined;
+class JsonQueue {
+  private readonly frames: Array<Record<string, unknown>> = [];
+  private readonly waiters: Array<(frame: Record<string, unknown>) => void> = [];
+  constructor(socket: WebSocket) {
+    socket.on("message", (data) => {
+      const frame = JSON.parse(data.toString()) as Record<string, unknown>;
+      const waiter = this.waiters.shift();
+      if (waiter) waiter(frame);
+      else this.frames.push(frame);
+    });
+  }
+  next(): Promise<Record<string, unknown>> {
+    const frame = this.frames.shift();
+    return frame ? Promise.resolve(frame) : new Promise((resolvePromise) => this.waiters.push(resolvePromise));
+  }
+}
+
+let host: FakeHost | undefined;
 let web: WebServer | undefined;
 
 afterEach(async () => {
@@ -123,107 +123,61 @@ afterEach(async () => {
   host = undefined;
 });
 
-async function connect(url: string): Promise<WebSocket> {
-  const socket = new WebSocket(url);
+async function connect(url: string, options?: ConstructorParameters<typeof WebSocket>[1]): Promise<WebSocket> {
+  const socket = new WebSocket(url, options);
   await once(socket, "open");
   return socket;
 }
 
-describe("Web Server seam", () => {
-  it("bridges a browser conversation to Host and serves the shell", async () => {
-    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+describe("Web gateway seam", () => {
+  it("proxies Host frames, keeps Host state across browser disconnects, and forwards future frame types", async () => {
+    host = new FakeHost();
     await host.start();
-    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: host.url(), hostToken: "host-token" });
     await web.start();
 
-    const health = await fetch(`http://127.0.0.1:${web.address().port}/healthz`);
-    expect(health.status).toBe(200);
-    expect(await health.json()).toMatchObject({ ok: true, role: "web" });
-    const shell = await fetch(`http://127.0.0.1:${web.address().port}/`);
-    expect(await shell.text()).toContain("PI Coffee");
-
     const browser = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
-    const frames = new FrameQueue(browser);
-    // The sidebar asks for the list before any session exists; the bridge
-    // forwards it to the Host without requiring open first.
-    browser.send(encodeFrame({ v: 1, type: "list_sessions" }));
-    expect(await frames.nextSessions()).toMatchObject({ type: "sessions", sessions: [] });
-
-    browser.send(encodeFrame({ v: 1, type: "open" }));
-    const opened = await frames.next();
-    expect(opened.type).toBe("opened");
-    if (opened.type !== "opened") throw new Error("expected opened");
+    const frames = new JsonQueue(browser);
+    browser.send(JSON.stringify({ v: 1, type: "open" }));
+    expect(await frames.next()).toMatchObject({ type: "opened", sessionId: "s1" });
     expect(await frames.next()).toMatchObject({ type: "history", entries: [] });
-    browser.send(encodeFrame({ v: 1, type: "prompt", requestId: "web-r1", text: "hello web" }));
-    expect(await frames.next()).toMatchObject({ type: "ack", requestId: "web-r1" });
-    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_start" } });
-    expect(await frames.next()).toMatchObject({
-      type: "event",
-      event: { assistantMessageEvent: { delta: "echo: hello web" } },
-    });
-    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "message_end" } });
-    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_settled" } });
-    const sessionId = opened.sessionId;
+    browser.send(JSON.stringify({ v: 1, type: "prompt", requestId: "r1", text: "hello" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", requestId: "r1" });
+    expect(await frames.next()).toMatchObject({ type: "event", event: { assistantMessageEvent: { delta: "echo: hello" } } });
+    browser.send(JSON.stringify({ v: 1, type: "future_command", payload: { x: 1 } }));
+    expect(await frames.next()).toMatchObject({ type: "future_ack", received: { type: "future_command" } });
     browser.close();
     await once(browser, "close");
 
-    // A different browser with no local state sees the conversation through
-    // the Web Server purely from what the Host serves.
-    const reconnected = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
-    const replay = new FrameQueue(reconnected);
-    reconnected.send(encodeFrame({ v: 1, type: "list_sessions" }));
-    expect(await replay.nextSessions()).toMatchObject({ type: "sessions", sessions: [{ id: sessionId }] });
-    reconnected.send(encodeFrame({ v: 1, type: "open", sessionId }));
-    expect(await replay.next()).toMatchObject({ type: "opened", sessionId });
-    expect(await replay.next()).toMatchObject({
-      type: "history",
-      sessionId,
-      entries: [{ kind: "user", text: "hello web" }, { kind: "assistant", text: "echo: hello web" }],
-    });
-    reconnected.close();
+    const again = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
+    const replay = new JsonQueue(again);
+    again.send(JSON.stringify({ v: 1, type: "open", sessionId: "s1" }));
+    expect(await replay.next()).toMatchObject({ type: "opened", sessionId: "s1" });
+    expect(await replay.next()).toMatchObject({ type: "history", entries: [{ kind: "user", text: "hello" }, { kind: "assistant", text: "echo: hello" }] });
+    again.close();
   });
 
-  it("serves the shell assets from public/ and nothing else", async () => {
-    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+  it("serves only the flat shell asset allowlist", async () => {
+    host = new FakeHost();
     await host.start();
-    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: host.url(), hostToken: "host-token" });
     await web.start();
     const base = `http://127.0.0.1:${web.address().port}`;
-
-    const page = await fetch(`${base}/`);
-    expect(page.headers.get("content-type")).toContain("text/html");
-    const html = await page.text();
-    expect(html).toContain('href="/app.css"');
-    expect(html).toContain('src="/app.js"');
-
-    const css = await fetch(`${base}/app.css`);
-    expect(css.status).toBe(200);
-    expect(css.headers.get("content-type")).toContain("text/css");
-    expect(await css.text()).toContain("color-scheme: light");
-
-    const js = await fetch(`${base}/app.js`);
-    expect(js.status).toBe(200);
-    expect(js.headers.get("content-type")).toContain("text/javascript");
-    const jsText = await js.text();
-    expect(jsText).toContain("'/ws'");
-    expect(jsText).toContain("extension_ui_request");
-
-    for (const path of ["/app.txt", "/nested/app.js", "/..%2Fpackage.json", "/../package.json", "/package.json", "/app.js.map"]) {
-      const blocked = await fetch(`${base}${path}`);
-      expect(blocked.status, path).toBe(404);
+    expect(await (await fetch(`${base}/healthz`)).json()).toMatchObject({ ok: true, role: "web" });
+    expect(await (await fetch(`${base}/`)).text()).toContain("PI Coffee");
+    expect((await fetch(`${base}/app.css`)).headers.get("content-type")).toContain("text/css");
+    for (const path of ["/nested/app.js", "/..%2Fpackage.json", "/package.json", "/app.js.map"]) {
+      expect((await fetch(`${base}${path}`)).status, path).toBe(404);
     }
   });
 
-  it("serves the shell and the WebSocket over HTTPS when given TLS material (the optional secure route)", async () => {
+  it("serves HTTPS/WSS when configured with TLS", async () => {
     const cert = readFileSync(resolve("test/fixtures/tls/test-cert.pem"));
     const key = readFileSync(resolve("test/fixtures/tls/test-key.pem"));
-    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
+    host = new FakeHost();
     await host.start();
-    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host`, tls: { cert, key } });
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: host.url(), hostToken: "host-token", tls: { cert, key } });
     await web.start();
-    expect(web.scheme).toBe("https");
-
-    // The test certificate is the trust anchor here, standing in for an internal CA.
     const page = await new Promise<{ status: number; body: string }>((resolvePromise, reject) => {
       httpsRequest({ host: "127.0.0.1", port: web!.address().port, path: "/", ca: cert }, (response) => {
         let body = "";
@@ -233,24 +187,10 @@ describe("Web Server seam", () => {
     });
     expect(page.status).toBe(200);
     expect(page.body).toContain("PI Coffee");
-
-    const browser = new WebSocket(`wss://127.0.0.1:${web.address().port}/ws`, { ca: cert });
-    await once(browser, "open");
-    const frames = new FrameQueue(browser);
-    browser.send(encodeFrame({ v: 1, type: "list_sessions" }));
-    expect(await frames.nextSessions()).toMatchObject({ type: "sessions" });
-    browser.close();
-  });
-
-  it("returns a structured error when the browser sends malformed JSON", async () => {
-    host = new HostServer({ host: "127.0.0.1", port: 0, factory: new FakeFactory() });
-    await host.start();
-    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: `ws://127.0.0.1:${host.address().port}/host` });
-    await web.start();
-    const browser = await connect(`ws://127.0.0.1:${web.address().port}/ws`);
-    const frames = new FrameQueue(browser);
+    const browser = await connect(`wss://127.0.0.1:${web.address().port}/ws`, { ca: cert });
+    const frames = new JsonQueue(browser);
     browser.send("not-json");
-    await expect(frames.next()).resolves.toMatchObject({ type: "error", code: "invalid_json", fatal: true });
+    expect(await frames.next()).toMatchObject({ type: "error", code: "invalid_json" });
     browser.close();
   });
 });

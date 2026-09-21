@@ -7,16 +7,16 @@ Wants=network-online.target
 Type=simple
 User=pi-coffee
 Group=pi-coffee
-WorkingDirectory=/opt/pi-coffee
+WorkingDirectory=/opt/pi-coffee-server
 EnvironmentFile=/etc/pi-coffee/web.env
-ExecStart=/usr/bin/node dist/src/main.js web
+ExecStart=/usr/bin/node dist/src/web/main.js
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadOnlyPaths=/opt/pi-coffee
+ReadOnlyPaths=/opt/pi-coffee-server
 
 [Install]
 WantedBy=multi-user.target
