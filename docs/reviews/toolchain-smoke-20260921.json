@@ -1,0 +1,449 @@
+{
+  "ok": false,
+  "model": "local scripted fixture",
+  "reports": [
+    {
+      "lensEnabled": false,
+      "ok": false,
+      "checks": [
+        {
+          "tool": "write",
+          "ok": true
+        },
+        {
+          "tool": "read",
+          "ok": true
+        },
+        {
+          "tool": "edit",
+          "ok": true
+        },
+        {
+          "tool": "bash",
+          "ok": true
+        },
+        {
+          "tool": "grep",
+          "ok": false,
+          "detail": "ripgrep (rg) is not available and could not be downloaded"
+        },
+        {
+          "tool": "find",
+          "ok": false,
+          "detail": "fd is not available and could not be downloaded"
+        },
+        {
+          "tool": "ls",
+          "ok": true
+        },
+        {
+          "tool": "git",
+          "ok": true
+        },
+        {
+          "tool": "verify",
+          "ok": false,
+          "detail": "verify [quick] overall: failed\n  failed   quick-1: bash: line 1: node: command not found"
+        },
+        {
+          "tool": "search_tools",
+          "ok": true
+        },
+        {
+          "tool": "search_tools",
+          "ok": true
+        },
+        {
+          "tool": "web_search",
+          "ok": true
+        },
+        {
+          "tool": "search_tools",
+          "ok": true
+        },
+        {
+          "tool": "verify",
+          "label": "verify with absolute Node path",
+          "ok": true
+        }
+      ],
+      "missing": [],
+      "lensMissingActive": [],
+      "lensMissingInModelRequest": [],
+      "snapshots": [
+        {
+          "label": "session_start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "work_baseline",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "after_activation",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded",
+            "web_search",
+            "research_seal",
+            "subagent",
+            "bg_wait"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "recall_folded",
+            "unfold"
+          ]
+        }
+      ],
+      "extensionErrors": [],
+      "markerCorrect": true,
+      "requests": 16
+    },
+    {
+      "lensEnabled": true,
+      "ok": false,
+      "checks": [
+        {
+          "tool": "write",
+          "ok": true
+        },
+        {
+          "tool": "read",
+          "ok": true
+        },
+        {
+          "tool": "edit",
+          "ok": true
+        },
+        {
+          "tool": "bash",
+          "ok": true
+        },
+        {
+          "tool": "grep",
+          "ok": false,
+          "detail": "ripgrep (rg) is not available and could not be downloaded"
+        },
+        {
+          "tool": "find",
+          "ok": false,
+          "detail": "fd is not available and could not be downloaded"
+        },
+        {
+          "tool": "ls",
+          "ok": true
+        },
+        {
+          "tool": "git",
+          "ok": true
+        },
+        {
+          "tool": "verify",
+          "ok": false,
+          "detail": "verify [quick] overall: failed\n  failed   quick-1: bash: line 1: node: command not found"
+        },
+        {
+          "tool": "search_tools",
+          "ok": true
+        },
+        {
+          "tool": "search_tools",
+          "ok": true
+        },
+        {
+          "tool": "web_search",
+          "ok": true
+        },
+        {
+          "tool": "search_tools",
+          "ok": true
+        },
+        {
+          "tool": "search_tools",
+          "ok": false,
+          "detail": "No matching trusted capabilities."
+        },
+        {
+          "tool": "verify",
+          "label": "verify with absolute Node path",
+          "ok": true
+        }
+      ],
+      "missing": [],
+      "lensMissingActive": [
+        "lens_diagnostics",
+        "lsp_diagnostics",
+        "module_report",
+        "read_symbol",
+        "read_enclosing",
+        "symbol_search",
+        "pi_lens_activate_tools"
+      ],
+      "lensMissingInModelRequest": [
+        "lens_diagnostics",
+        "lsp_diagnostics",
+        "module_report",
+        "read_symbol",
+        "read_enclosing",
+        "symbol_search",
+        "pi_lens_activate_tools"
+      ],
+      "snapshots": [
+        {
+          "label": "session_start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "lsp_diagnostics",
+            "symbol_search",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "ast_grep_dump",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "work_baseline",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "lsp_diagnostics",
+            "symbol_search",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "ast_grep_dump",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "after_activation",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded",
+            "web_search",
+            "research_seal",
+            "subagent",
+            "bg_wait"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "lsp_diagnostics",
+            "symbol_search",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "ast_grep_dump",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        }
+      ],
+      "extensionErrors": [],
+      "markerCorrect": true,
+      "requests": 17
+    }
+  ]
+}

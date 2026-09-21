@@ -80,6 +80,8 @@ export interface RpcPiSessionFactoryOptions {
   args?: string[];
   /** Additional native Pi extensions loaded for every Host session. */
   extensions?: string[];
+  /** Additional Pi skills loaded for every Host session. */
+  skills?: string[];
   env?: Record<string, string>;
   cwdForSession?: (id: string, existing: boolean) => Promise<string>;
 }
@@ -120,7 +122,10 @@ export class RpcPiSessionFactory implements PiSessionFactory {
   }
 
   async create(options: { sessionId: string }): Promise<PiSession> {
-    const args = appendExtensionArgs([...(this.options.args ?? [])], this.options.extensions ?? []);
+    const args = appendSkillArgs(
+      appendExtensionArgs([...(this.options.args ?? [])], this.options.extensions ?? []),
+      this.options.skills ?? [],
+    );
     // Resume from the durable store when the conversation already exists there;
     // only a genuinely new conversation gets a fresh file with our id.
     const existing = (await this.listWithPaths()).find((session) => session.id === options.sessionId);
@@ -198,6 +203,18 @@ export function appendExtensionArgs(args: string[], extensions: readonly string[
       (arg === "--extension" || arg === "-e") && args[index + 1] === trimmed,
     ) || args.includes(`--extension=${trimmed}`);
     if (!alreadyPresent) args.push("--extension", trimmed);
+  }
+  return args;
+}
+
+/** Add `--skill path` pairs without duplicating explicitly supplied paths. */
+export function appendSkillArgs(args: string[], skills: readonly string[]): string[] {
+  for (const skill of skills) {
+    const trimmed = skill.trim();
+    if (trimmed.length === 0) continue;
+    const alreadyPresent = args.some((arg, index) => arg === "--skill" && args[index + 1] === trimmed)
+      || args.includes(`--skill=${trimmed}`);
+    if (!alreadyPresent) args.push("--skill", trimmed);
   }
   return args;
 }

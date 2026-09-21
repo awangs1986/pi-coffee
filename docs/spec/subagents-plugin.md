@@ -1,11 +1,14 @@
 # 原生子 Agent：默认研究、独立模型、VM 并发准入
 
-实现合同更新：2026-09-16；规格归属更新：2026-09-20。当前兼容代码仍为 Simple/Lean 禁用、Full 可用。目标模式由 [Pi Agent 主 SPEC](./pi-agent.md) PA-002 定义；这里的模式分配、3/5 准入等现有行为不能未经确认整体映射成 Work 政策，见 PA-Q04。本次未修改执行器或配额。
+实现合同更新：2026-09-16；规格归属更新：2026-09-20。Chat/Work 分配尚待确认；当前兼容分派见 `src/harness/runtime-mode.ts`。目标模式由 [Pi Agent 主 SPEC](./pi-agent.md) PA-002 定义；这里的模式分配、3/5 准入等现有行为不能未经确认整体映射成 Work 政策，见 PA-Q04。本次未修改执行器或配额。
 
-## 当前兼容实现合同
+## 可复用的执行合同
 
-- **Simple/Lean** 不可激活 `subagent`/`bg_wait`，搜索直接执行并保留短摘要与证据索引，即使传入 `delegate=true` 也不启动子任务。原生子任务命令亦要求切到 Full。
-- **Full** 的 Web 搜索默认由 `coffee-research` 子 Pi 真正执行，必要时使用 `fetch_content`/`read` 核查来源。父 Agent 负责分解与综合，接收短结论、URL 和证据文件索引，不先搜索再委派摘要。
+Chat 不由本插件增加工具；Work 是否默认研究委派、是否按需激活子任务，见 PA-Q01/04。当前模式限制不再作为目标设计复述；历史证据保存在 Git 提交 `b027838`。
+
+以下是已存在的执行器约束，不等于新的模式分配已验收：
+
+- 研究子 Pi 实际搜索并按需读取来源；父 Agent 接收短结论、URL 与证据索引，不先搜索再委派摘要。
 - 简单查询只启动一个子任务；独立问题可并行。每个主对话最多 **3** 个正在运行的子 Pi，每个 User VM 最多 **5** 个；主 Agent 不计数。多出的启动请求等待名额，不是直接报“并发超限”。
 - 默认 fresh context，不复制父会话的完整历史。当前本地适配器禁止所有嵌套子 Agent（研究子任务当然不能递归委派）；复杂分解回到主 Agent。
 - 保留 Pi 原生登录、provider/model registry、上游执行器、后台作业和取消协议。没有添加安全沙箱、权限内核或自动 worktree 策略。
@@ -16,7 +19,7 @@
 
 `subagent` 支持：单个 `{agent,task,model?,cwd?,async?}`；最多 12 个 `tasks` 的批次（转换为原生 `runs.all` workflow）；`list/get/models/status/stop` 管理操作；`pending/reply` 转发原生 supervisor。`async` 默认 true；研究工具的事件委派使用前台等待。12 是单次批量输入上限，不是运行并发上限。默认不暴露任意 workflowScript、worktree 与并发覆盖参数。`bg_wait` 保留原生后台等待语义；普通异步子任务优先使用完成通知，不轮询。
 
-父端 Simple/Lean 基础 8、Full 基础 10，另加常驻 `recall_folded`。子任务能力为 Full-only：`search_tools` 在 Simple/Lean 不允许激活，在 Full 可真实激活 `subagent` 与 `bg_wait`。模式切换即时生效；从 Full 切回 Simple 不强行终止已有后台作业，但不得启动新委派。原生 supervisor 不另加常驻工具，而通过 `subagent` 的 pending/reply 操作提供。公开事件总线负责跨扩展 API 实例共享能力注册。
+`subagent` 与 `bg_wait` 是两个模型工具，不因属于同一能力包而只计一个。准入状态、公开事件总线和原生 supervisor 继续复用；后者通过 `subagent` 的 pending/reply 操作提供，不增加常驻工具。新模式的切换与在途任务规则须在 PA-Q03 中确定，不能以隐藏工具代替执行侧限制。
 
 ## 硬并发与排队
 
@@ -47,10 +50,10 @@ Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作�
 
 ## 部署与验证
 
-要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。在 Full 关闭 subagents 或替换扩展列表时，默认 Web 委派会明确失败；可恢复配置，或显式 `delegate=false`。原生认证仍由用户在 VM 终端配置。
+要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。在依赖研究委派的配置中关闭 subagents 或替换扩展列表时，默认 Web 委派会明确失败；可恢复配置，或显式 `delegate=false`。原生认证仍由用户在 VM 终端配置。
 
 - `test/subagent-launcher.test.ts`：14 个独立进程/两个根对话，观测峰值 5、每根不超过 3；排队、等待中取消、SIGKILL 释放、禁止嵌套。
-- `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖 Full 激活、Simple/Lean 拒绝激活且直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。
+- `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖当前兼容分派的能力激活、拒绝与直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。
 - `test/subagent-result.test.ts`：Unicode/details 限量、0600 归档、写盘失败；其余测试覆盖事件注册、模型配置、失败无静默回退。
 - `npm run check`、`npm run smoke:subagents`、`npm run smoke:web`。
 

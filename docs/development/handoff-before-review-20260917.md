@@ -1,8 +1,8 @@
 > 历史存档：此文件保存本轮提交前的旧 handoff，部分状态已过时。当前入口为根目录 `handoff.md`，不要按本页旧的 Resume Here 重做功能。
 
-# PI Coffee handoff
+> 2026-09-20 文档清理：本页涉及旧模式的段落/表项已撤下，未改写为 Chat/Work 的实现证据。原始记录用 `git show b027838:docs/development/handoff-before-review-20260917.md` 追溯；当前模式只见 [Pi Agent 主规格](../spec/pi-agent.md)。其余内容仍是标题日期的历史快照。
 
-> **2026-09-16 owner 更新**：通用软件开发提示词已统一（simple/lean/full 同正文）；VM 是执行隔离边界，不新增 sandbox/内核。搜索历史只保留精选摘要与索引，完整证据留在独立 VM artifact；默认不委派搜索子 Agent。恢复使用 context-fold 本地算法、常驻 recall_folded 和失败取消，不再静默回退模型摘要。当前合同见 `docs/spec/harness-prompt.md`、`docs/spec/web-search-plugin.md`、`docs/spec/context-recovery.md`（路径均相对仓库根）。通用 SUBAGENTS 设计待单独对齐；下文历史 Lean/Full、8/10 总数、agent_end 封存与 fail-open 描述由上述合同取代。
+# PI Coffee handoff
 
 
 Generated: 2026-09-16
@@ -66,16 +66,6 @@ Do not duplicate those documents here.
 ## Already shipped on `main` (do not rebuild)
 
 Details live in [`BACKLOG.md`](./BACKLOG.md). In short:
-
-- Host/Web/Relay processes, frame protocol, Codex-style browser shell, session list/history from the User VM Pi store ([`docs/adr/0008-conversation-history-lives-in-the-user-vm-session-store.md`](./docs/adr/0008-conversation-history-lives-in-the-user-vm-session-store.md)).
-- Harness Lean/Full prompts and frozen V5 8/10 tool tables via the Pi extension seam ([`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md), [`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)).
-- Locked `pi-subagents@0.63.0` (optional `subagent` / `bg_wait`, Harness counts unchanged) plus `/subagents-model` ([`docs/spec/subagents-plugin.md`](./docs/spec/subagents-plugin.md)).
-- Relay-backed Serper `web_search`, native research closure to User VM Markdown, official `pi-web-access@0.27.0` for non-conflicting content tools ([`docs/spec/web-search-plugin.md`](./docs/spec/web-search-plugin.md)).
-- `context-fold@0.4.0` loaded last as fail-open default compaction.
-- Opt-in only (off by default): `pi-lens`, `rpiv-todo`, `pi-mcp-adapter`.
-- **FILE-001a**: LocalSend v2 direct browser → User VM transfer, inbox under `.pi-coffee/inbox/<session>/`, progress chips, download API ([`docs/adr/0009-file-transfer-is-localsend-direct-to-the-user-vm.md`](./docs/adr/0009-file-transfer-is-localsend-direct-to-the-user-vm.md), [`src/host/transfer.ts`](./src/host/transfer.ts)).
-- **Optional HTTPS** for Web + transfer only (all-or-nothing). 0.1 stays HTTP. Private Host and Relay remain HTTP + bearer tokens. See [`docs/deployment/runbook.md`](./docs/deployment/runbook.md).
-- **Plugin panel**: read-only list of extensions/skills/prompts the current Pi process actually loaded (`get_extensions`). Enable/disable/install is still `ARCH-002` / `PLUGIN-001` in [`BACKLOG.md`](./BACKLOG.md).
 
 Pinned Pi: `@earendil-works/pi-coding-agent@0.84.4`. A ticket is done only when this checkout (or the target VM) can run the documented check in [`docs/development/workflow.md`](./docs/development/workflow.md).
 

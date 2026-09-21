@@ -1,6 +1,6 @@
 # PI Coffee documentation map
 
-> **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。旧模式描述属于历史/兼容实现，不能反推新设计；Chat 零系统提示词和模式迁移尚未在当前检出版本实现。
+> **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。退役模式说明已从当前文档撤下，历史由 Git 追溯；Chat 零系统提示词和模式迁移尚未在当前检出版本实现。
 
 > **2026-09-19 架构更新**：[统一网关 ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md) 与 [工作台主 SPEC](./spec/multi-user-vm.md)：统一 HTTPS 入口，聊天/文件经轻量网关转发，用户 VM 仅私网开放，复用原生 Pi。文件网关仍待开发，不代表现有直连运行代码已经切换。
 
@@ -21,9 +21,14 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - [`pi-agent.md`](./spec/pi-agent.md): PA decisions, rationale, open questions, implementation gaps, acceptance matrix and revision history.
 - [`harness-prompt.md`](./spec/harness-prompt.md): WP rules, Work prompt source, engineering budget, public extension seam and model behavior evaluation cases.
 - [`context-recovery.md`](./spec/context-recovery.md): context ingress limits, local compaction, conservative request budgeting and failure behavior; new-mode allocation follows the main SPEC.
-- [`web-search-plugin.md`](./spec/web-search-plugin.md): Relay-backed search, bounded history and evidence artifacts; legacy dispatch is labeled separately from target modes.
+- [`web-search-plugin.md`](./spec/web-search-plugin.md): Relay-backed search, bounded history and evidence artifacts; mode allocation follows the main SPEC.
 - [`subagents-plugin.md`](./spec/subagents-plugin.md): upstream executor adapter, admission/model/output contracts; does not decide the new mode mapping.
-- [`harness-plugin.md`](./spec/harness-plugin.md): **compatibility implementation**, including old tool tables and native Git/Verify adapters; not the target Chat/Work design.
+- [`harness-plugin.md`](./spec/harness-plugin.md): native Git/Verify adapters and migration status; no separate product-mode table.
+
+- [Work 工具设计](./spec/work-tools.md)：已确认的精简集合、现有实现与迁移差距。
+- [LSP 中间层](./spec/lsp-middle-layer.md)：原生 Skill 发现、CLI 语义查询、按需语言服务器复用与项目验收；设计完成待实施。
+- [人工测试手册](./testing/work-prompt-manual.md)：owner 可执行的行为测试与结果模板。
+- [本轮设计审核](./reviews/chat-work-design-review-20260920.md)：确定问题、风险判断和验证边界。
 
 ## Product, protocol and operations
 
@@ -34,8 +39,10 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 
 ## Dated research and evidence — not alternate current specifications
 
+- [工具链真实执行探针](./reviews/toolchain-smoke-20260921.md)：基础工具实调、pi-lens 注册/活动集合、环境缺项与可复跑命令。
+
 - [`work-prompt-20260920.md`](./reviews/work-prompt-20260920.md): pinned Codex and Claude Code references, Pi native prompt findings, adopted/rejected rules, subtraction of duplicated guidance, and explicit limitations.
-- [`work-prompt-20260920-pi-claude-grok.md`](./reviews/work-prompt-20260920-pi-claude-grok.md): pinned Pi, Claude Code full and Grok Build cross-reference; adopted/rejected additions for the expanded generic Work prompt, current text-contract evidence and behavior gaps.
+- [`work-prompt-20260920-pi-claude-grok.md`](./reviews/work-prompt-20260920-pi-claude-grok.md): pinned Pi, Claude Code 完整默认版 and Grok Build cross-reference; adopted/rejected additions for the expanded generic Work prompt, current text-contract evidence and behavior gaps.
 - [`plan-20260916.md`](./development/plan-20260916.md): **historical** Pi/tool handoff; its old mode decisions have been superseded, not silently carried forward.
 - [`harness-prompt-audit-20260902.md`](./research/harness-prompt-audit-20260902.md): historical prompt provenance; not a requirement to inspect V3 or revive its design.
 - [`pi-subagents-audit-20260903.md`](./research/pi-subagents-audit-20260903.md) and [`pi-web-access-audit-20260903.md`](./research/pi-web-access-audit-20260903.md): pinned package integration evidence.
@@ -48,5 +55,5 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - Gitea manages Issue status, dependencies and acceptance comments; ADRs record architectural choices.
 - Maintained SPECs define confirmed/planned behavior. For Agent decisions start with `pi-agent.md`, not a dated report or an old entrypoint banner.
 - Code/tests in the checkout define implemented behavior. Evidence states the revision, commands, environment and unverified boundaries; a requirement or document being written does not mean it has shipped.
-- Change the canonical requirement and linked implementation/evidence status together. Keep unresolved proposals explicit, mark superseded rules, and update links instead of duplicating full contracts.
+- Change the canonical requirement and linked implementation/evidence status together. Keep unresolved proposals explicit, mark superseded rules, and update links instead of duplicating complete contracts.
 - Wiki is a mirror, not a competing source. Frozen Picode V5 is not a work queue or implementation dependency.

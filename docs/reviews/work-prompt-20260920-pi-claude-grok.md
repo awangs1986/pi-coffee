@@ -1,4 +1,4 @@
-# Work 提示词三仓库交叉评审（Pi / Claude Code full / Grok Build）
+# Work 提示词三仓库交叉评审（Pi / Claude Code 完整默认版 / Grok Build）
 
 日期：2026-09-20。范围：按 owner 要求，只评审并扩展通用 Work 软件开发系统提示词。目标是在 Pi 原生系统提示词基础上做加法，完善程度向 Claude Code 的完整默认提示词靠拢；遵循“宁缺毋错”，不迁移 Chat/Work 运行时、不新增工具、不改 Pi 内核。
 
@@ -9,7 +9,7 @@
 | 来源 | 固定版本 | 本次实际读取的系统提示词相关文件 | 用于学习的重点 |
 |---|---|---|---|
 | `earendil-works/pi` | `c596d09d9cef6fdf0db2dd08f3eec8582b7fe8ba` | `packages/coding-agent/src/core/system-prompt.ts`；`packages/coding-agent/src/core/tools/{read,write,edit,bash,powershell,grep,find,ls}.ts` 中的 `promptSnippet` / `promptGuidelines` | 原生 Base 的真实构成：`preamble` 身份、`<tools>` 仅列激活工具、`<rules>` 汇总工具 guideline 与内置简洁/路径、`<project_context>` 项目指导、Skills/文档指针、CWD |
-| `claude-code-best/claude-code` | `77a7934e15d69da13879112ed7db695c9ee7a52a` | `src/constants/prompts.ts` 的 `getSimpleIntroSection`、`getSimpleSystemSection`、`getSimpleDoingTasksSection`、`getActionsSection`、`getUsingYourToolsSection`、`getSessionSpecificGuidanceSection`、`getOutputEfficiencySection`、`getSystemPrompt`；`src/constants/systemPromptSections.ts`；`src/utils/systemPrompt.ts` | **full 默认路径**，不是 `CLAUDE_CODE_SIMPLE` lean 路径：任务边界、行动授权、工具纪律、验证与报告、沟通规则、静态/动态分区缓存思路 |
+| `claude-code-best/claude-code` | `77a7934e15d69da13879112ed7db695c9ee7a52a` | `src/constants/prompts.ts` 的 `getSimpleIntroSection`、`getSimpleSystemSection`、`getSimpleDoingTasksSection`、`getActionsSection`、`getUsingYourToolsSection`、`getSessionSpecificGuidanceSection`、`getOutputEfficiencySection`、`getSystemPrompt`；`src/constants/systemPromptSections.ts`；`src/utils/systemPrompt.ts` | **完整默认路径**，不是 `CLAUDE_CODE_SIMPLE` 精简路径：任务边界、行动授权、工具纪律、验证与报告、沟通规则、静态/动态分区缓存思路 |
 | `xai-org/grok-build` | `4247f661689354b831191f11eeeac8424993fe3d` | `crates/codegen/xai-grok-agent/templates/prompt.md`、`apply_patch_prompt.md`、`subagent_prompt.md`；`src/prompt/{context,template}.rs` | 新一代 harness 的模板化取舍：dangerous_actions、work_policy、communication、background_tasks、browser_verification、AGENTS/project-instruction 规则、按工具存在性裁剪的正文 |
 
 体量参考：Pi 的 `system-prompt.ts` 源码 9,427 字节（Base 动态生成）；Claude `prompts.ts` 55,483 字节但含大量动态/产品/工具常量，不能直接当最终提示词长度；Grok Build 基础模板 10,179 字节、apply-patch profile 21,360 字节、subagent 模板 4,918 字节。我们的 Work 正文从 6,185 → **8,794 UTF-8 字节 / 1,295 空白分词**，工程预算上调为 **9,000 字节**。这是仍然比 Grok 基础模板小得多的扩展，不是复制 Claude 全文。

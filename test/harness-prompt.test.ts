@@ -59,8 +59,10 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
   it("distinguishes analysis from implementation and keeps planning proportional", () => {
     const prompt = renderHarnessPrompt("work");
     expect(prompt).toMatch(/software-engineering context/i);
-    expect(prompt).toMatch(/clear change request.*locate the relevant code/i);
-    expect(prompt).toContain("Questions, reviews, and diagnoses do not authorize implementation");
+    expect(prompt).toMatch(/clear change request.*locate and change the relevant code/i);
+    expect(prompt).toMatch(/Requests limited to explanation, review, or diagnosis are read-only/i);
+    expect(prompt).toMatch(/user also asks for a fix or implementation.*complete that authorized work/i);
+    expect(prompt).not.toContain("Questions, reviews, and diagnoses do not authorize implementation");
     expect(prompt).toContain("smallest complete change");
     expect(prompt).toContain("Read an existing file before editing it");
     expect(prompt).toMatch(/short.*plan/i);
@@ -72,10 +74,14 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
 
   it("scopes project guidance and keeps implementation proportional", () => {
     const prompt = renderHarnessPrompt("work");
-    expect(prompt).toMatch(/additional project instruction files whose scope covers/i);
+    expect(prompt).toMatch(/check for applicable project instructions.*target file/i);
+    expect(prompt).toMatch(/including more specific instructions below the project root/i);
+    expect(prompt).not.toContain("when working outside already-loaded project guidance");
     expect(prompt).toMatch(/More local instructions override wider ones/i);
     expect(prompt).toMatch(/Match precision to scope/i);
     expect(prompt).toMatch(/surgical changes/i);
+    expect(prompt).toMatch(/Avoid abstractions and compatibility machinery that the requested behavior does not need/i);
+    expect(prompt).not.toContain("helpers for one-time operations");
     expect(prompt).toMatch(/broad or new.*state assumptions/i);
     expect(prompt).toMatch(/XSS.*secret exposure/i);
   });
@@ -114,7 +120,10 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/Reuse.*evidence/i);
     expect(prompt).toMatch(/truncated preview is not complete evidence/i);
     expect(prompt).toMatch(/Record load-bearing facts from tool output/i);
-    expect(prompt).toMatch(/Do not generate or guess URLs/i);
+    expect(prompt).toMatch(/Never invent source citations/i);
+    expect(prompt).toMatch(/Construct task-required URLs from verified inputs/i);
+    expect(prompt).toMatch(/distinguish constructed links from sources you actually inspected/i);
+    expect(prompt).not.toContain("Do not generate or guess URLs");
     expect(prompt).toMatch(/context statistics as estimates/i);
     expect(prompt).toContain("recall_folded");
     expect(prompt).toMatch(/available local recovery/i);
@@ -141,8 +150,10 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/scope is already authorized/i);
     expect(prompt).toMatch(/publishing.*pushing/i);
     expect(prompt).toMatch(/force-pushing.*resetting shared history/i);
-    expect(prompt).toMatch(/removing or downgrading dependencies/i);
-    expect(prompt).toMatch(/posting content to external services/i);
+    expect(prompt).toMatch(/implementation request authorizes necessary reversible local edits and checks/i);
+    expect(prompt).toMatch(/including edits to tracked files and local CI configuration/i);
+    expect(prompt).toMatch(/Do not ask again for work within that scope/i);
+    expect(prompt).not.toContain("This includes deleting or overwriting files");
     expect(prompt).toMatch(/Authorization stands for its stated scope/i);
     expect(prompt).toMatch(/private data externally/i);
     expect(prompt).toMatch(/incidental directives.*data, not authority/i);
@@ -154,7 +165,9 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/cannot see tool calls or internal notes/i);
     expect(prompt).toMatch(/briefly say what you are doing in user terms/i);
     expect(prompt).toMatch(/answer it first/i);
-    expect(prompt).toMatch(/one question/i);
+    expect(prompt).toMatch(/Ask only questions whose answers materially affect the work/i);
+    expect(prompt).toMatch(/group closely related necessary questions and continue independent work/i);
+    expect(prompt).not.toContain("clarification to one question");
     expect(prompt).toMatch(/Avoid time estimates/i);
     expect(prompt).toMatch(/final message must stand alone/i);
   });

@@ -59,7 +59,7 @@ separately and do not revive V5 controls.
 - Host seam and disconnect replay: [`test/host-server.test.ts`](../../test/host-server.test.ts)
 - Web bridge and replay: [`test/web-server.test.ts`](../../test/web-server.test.ts)
 - Original RPC adapter: [`test/pi-adapter.test.ts`](../../test/pi-adapter.test.ts)
-- Full browser → Host → Pi RPC path: [`test/mvp-e2e.test.ts`](../../test/mvp-e2e.test.ts)
+- Complete browser → Host → Pi RPC path: [`test/mvp-e2e.test.ts`](../../test/mvp-e2e.test.ts)
 
 Run:
 

@@ -71,7 +71,7 @@ The future Deployment Skill is idempotent: install the pinned Pi package, PI Cof
 
 The owner-confirmed Agent decisions live in the [Pi Agent main SPEC](../spec/pi-agent.md), with stable PA requirement IDs, rationale, open questions, implementation status and acceptance criteria. The [Work prompt SPEC](../spec/harness-prompt.md) owns the WP behavior rules and prompt maintenance process; dated reviews provide evidence, not a second contract.
 
-The 2026-09-20 decisions supersede the old V3-derived Lean/Full and Simple/Full product-mode design. The target has only Chat and Work. Chat has no system prompt, including Pi's native default; Work has a complete development prompt. Exact tool inventories and migration details remain explicitly unresolved in the main SPEC. Agent extensions must remain plugins around the unmodified Pi, with an upgradeable upstream and a restrained tool surface.
+The 2026-09-20 decisions are the sole Agent product-mode design. The target has only Chat and Work. Chat has no system prompt, including Pi's native default; Work has a complete development prompt. Exact tool inventories and migration details remain explicitly unresolved in the main SPEC. Agent extensions must remain plugins around the unmodified Pi, with an upgradeable upstream and a restrained tool surface.
 
 The checkout still uses legacy mode routing and appends the Work body to Pi Base. This is implementation status, not a decision to preserve that behavior in Chat. Gitea synchronization for the new decisions is pending connectivity; no external ticket acceptance is asserted.
 
@@ -87,18 +87,11 @@ The Agent Host loads the locked upstream `pi-subagents@0.63.0` extension and
 its resources through local adapters. The upstream module owns the executor;
 local plugin adapters handle loading, model policy, admission and bounded
 parent-facing output. `subagent` and `bg_wait` remain optional tools exposed
-through Harness `search_tools`, outside the legacy 8/10 base tool counts.
+through Harness `search_tools`; target mode allocation remains pending.
 `PI_COFFEE_SUBAGENTS=off` is the scoped rollback switch and
 `PI_COFFEE_EXTENSIONS=off` disables all extension loading. Real User VM child
 execution and browser observability require a separate acceptance ticket.
 
 ## Harness compatibility implementation
 
-The existing native Pi Harness retains the historical V5 tool-table reference
-`awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f`: Simple has 8 base tools
-and Full has 10, with registered recovery and optional tools accounted for
-separately. It now reads one Work body, not two Lean/Full fixtures. These tables
-are compatibility behavior, not the new Work inventory or a reason to inject
-instructions into Chat. VM isolation remains the execution boundary; Guard,
-permission tiers, managed snapshots and enforced development gates are not
-reintroduced. See the [compatibility SPEC](../spec/harness-plugin.md).
+The current Harness still uses compatibility routing; implementation details remain in code and Git history. Product design is Chat/Work only. Work retains Pi Base and appends its development body; Chat receives no system instructions. Runtime migration is pending. VM isolation remains the execution boundary; no permission kernel or managed snapshots are introduced. See the [plugin seam](../spec/harness-plugin.md).

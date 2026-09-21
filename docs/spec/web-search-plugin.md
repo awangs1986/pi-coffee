@@ -1,6 +1,6 @@
 # Web 搜索：短摘要、来源索引与 VM 证据文件
 
-实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；下文 Simple/Lean/Full 仅描述兼容运行时，不能自动作为 Chat/Work 的工具与委派政策，映射待 PA-Q01/04。
+实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；产品只使用 Chat/Work；工具和委派分配待 PA-Q01/04，当前兼容分派不构成新设计。
 
 ## 边界
 
@@ -18,13 +18,11 @@
 
 用户若主动读取完整 artifact，仍可能再次引入数据；通用提示词要求按范围检索，大工具结果由上下文入口策略限量。
 
-## 当前兼容模式的搜索路径（非 Chat/Work 分配决定）
+## Chat/Work 搜索边界
 
-**Simple/Lean** 不使用子 Agent：在当前进程直接搜索并保留相同的有界摘要、来源索引与证据文件。`delegate=true` 不会绕过模式限制。
+Chat 按 PA-003 的基础工具与 Web 搜索范围设计，不因搜索而附加 Work 系统指令或自行扩展子任务工具。Work 的默认直接搜索还是研究委派仍待 PA-Q04，不能从兼容运行时继承默认政策。
 
-**Full** 的普通搜索默认委派给 fresh-context 的 `coffee-research`，父进程不先调用 Relay。子进程实际调用 `web_search`、按需抓取来源并返回短结论与 URL/artifact 索引。子进程中的 Web 工具始终直接执行，不能递归委派。单个简单查询只需一个子任务；共用每主对话 3、每 VM 5 的原生子 Pi 准入。模型独立配置与队列细节见 [subagents-plugin.md](./subagents-plugin.md)。
-
-Full 中委派失败明确失败，不自动在父 Agent 重做搜索；显式 `delegate=false` 才选直接搜索。Simple/Lean 直接搜索是模式本身的行为，不是失败回退。`PI_COFFEE_WEB_SUBAGENT` 不再控制默认开启；嵌入方可以设置 `delegateByDefault`。
+现有直接搜索、研究子 Pi、来源读取和短结论回传能力可复用。委派失败须明确报告，不能静默在父 Agent 重做；子进程不能递归委派。当前分派细节以 `src/web/extension.ts`、`src/harness/runtime-mode.ts` 和对应测试为准，旧产品分派文本已撤回 Git 历史（提交 `b027838`）。
 
 `fetch_content`、`source_check`、`get_search_content` 继续属于可选 web-access 能力。后者的上游缓存不等同于本地 Serper artifact，不能假定互通；获取已知 URL 正文与读取本地 evidence 文件应使用各自工具。搜索故障明确报告，不自动换供应商或帐号。
 

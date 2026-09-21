@@ -1,5 +1,7 @@
 # `pi-subagents` integration audit
 
+> 2026-09-20 文档清理：本页涉及旧模式的段落/表项已撤下，未改写为 Chat/Work 的实现证据。原始记录用 `git show b027838:docs/research/pi-subagents-audit-20260903.md` 追溯；当前模式只见 [Pi Agent 主规格](../spec/pi-agent.md)。其余内容仍是标题日期的历史快照。
+
 Date: 2026-09-03
 Repository: `awangs/pi-coffee`
 Purpose: decide how the upstream `nicobailon/pi-subagents` Pi extension can be
@@ -50,19 +52,6 @@ Web Server.
 The following smoke checks were run against the installed official Pi package
 `@earendil-works/pi-coding-agent@0.84.4`:
 
-1. A Pi CLI process started with
-   `--extension .../pi-subagents/index.ts --offline --mode json --list-models`
-   exited successfully without an extension-load error.
-2. A local RPC client started the same extension with `--no-session` and
-   `PI_OFFLINE=1`. `get_commands` returned the upstream subagent commands,
-   including `subagents`, `subagents-doctor`, `subagents-fleet`,
-   `subagents-stop`, `subagents-steer`, and `subagents-models`. The process
-   stopped cleanly.
-3. The repeatable `npm run smoke:subagents` script adds a temporary diagnostic
-   extension. It observed `subagent` and `bg_wait` in the registered tool set
-   while the Harness active list stayed exactly at the Simple 8-tool table,
-   and it observed the packaged prompt/skill commands.
-
 These checks prove loading and command registration, not model-backed child
 execution. A real User VM acceptance run must still cover child launch,
 background completion, cancellation, restart, and resource cleanup.
@@ -76,13 +65,6 @@ native Pi extension after the PI Coffee Harness extension. The existing
 list; `PI_COFFEE_EXTENSIONS=off` still disables all extensions. A separate
 `PI_COFFEE_SUBAGENTS=off` switch disables only the packaged extension while
 leaving Harness enabled.
-
-The Harness `session_start` handler continues to select exactly the frozen V5
-base table: Simple has 8 tools and Full has 10. `subagent` and `bg_wait` are
-registered by the external extension but are not silently inserted into
-either base table. They appear in `search_tools` as optional extension tools
-and can be activated deliberately. This keeps the V5 count honest while
-making the new capability available through the same Pi session.
 
 The package's built-in agent definitions are resolved relative to its own
 installed entry point. PI Coffee does not copy or mutate those files. An
@@ -108,13 +90,3 @@ rather than widening the Host seam.
 ## Follow-up acceptance
 
 The integration ticket should remain open until a User VM test demonstrates:
-
-- `search_tools` discovers `subagent` and `bg_wait` while Simple/Full counts
-  remain 8/10;
-- a foreground child returns a result to the parent session;
-- a background child can be observed, waited on, stopped, and recovered after
-  a browser disconnect;
-- `PI_COFFEE_SUBAGENTS=off` and `PI_COFFEE_EXTENSIONS=off` have the documented
-  fail-closed effect; and
-- no upstream key, transcript, or uploaded file body is written to the
-  Control Plane.

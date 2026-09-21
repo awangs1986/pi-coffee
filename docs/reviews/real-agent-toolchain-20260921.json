@@ -1,0 +1,1126 @@
+{
+  "generatedAt": "2026-09-21T09:11:13.981Z",
+  "provider": "eidolon",
+  "model": "gpt-5.6-terra",
+  "piLensVersion": "4.2.1",
+  "fixture": "disposable TypeScript repository; no project or credential files exposed",
+  "runs": [
+    {
+      "name": "full-stack",
+      "ok": true,
+      "promptResults": [
+        {
+          "id": "autonomous",
+          "toolCalls": [
+            "ls",
+            "git",
+            "find",
+            "find",
+            "find",
+            "read",
+            "read",
+            "ls",
+            "ls",
+            "bash",
+            "read",
+            "read",
+            "read",
+            "read",
+            "verify",
+            "search_tools",
+            "edit",
+            "bash",
+            "git",
+            "bash",
+            "bash",
+            "bash",
+            "git",
+            "git",
+            "verify"
+          ],
+          "finalText": "Fixed the TypeScript contract mismatch in [src/app.ts](/tmp/pi-coffee-real-toolchain-inJpy4/full-stack/src/app.ts:4): `result` is now declared as `string`, matching `formatTotal()` and the UI’s formatted-string contract.\n\nValidation with the installed explicit Node runtime:\n- TypeScript: `tsc -p tsconfig.json --noEmit` passed.\n- Contract test: `node --test test/*.test.mjs` passed, 1/1 tests.\n\nThe configured `verify` command still reports failure because its environment has no `node` on `PATH` (`node: command not found`), not because of a project failure. The explicit runtime used was `/home/awang/.local/share/pi-node/node-v22.23.2-linux-x64/bin/node`."
+        },
+        {
+          "id": "explicit-coverage",
+          "toolCalls": [
+            "ls",
+            "grep",
+            "find",
+            "read",
+            "git",
+            "search_tools",
+            "search_tools",
+            "search_tools",
+            "search_tools",
+            "search_tools",
+            "read",
+            "read",
+            "write",
+            "edit",
+            "bash",
+            "verify",
+            "web_search",
+            "subagent",
+            "subagent",
+            "bash",
+            "git",
+            "git",
+            "find",
+            "read"
+          ],
+          "finalText": "Compatibility probe completed. No commit or push was performed.\n\nExercised visible base development capabilities:\n- `ls`, `find`, `grep`, and `read` inspected the repository and `formatTotal`.\n- `write` created `.pi-capability-probe.tmp`; `edit` changed it from `probe=created` to `probe=modified`.\n- `bash` confirmed the temporary file content, then removed it.\n- `git status` and `git diff` inspected repository state.\n- `verify` was run.\n\nCapability discovery and activated-bundle probes:\n- Activated `web`; a minimal `example.com` query completed. Its synthetic result artifact is at `/home/awang/.pi/agent/pi-coffee/research/research-82f51e850d5e1eadf163.md`.\n- Activated `subagent`; an initial `explorer` request correctly failed because that agent is not registered. A minimal `scout` delegation completed and returned `calculator.ts`.\n\nPi-lens availability:\n- Read the available pi-lens LSP-navigation and AST-grep skill instructions.\n- No pi-lens capability bundle was returned by `search_tools`.\n- Neither `lens`, `lsp_navigation`, `lens_diagnostics`, `ast_grep_search`, nor the documented `pi_lens_activate_tools` interface is visible in the active tool table. Consequently, no valid activation or LSP definition/reference query for `formatTotal` could be made. I did perform the closest available textual search, which found its definition in `src/calculator.ts:9` and usage in `src/app.ts:1`.\n\nVerification remains blocked by the harness environment:\n- Configured verification failed both commands because `node` is absent from its `PATH`.\n- This is the same environment issue observed previously; the repository’s explicit-runtime TypeScript and contract-test checks had passed before this probe.\n\nFinal state is clean apart from the intended existing change to [src/app.ts](/tmp/pi-coffee-real-toolchain-inJpy4/full-stack/src/app.ts:4). The temporary probe file is confirmed removed."
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "ls",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "find",
+          "status": "completed"
+        },
+        {
+          "name": "find",
+          "status": "completed"
+        },
+        {
+          "name": "find",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "ls",
+          "status": "completed"
+        },
+        {
+          "name": "ls",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "verify",
+          "status": "completed"
+        },
+        {
+          "name": "search_tools",
+          "status": "completed"
+        },
+        {
+          "name": "edit",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "verify",
+          "status": "completed"
+        },
+        {
+          "name": "ls",
+          "status": "completed"
+        },
+        {
+          "name": "grep",
+          "status": "completed"
+        },
+        {
+          "name": "find",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "search_tools",
+          "status": "completed"
+        },
+        {
+          "name": "search_tools",
+          "status": "completed"
+        },
+        {
+          "name": "search_tools",
+          "status": "completed"
+        },
+        {
+          "name": "search_tools",
+          "status": "completed"
+        },
+        {
+          "name": "search_tools",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        },
+        {
+          "name": "write",
+          "status": "completed"
+        },
+        {
+          "name": "edit",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "verify",
+          "status": "completed"
+        },
+        {
+          "name": "web_search",
+          "status": "completed"
+        },
+        {
+          "name": "subagent",
+          "status": "error"
+        },
+        {
+          "name": "subagent",
+          "status": "completed"
+        },
+        {
+          "name": "bash",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "git",
+          "status": "completed"
+        },
+        {
+          "name": "find",
+          "status": "completed"
+        },
+        {
+          "name": "read",
+          "status": "completed"
+        }
+      ],
+      "snapshots": [
+        {
+          "label": "session-start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "configured-full",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "before-agent-start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "after-autonomous",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "before-agent-start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        },
+        {
+          "label": "after-explicit-coverage",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "search_tools",
+            "git",
+            "verify",
+            "recall_folded",
+            "web_search",
+            "research_seal",
+            "subagent",
+            "bg_wait"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "web_search",
+            "research_seal",
+            "search_tools",
+            "git",
+            "verify",
+            "subagent",
+            "bg_wait",
+            "source_check",
+            "fetch_content",
+            "get_search_content",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark",
+            "recall_folded",
+            "unfold"
+          ]
+        }
+      ],
+      "extensionErrors": [],
+      "stderrTail": "",
+      "finalCheck": {
+        "ok": true,
+        "output": "\n> check\n> tsc -p tsconfig.json --noEmit && node --test test/*.test.mjs\n\n✔ the UI result remains a formatted string (3.992371ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 51.932618\n"
+      },
+      "finalAppSource": "import { formatTotal } from \"./calculator.js\";\n\n// The UI displays a formatted string with two decimal places.\nexport const result: string = formatTotal({ prices: [3, 4.5] });\n"
+    },
+    {
+      "name": "pi-lens-control",
+      "ok": true,
+      "promptResults": [
+        {
+          "id": "lsp-control",
+          "toolCalls": [
+            "read",
+            "module_report",
+            "lens_diagnostics",
+            "bash",
+            "pi_lens_activate_tools",
+            "read",
+            "read_symbol",
+            "lsp_navigation",
+            "lsp_navigation",
+            "read",
+            "read",
+            "read",
+            "lsp_navigation",
+            "lsp_navigation",
+            "edit",
+            "lens_diagnostics",
+            "lens_diagnostics",
+            "bash",
+            "lsp_navigation",
+            "read_symbol"
+          ],
+          "finalText": "Fixed the type error in [src/app.ts](/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts:4): `result` is now declared as `string`, matching `formatTotal`.\n\nPi-lens inspection confirmed `formatTotal(cart: Cart): string` in [src/calculator.ts](/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts:9).\n\nVerification:\n- `npm run check` passed: TypeScript compilation and 1 test succeeded.\n- Active pi-lens LSP diagnostics ran before and after the fix with zero findings, but are **inconclusive**, not confirmed clean: the TypeScript server is push-only/silent on clean re-checks.\n- Pi-lens `definition`, `references`, and `hover` operations were available but returned empty results for `formatTotal` in `src/app.ts`; navigation could not be confirmed for this repository.\n- No pi-lens health tool was exposed in the available tools, so it could not be called."
+        },
+        {
+          "id": "all-lens-tools",
+          "toolCalls": [
+            "read",
+            "pi_lens_activate_tools",
+            "symbol_search",
+            "read_enclosing",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "lens_diagnostics",
+            "ast_grep_search",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lsp_navigation",
+            "lens_diagnostics",
+            "ast_grep_search",
+            "write",
+            "ast_grep_replace",
+            "ast_grep_replace",
+            "ast_grep_replace",
+            "ast_grep_replace",
+            "ast_grep_search",
+            "read",
+            "lsp_navigation",
+            "bash"
+          ],
+          "finalText": "Completed the explicit pi-lens coverage probe. No commit or push was performed. The disposable `src/lens-probe.ts` was structurally renamed, verified, and deleted; the final worktree only shows the pre-existing task change in [src/app.ts](/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts:4).\n\nSuccessful tool coverage:\n- `symbol_search(\"formatTotal\")`: indexed and returned `src/app.ts` and [src/calculator.ts](/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts:9).\n- `read_enclosing` at calculator line 9 and `read_symbol`: both returned `formatTotal(cart: Cart): string`.\n- `effective_config`: completed; selected TypeScript plus auxiliary tooling. It lists `health` as enabled internally, but no callable health tool is exposed by this harness.\n- `project_report`: completed with a fresh 2-file review graph.\n- `module_report`: completed with three exports. Its optional call graph is degraded as `stale`/unavailable.\n- `lens_diagnostics` active LSP probe: zero findings, but **inconclusive**, because the server is push-only and silent on a clean re-check.\n- Activated `ast_grep_search`, `ast_grep_replace`, `ast_grep_outline`, `lsp_navigation`, and `lens_diagnostic_mark`.\n- `ast_grep_outline`: successfully outlined exported items in `src/`.\n- `ast_grep_replace`: previewed and applied one replacement in the temporary file:\n  `lensProbeValue` -> `lensProbeRenamed`.\n- `ast_grep_search` and a direct read verified the renamed function before cleanup.\n\nDegraded or failed results:\n- Two initial AST search patterns against exported `formatTotal` returned no matches. The patterns did not account for the exported/typed declaration shape; a successful AST search then verified the renamed disposable probe instead.\n- Two initial AST replacement previews on the disposable function returned no matches for the same exported/return-type shape issue. The typed pattern `export function lensProbeValue($$$ARGS): $RETURN { $$$BODY }` then previewed and applied exactly one replacement.\n- `lsp_navigation` `definition`, `references`, and `documentSymbol` calls completed but returned empty results. Navigation is therefore available as a tool but did not yield symbol data in this fixture.\n- `lens_diagnostic_mark` was not called. There was no real diagnostic identifier with the required exact file, line, rule, and message precondition; inventing one would be invalid.\n- The session-cache diagnostic query reported no files diagnosed in that cache view. The active LSP check is the relevant result and remains inconclusive rather than clean-confirmed."
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "---\nname: pi-lens-lsp-navigation\ndescription: Navigate code with IDE features and run proactive LSP diagnostics on files/folders/batches. Use as PRIMARY for code intelligence and type/error checks.\n---\n\n# LSP Navigation and Diagnostics\n\nUse `lsp_navigation` as **PRIMARY** for code intelligence. Use `lens_diagnostics` with `source=lsp` as **PRIMARY** for proactive type/error checks. Do NOT use grep/glob/ast-grep first for code intelligence.\n\n## Aggregate-tool hosts\n\nSome hosts expose pi-lens through a single aggregate tool — `lens(action=...)` — instead of registering the standalone names below. On those hosts:\n\n- Proactive checks: `lens({ action: \"lsp_diagnostics\", ... })` — same parameters as the table below; the cached-report entry point maps to `lens({ action: \"diagnostics\", ... })`.\n- If `lsp_navigation` is not among the aggregate's actions, do not call the standalone name: use the host's structural search funnel (`symbol_search` → `module_report` → `read_symbol`) or the `ast-grep` CLI for navigation instead.\n\n## Diagnostics\n\nUse `lens_diagnostics` with `source=lsp` before builds/tests or after touching several files:\n\n| Need | Tool call |\n|---|---|\n| Check one file | `lens_diagnostics({ source: \"lsp\", scope: \"paths\", paths: [\"src/file.ts\"] })` |\n| Check a folder | `lens_diagnostics({ source: \"lsp\", scope: \"workspace\", path: \"src/\", severity: \"error\" })` |\n| Check exact touched files | `lens_diagnostics({ source: \"lsp\", scope: \"paths\", paths: [\"src/a.ts\", \"src/b.ts\"] })` "
+        },
+        {
+          "name": "module_report",
+          "status": "completed",
+          "result": "{\"available\":false,\"staleness\":\"unavailable\",\"path\":\"src/app.ts\",\"language\":\"jsts\",\"lineCount\":5,\"summary\":{\"imports\":1,\"exports\":0,\"symbols\":0},\"imports\":{\"external\":[],\"internal\":[\"src/calculator.ts\"]},\"api\":[],\"internal\":[],\"callbacks\":[],\"callbackSupport\":\"tuned\",\"recommendedReads\":[],\"callGraph\":{\"available\":false,\"reason\":\"review-graph-missing\",\"callers\":[],\"callees\":[],\"truncated\":false,\"coverage\":{\"status\":\"unavailable\",\"complete\":false}},\"provenance\":{\"symbols\":\"syntax\",\"imports\":\"syntax\",\"usedBy\":\"none\",\"callbacks\":\"heuristic-tree-sitter\",\"callGraph\":\"none\"},\"semantic\":{\"source\":\"none\",\"references\":false,\"implementations\":false}}\n\nresult error\nusage tokens=162 elapsed-ms=0 bytes=647 truncated=false"
+        },
+        {
+          "name": "lens_diagnostics",
+          "status": "completed",
+          "result": "Files checked: 1\nTotal diagnostics: 0\nConcurrency: 8\nWait budget: 10000ms\nOutcomes: clean=0, findings=0, unsupported=0, unavailable=0, failed=0, inconclusive=1\n\nChecks not confirmed: 1 (inconclusive/unavailable/unsupported/failed or not started).\n\n0 files confirmed clean, 1 unconfirmed: from a server that cannot confirm clean (push-only, silent-on-clean; e.g. classic typescript-language-server does not publish on a clean re-check). NOT the same as 0 diagnostics.\n\nresult ok\nusage tokens=117 elapsed-ms=0 bytes=466 truncated=false"
+        },
+        {
+          "name": "bash",
+          "status": "completed",
+          "result": "/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only\nsrc/app.ts\npackage.json\ntsconfig.json\n"
+        },
+        {
+          "name": "pi_lens_activate_tools",
+          "status": "completed",
+          "result": "Activated: lsp_navigation. Available starting next turn.\n\nresult ok\nusage tokens=14 elapsed-ms=0 bytes=56 truncated=false"
+        },
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "import { formatTotal } from \"./calculator.js\";\n\n// The UI displays a formatted string with two decimal places.\nexport const result: number = formatTotal({ prices: [3, 4.5] });\n"
+        },
+        {
+          "name": "read_symbol",
+          "status": "completed",
+          "result": "Symbol \"formatTotal\" not found in app.ts. Use module_report to list available symbols.\n\nresult error\nusage tokens=22 elapsed-ms=0 bytes=86 truncated=false"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"definition\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"resultCount\":0,\"notes\":[\"No results for definition at app.ts:3:13\"],\"metadata\":{\"operation\":\"definition\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=79 elapsed-ms=0 bytes=315 truncated=false"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"references\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"resultCount\":0,\"notes\":[\"No results for references at app.ts:3:13\"],\"hints\":[\"references from usage sites can be partial; retry from the symbol definition for broader cross-file results.\"],\"metadata\":{\"operation\":\"references\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=109 elapsed-ms=0 bytes=436 truncated=false"
+        },
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"noEmit\": true\n  },\n  \"include\": [\n    \"src/**/*.ts\"\n  ]\n}\n"
+        },
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "{\n  \"name\": \"pi-coffee-toolchain-fixture\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"check\": \"tsc -p tsconfig.json --noEmit && node --test test/*.test.mjs\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"5.9.3\"\n  }\n}\n"
+        },
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "export interface Cart {\n  prices: number[];\n}\n\nexport function total(cart: Cart): number {\n  return cart.prices.reduce((sum, price) => sum + price, 0);\n}\n\nexport function formatTotal(cart: Cart): string {\n  return total(cart).toFixed(2);\n}\n"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"definition\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"resultCount\":0,\"notes\":[\"No results for definition at app.ts:1:10\"],\"metadata\":{\"operation\":\"definition\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=79 elapsed-ms=0 bytes=315 truncated=false"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"references\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"resultCount\":0,\"notes\":[\"No results for references at app.ts:1:10\"],\"hints\":[\"references from usage sites can be partial; retry from the symbol definition for broader cross-file results.\"],\"metadata\":{\"operation\":\"references\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=109 elapsed-ms=0 bytes=436 truncated=false"
+        },
+        {
+          "name": "edit",
+          "status": "completed",
+          "result": "Successfully replaced 1 block(s) in src/app.ts.\n\n\n\n🟡 1 warning(s):\n  coverage: opengrep, typos silent — diagnostics are incomplete (not a clean result).\n"
+        },
+        {
+          "name": "lens_diagnostics",
+          "status": "completed",
+          "result": "Files checked: 1\nTotal diagnostics: 0\nConcurrency: 8\nWait budget: 10000ms\nOutcomes: clean=0, findings=0, unsupported=0, unavailable=0, failed=0, inconclusive=1\n\nChecks not confirmed: 1 (inconclusive/unavailable/unsupported/failed or not started).\n\n0 files confirmed clean, 1 unconfirmed: from a server that cannot confirm clean (push-only, silent-on-clean; e.g. classic typescript-language-server does not publish on a clean re-check). NOT the same as 0 diagnostics.\n\nresult ok\nusage tokens=117 elapsed-ms=0 bytes=466 truncated=false"
+        },
+        {
+          "name": "lens_diagnostics",
+          "status": "completed",
+          "result": "src/app.ts\n  ℹ L?  pi-lens  coverage: opengrep, typos silent — diagnostics are incomplete (not a clean result).\nSummary (turn delta): 0 actionable warnings · 1 quality issue · 0 project diagnostics\n\nresult ok\nusage tokens=51 elapsed-ms=0 bytes=203 truncated=false"
+        },
+        {
+          "name": "bash",
+          "status": "completed",
+          "result": "\n> check\n> tsc -p tsconfig.json --noEmit && node --test test/*.test.mjs\n\n✔ the UI result remains a formatted string (2.482064ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 36.313154\n"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"hover\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"resultCount\":0,\"notes\":[\"No results for hover at app.ts:3:14\"],\"metadata\":{\"operation\":\"hover\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=75 elapsed-ms=0 bytes=300 truncated=false"
+        },
+        {
+          "name": "read_symbol",
+          "status": "completed",
+          "result": "function formatTotal  calculator.ts:9-11\n\nexport function formatTotal(cart: Cart): string {\n  return total(cart).toFixed(2);\n}\n\nresult ok\nusage tokens=32 elapsed-ms=0 bytes=126 truncated=false"
+        },
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "---\nname: pi-lens-ast-grep\ndescription: Use when searching or replacing code patterns - use ast-grep instead of text search for semantic accuracy\n---\n\n# AST-Grep Code Search\n\nUse `ast_grep_search` and `ast_grep_replace` for semantic code search/replace. ast-grep understands code structure, not just text.\n\nThese tools (plus `ast_grep_outline`, `lsp_navigation`) are registered but inactive by default on hosts that support pi's dynamic tooling. If a call to one of them isn't recognized, activate it first: `pi_lens_activate_tools tools=[\"ast_grep_search\", \"ast_grep_replace\"]`.\n\nOn hosts that aggregate pi-lens behind a single `lens` tool, the `ast_grep_*` tools and `pi_lens_activate_tools` may not be registered at all. There, fall back to the `ast-grep` CLI (alias `sg`) — patterns, metavariables, and YAML rules are identical:\n\n```bash\n# search (≈ ast_grep_search)\nast-grep run -p 'fetchMetrics($$$ARGS)' -l ts src/\n\n# rewrite (≈ ast_grep_replace; -U applies all)\nast-grep run -p 'var $X' -r 'let $X' -l js src/ -U\n\n# full YAML rule (≈ the rule: parameter)\nast-grep scan --rule my-rule.yml src/\n```\n\nStructural-intent parameters map to YAML constraints: `insideKind` → `inside: { kind: ..., stopBy: end }`, `hasKind`/`hasDescendantKind` → `has: { kind: ... }`, `follows` → `follows: { pattern: ... }`, `precedes` → `precedes: { pattern: ... }`.\n\n## When to Use\n\n- Function calls, imports, class methods (structured code)\n- Safe replacements across files\n- **Use LSP first for:** definitions/ref"
+        },
+        {
+          "name": "pi_lens_activate_tools",
+          "status": "completed",
+          "result": "Activated: ast_grep_search, ast_grep_replace, ast_grep_outline, lsp_navigation, lens_diagnostic_mark. Available starting next turn.\n\nresult ok\nusage tokens=33 elapsed-ms=0 bytes=131 truncated=false"
+        },
+        {
+          "name": "symbol_search",
+          "status": "completed",
+          "result": "Top 2 file(s) for \"formatTotal\":\n  1. src/app.ts (score 4.60, 6 hit(s), line 1)\n  2. src/calculator.ts (score 4.31, 5 hit(s), line 5)\nIndex covers 6 files.\n\n{\"available\":true,\"query\":\"formatTotal\",\"coverage\":{\"files\":6,\"truncated\":false},\"results\":[{\"file\":\"src/app.ts\",\"score\":4.603445032307119,\"hits\":6,\"startLine\":1,\"endLine\":1,\"annotations\":{\"fanIn\":0},\"suggestedNext\":{\"tool\":\"module_report\",\"path\":\"src/app.ts\"}},{\"file\":\"src/calculator.ts\",\"score\":4.305082954605872,\"hits\":5,\"startLine\":5,\"endLine\":5,\"annotations\":{\"fanIn\":1,\"complexity\":1},\"suggestedNext\":{\"tool\":\"module_report\",\"path\":\"src/calculator.ts\"}}]}\n\nresult ok\nusage tokens=155 elapsed-ms=0 bytes=619 truncated=false"
+        },
+        {
+          "name": "read_enclosing",
+          "status": "completed",
+          "result": "function formatTotal  calculator.ts:9-11\n\nexport function formatTotal(cart: Cart): string {\n  return total(cart).toFixed(2);\n}\n\nresult ok\nusage tokens=32 elapsed-ms=0 bytes=126 truncated=false"
+        },
+        {
+          "name": "effective_config",
+          "status": "completed",
+          "result": "effective_config /tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts — 0 config file(s) · 5 server(s) selected · 7 tool(s)\n\n{\"cwd\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only\",\"documents\":[],\"provenance\":[],\"provenanceCounts\":{\"builtin\":0,\"global\":0,\"project\":0,\"nested-project\":0,\"env\":0,\"cli\":0,\"host\":0},\"recordCounts\":{},\"tools\":[{\"name\":\"ast_grep_search\",\"enabled\":true},{\"name\":\"ast_grep_replace\",\"enabled\":true},{\"name\":\"ast_grep_outline\",\"enabled\":true},{\"name\":\"lsp_navigation\",\"enabled\":true},{\"name\":\"lens_diagnostics\",\"enabled\":true},{\"name\":\"lens_diagnostic_mark\",\"enabled\":true},{\"name\":\"symbol_search\",\"enabled\":true},{\"name\":\"module_report\",\"enabled\":true},{\"name\":\"project_report\",\"enabled\":true},{\"name\":\"read_symbol\",\"enabled\":true},{\"name\":\"read_enclosing\",\"enabled\":true},{\"name\":\"effective_config\",\"enabled\":true},{\"name\":\"pi_lens_activate_tools\",\"enabled\":true},{\"name\":\"analyze\",\"enabled\":true},{\"name\":\"health\",\"enabled\":true},{\"name\":\"latency\",\"enabled\":true},{\"name\":\"project_scan\",\"enabled\":true},{\"name\":\"rebuild\",\"enabled\":true},{\"name\":\"session_start\",\"enabled\":true},{\"name\":\"turn_end\",\"enabled\":true},{\"name\":\"session_end\",\"enabled\":true}],\"file\":{\"path\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"language\":\"typescript\",\"kind\":\"jsts\",\"servers\":[{\"id\":\"typescript\",\"selected\":true,\"reason\":\"selected\"},{\"id\":\"deno\",\"selected\":true,\"reason\":\"selected\"},{\"id\":\"python\",\"selected\":false,\"reason\":\"extension-mismatch\"},{\"id\":\"pyt"
+        },
+        {
+          "name": "project_report",
+          "status": "completed",
+          "result": "{\"available\":true,\"lastBuildAttempt\":{\"when\":\"2026-09-21T09:12:08.824Z\",\"outcome\":\"succeeded\",\"buildId\":1},\"trust\":{\"graphBuiltAt\":\"2026-09-21T09:12:08.823Z\",\"filesCovered\":2,\"filesTotal\":2,\"coverage\":1,\"resolution\":{\"exact\":1,\"import\":0,\"receiverType\":0,\"nameOnly\":0,\"sampleSize\":1},\"stale\":false,\"lowCoverage\":false,\"notes\":[]},\"hubs\":[{\"file\":\"src/calculator.ts\",\"fanIn\":1,\"blastRadius\":1,\"role\":\"total\",\"suggestedNext\":{\"tool\":\"module_report\",\"path\":\"src/calculator.ts\"}}],\"entryPoints\":[{\"file\":\"src/app.ts\",\"fanIn\":0,\"fanOut\":1,\"suggestedNext\":{\"tool\":\"module_report\",\"path\":\"src/app.ts\"}}],\"subsystems\":{\"directories\":[\"src\"],\"edges\":[],\"cycles\":[],\"violations\":[]},\"riskHotspots\":[{\"file\":\"src/calculator.ts\",\"fanIn\":1,\"maxComplexity\":1,\"score\":1,\"suggestedNext\":{\"tool\":\"module_report\",\"path\":\"src/calculator.ts\"}}],\"deadWeight\":{\"files\":[],\"disclaimer\":\"Low confidence: dynamic imports, runtime registration, and test-only reachability all produce false positives here — verify with a real usage search (symbol_search/grep) before deleting anything listed.\"}}\n\nresult ok\nusage tokens=268 elapsed-ms=0 bytes=1071 truncated=false"
+        },
+        {
+          "name": "module_report",
+          "status": "completed",
+          "result": "{\"available\":true,\"staleness\":\"fresh\",\"path\":\"src/calculator.ts\",\"language\":\"jsts\",\"lineCount\":12,\"summary\":{\"imports\":0,\"exports\":3,\"symbols\":3},\"imports\":{\"external\":[],\"internal\":[]},\"api\":[{\"name\":\"Cart\",\"kind\":\"interface\",\"startLine\":1,\"endLine\":3,\"exported\":true},{\"name\":\"total\",\"kind\":\"function\",\"startLine\":5,\"endLine\":7,\"exported\":true,\"signature\":\"(cart: Cart)\",\"fanout\":1,\"complexity\":1,\"usedBy\":[{\"file\":\"src/calculator.ts\",\"symbol\":\"formatTotal\",\"line\":9,\"relation\":\"calls\",\"resolution\":\"exact\"}]},{\"name\":\"formatTotal\",\"kind\":\"function\",\"startLine\":9,\"endLine\":11,\"exported\":true,\"signature\":\"(cart: Cart)\",\"fanout\":2,\"complexity\":1}],\"internal\":[],\"callbacks\":[],\"callbackSupport\":\"tuned\",\"recommendedReads\":[{\"reason\":\"matches focus, exported\",\"symbol\":\"formatTotal\",\"startLine\":9,\"endLine\":11},{\"reason\":\"exported, used by 1\",\"symbol\":\"total\",\"startLine\":5,\"endLine\":7},{\"reason\":\"exported\",\"symbol\":\"Cart\",\"startLine\":1,\"endLine\":3}],\"callGraph\":{\"available\":false,\"reason\":\"stale\",\"callers\":[],\"callees\":[],\"truncated\":false,\"coverage\":{\"status\":\"unavailable\",\"complete\":false}},\"graphBuiltAt\":\"2026-09-21T09:12:08.823Z\",\"provenance\":{\"symbols\":\"syntax\",\"imports\":\"syntax\",\"usedBy\":\"cached-review-graph\",\"callbacks\":\"heuristic-tree-sitter\",\"callGraph\":\"none\"},\"semantic\":{\"source\":\"review-graph\",\"references\":true,\"implementations\":false}}\n\nresult ok\nusage tokens=340 elapsed-ms=0 bytes=1359 truncated=false"
+        },
+        {
+          "name": "read_symbol",
+          "status": "completed",
+          "result": "function formatTotal  calculator.ts:9-11\n\nexport function formatTotal(cart: Cart): string {\n  return total(cart).toFixed(2);\n}\n\nresult ok\nusage tokens=32 elapsed-ms=0 bytes=126 truncated=false"
+        },
+        {
+          "name": "lens_diagnostics",
+          "status": "completed",
+          "result": "Files checked: 1\nTotal diagnostics: 0\nConcurrency: 8\nWait budget: 10000ms\nOutcomes: clean=0, findings=0, unsupported=0, unavailable=0, failed=0, inconclusive=1\n\nChecks not confirmed: 1 (inconclusive/unavailable/unsupported/failed or not started).\n\n0 files confirmed clean, 1 unconfirmed: from a server that cannot confirm clean (push-only, silent-on-clean; e.g. classic typescript-language-server does not publish on a clean re-check). NOT the same as 0 diagnostics.\n\nresult ok\nusage tokens=117 elapsed-ms=0 bytes=466 truncated=false"
+        },
+        {
+          "name": "ast_grep_search",
+          "status": "completed",
+          "result": "No matches found\n\nHint: No matches. Retry once with a smaller valid AST pattern scoped to the same paths (for example a call like `foo($$$ARGS)`, an import statement, or `function $NAME($$$ARGS) { $$$BODY }`). If you're actually looking for a name/usage rather than a structural pattern, prefer symbol_search (ranked identifier search) or module_report (file outline) over another AST retry; lsp_navigation findReferences finds exact call sites once you have a definition. If that also fails, use grep for text search, or ast_grep_search with dump=true on a small representative snippet to inspect node kinds.\n\nresult ok\nusage tokens=153 elapsed-ms=0 bytes=609 truncated=false"
+        },
+        {
+          "name": "ast_grep_outline",
+          "status": "completed",
+          "result": "{\"outline\":[{\"path\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"language\":\"TypeScript\",\"items\":[{\"role\":\"item\",\"symbolType\":\"constant\",\"name\":\"result\",\"range\":{\"byteOffset\":{\"start\":111,\"end\":175},\"start\":{\"line\":3,\"column\":0},\"end\":{\"line\":3,\"column\":64}},\"signature\":\"export const result: string = formatTotal({ prices: [3, 4.5] });\",\"astKind\":\"export_statement\",\"isImport\":false,\"isExported\":true,\"read\":{\"path\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/app.ts\",\"offset\":4,\"limit\":1}}]},{\"path\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"language\":\"TypeScript\",\"items\":[{\"role\":\"item\",\"symbolType\":\"interface\",\"name\":\"Cart\",\"range\":{\"byteOffset\":{\"start\":0,\"end\":45},\"start\":{\"line\":0,\"column\":0},\"end\":{\"line\":2,\"column\":1}},\"signature\":\"export interface Cart {\",\"astKind\":\"export_statement\",\"isImport\":false,\"isExported\":true,\"read\":{\"path\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"offset\":1,\"limit\":3}},{\"role\":\"item\",\"symbolType\":\"function\",\"name\":\"total\",\"range\":{\"byteOffset\":{\"start\":47,\"end\":153},\"start\":{\"line\":4,\"column\":0},\"end\":{\"line\":6,\"column\":1}},\"signature\":\"export function total(cart: Cart): number {\",\"astKind\":\"export_statement\",\"isImport\":false,\"isExported\":true,\"read\":{\"path\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"offset\":5,\"limit\":3}},{\"role\":\"item\",\"symbolType\":\"function\",\"name\":\"formatTotal\",\"range\":{\"byteOffset\":{\"start\":155,\"end\":239},\"start\":{\"line\":8,\"co"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"definition\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"resultCount\":0,\"notes\":[\"No results for definition at calculator.ts:9:17\"],\"metadata\":{\"operation\":\"definition\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=83 elapsed-ms=0 bytes=329 truncated=false"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"references\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"resultCount\":0,\"notes\":[\"No results for references at calculator.ts:9:17\"],\"hints\":[\"references from usage sites can be partial; retry from the symbol definition for broader cross-file results.\"],\"metadata\":{\"operation\":\"references\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=113 elapsed-ms=0 bytes=450 truncated=false"
+        },
+        {
+          "name": "lens_diagnostics",
+          "status": "completed",
+          "result": "No files diagnosed yet this session.\n\nNote: paths restricts this to cached findings for files pi-lens has already dispatched this session — mode=delta/all can't see files it hasn't touched. Use mode=full to actively scan exactly these paths.\n\nresult ok\nusage tokens=61 elapsed-ms=0 bytes=243 truncated=false"
+        },
+        {
+          "name": "ast_grep_search",
+          "status": "completed",
+          "result": "No matches found\n\nHint: No matches. Retry once with a smaller valid AST pattern scoped to the same paths (for example a call like `foo($$$ARGS)`, an import statement, or `function $NAME($$$ARGS) { $$$BODY }`). If you're actually looking for a name/usage rather than a structural pattern, prefer symbol_search (ranked identifier search) or module_report (file outline) over another AST retry; lsp_navigation findReferences finds exact call sites once you have a definition. If that also fails, use grep for text search, or ast_grep_search with dump=true on a small representative snippet to inspect node kinds.\n\nresult ok\nusage tokens=153 elapsed-ms=0 bytes=609 truncated=false"
+        },
+        {
+          "name": "write",
+          "status": "completed",
+          "result": "Successfully wrote 78 bytes to src/lens-probe.ts\n\n\n\n🟡 1 warning(s):\n  coverage: opengrep, typos silent — diagnostics are incomplete (not a clean result).\n"
+        },
+        {
+          "name": "ast_grep_replace",
+          "status": "completed",
+          "result": "[DRY-RUN] No matches found.\n\nresult ok\nusage tokens=7 elapsed-ms=0 bytes=27 truncated=false"
+        },
+        {
+          "name": "ast_grep_replace",
+          "status": "completed",
+          "result": "[DRY-RUN] No matches found.\n\nresult ok\nusage tokens=7 elapsed-ms=0 bytes=27 truncated=false"
+        },
+        {
+          "name": "ast_grep_replace",
+          "status": "completed",
+          "result": "[DRY-RUN] 1 replacement(s):\n\nsrc/lens-probe.ts:1:1\n  - export function lensProbeValue(input: number): number {\n  return input + 1;\n}\n  + export function lensProbeRenamed(input: number): number { return input + 1; }\n  $RETURN=number  $$$BODY=return input + 1;  $$$ARGS=input: number\n\n(Dry run — use apply=true to apply changes)\n\nresult ok\nusage tokens=82 elapsed-ms=0 bytes=328 truncated=false"
+        },
+        {
+          "name": "ast_grep_replace",
+          "status": "completed",
+          "result": "[APPLIED] 1 replacement(s):\n\nsrc/lens-probe.ts:1:1: export function lensProbeValue(input: number): number {\n  return input + 1;\n}  [TypeScript]\n  $RETURN=number  $$$ARGS=input: number  $$$BODY=return input + 1;\n\nresult ok\nusage tokens=53 elapsed-ms=0 bytes=210 truncated=false"
+        },
+        {
+          "name": "ast_grep_search",
+          "status": "completed",
+          "result": "src/lens-probe.ts:1:1: export function lensProbeRenamed(input: number): number { return input + 1; }  [TypeScript]\n  $RETURN=number  $$$ARGS=input: number  $$$BODY=return input + 1;\n\nresult ok\nusage tokens=46 elapsed-ms=0 bytes=181 truncated=false"
+        },
+        {
+          "name": "read",
+          "status": "completed",
+          "result": "export function lensProbeRenamed(input: number): number { return input + 1; }\n"
+        },
+        {
+          "name": "lsp_navigation",
+          "status": "completed",
+          "result": "{\"tool\":\"lsp_navigation\",\"operation\":\"documentSymbol\",\"ok\":true,\"status\":\"empty\",\"filePath\":\"/tmp/pi-coffee-real-toolchain-UIDBq3/lens-only/src/calculator.ts\",\"resultCount\":0,\"notes\":[\"No results for documentSymbol at calculator.ts\"],\"metadata\":{\"operation\":\"documentSymbol\",\"supported\":null,\"emptyReason\":\"no-results\",\"resultCount\":0}}\n\nresult ok\nusage tokens=84 elapsed-ms=0 bytes=336 truncated=false"
+        },
+        {
+          "name": "bash",
+          "status": "completed",
+          "result": " M src/app.ts\n"
+        }
+      ],
+      "snapshots": [
+        {
+          "label": "session-start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark"
+          ]
+        },
+        {
+          "label": "before-agent-start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark"
+          ]
+        },
+        {
+          "label": "after-lsp-control",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "lsp_navigation"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark"
+          ]
+        },
+        {
+          "label": "before-agent-start",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "lsp_navigation"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark"
+          ]
+        },
+        {
+          "label": "after-all-lens-tools",
+          "active": [
+            "read",
+            "bash",
+            "edit",
+            "write",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "lsp_navigation",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lens_diagnostic_mark"
+          ],
+          "registered": [
+            "read",
+            "bash",
+            "powershell",
+            "edit",
+            "write",
+            "grep",
+            "find",
+            "ls",
+            "lens_diagnostics",
+            "symbol_search",
+            "effective_config",
+            "project_report",
+            "module_report",
+            "read_symbol",
+            "read_enclosing",
+            "pi_lens_activate_tools",
+            "ast_grep_search",
+            "ast_grep_replace",
+            "ast_grep_outline",
+            "lsp_navigation",
+            "lens_diagnostic_mark"
+          ]
+        }
+      ],
+      "extensionErrors": [],
+      "stderrTail": "",
+      "finalCheck": {
+        "ok": true,
+        "output": "\n> check\n> tsc -p tsconfig.json --noEmit && node --test test/*.test.mjs\n\n✔ the UI result remains a formatted string (2.524882ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 36.840151\n"
+      },
+      "finalAppSource": "import { formatTotal } from \"./calculator.js\";\n\n// The UI displays a formatted string with two decimal places.\nexport const result: string = formatTotal({ prices: [3, 4.5] });\n"
+    }
+  ],
+  "assessment": {
+    "autonomousToolDiscovery": true,
+    "fullStackLensActive": [],
+    "fullStackLensCalled": [],
+    "controlLensActive": [
+      "lens_diagnostics",
+      "symbol_search",
+      "effective_config",
+      "project_report",
+      "module_report",
+      "read_symbol",
+      "read_enclosing",
+      "pi_lens_activate_tools"
+    ],
+    "controlLensCalled": [
+      "lens_diagnostics",
+      "symbol_search",
+      "effective_config",
+      "project_report",
+      "module_report",
+      "read_symbol",
+      "read_enclosing",
+      "pi_lens_activate_tools",
+      "ast_grep_search",
+      "ast_grep_replace",
+      "ast_grep_outline",
+      "lsp_navigation"
+    ],
+    "harnessLensConflictObserved": true,
+    "lspDiagnosticsOutcome": "inconclusive",
+    "lspNavigationOutcome": "all queries empty",
+    "diagnosticMarkOutcome": "not called: no real diagnostic identifier",
+    "fullStackCheckPassed": true,
+    "controlCheckPassed": true
+  }
+}

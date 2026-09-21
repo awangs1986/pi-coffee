@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HostSessionRegistry } from "../src/host/session.js";
 import type { ServerFrame } from "../src/shared/protocol.js";
-import { appendExtensionArgs, buildHostChildEnv, extensionPathsFromArgs, HOST_STRIPPED_ENV_KEYS, projectExtensions, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
+import { appendExtensionArgs, appendSkillArgs, buildHostChildEnv, extensionPathsFromArgs, HOST_STRIPPED_ENV_KEYS, projectExtensions, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
 
 describe("original Pi RPC adapter", () => {
   it("reports Pi death after prompt acknowledgement and permits explicit reopening without replay", async () => {
@@ -42,6 +42,15 @@ describe("original Pi RPC adapter", () => {
       "./existing.js",
       "--extension",
       "./harness.js",
+    ]);
+  });
+
+  it("adds configured Pi skills once while preserving explicit CLI args", () => {
+    expect(appendSkillArgs(["--skill", "./existing"], ["./existing", "./lsp", ""])).toEqual([
+      "--skill",
+      "./existing",
+      "--skill",
+      "./lsp",
     ]);
   });
 

@@ -5,6 +5,7 @@ import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
 import { DEFAULT_MAX_BATCH_BYTES, DEFAULT_MAX_FILE_BYTES, TransferServer } from "./host/transfer.js";
 import { resolvePiExtensions } from "./pi-extensions.js";
+import { resolvePiSkills, withCoffeeLspPath } from "./pi-skills.js";
 import { RelayServer } from "./relay/server.js";
 import { WebServer } from "./web/server.js";
 
@@ -96,6 +97,8 @@ async function run(selectedRole: Role): Promise<void> {
       provider: process.env.PI_COFFEE_PROVIDER,
       model: process.env.PI_COFFEE_MODEL,
       extensions: resolvePiExtensions(),
+      skills: resolvePiSkills(),
+      env: withCoffeeLspPath(),
     }),
   });
   if (host) await host.start();
