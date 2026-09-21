@@ -38,6 +38,10 @@
 - Work 固定正文只放稳定行为规则；活动工具、模型、预算和具体参数由真实运行时/工具契约提供。按 PA-009 保留 Pi Base 并追加 Work 正文；PA-Q02 的二选一已关闭，最终请求装配仍需验收。
 - 下列验收与工程分工用于落实已确认目标；尚未选定的数值、API 或迁移策略不能写成 owner 已批准。
 
+### VM 权限与代码协作边界
+
+[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 与 [GW-01～12](./gitea-workspaces.md) 明确 owner + 免密 sudo、独立 Checkout、Conversation 分支 checkpoint 预授权及 Gitea PR。这些是部署/工作区上下文，不进入项目中立的通用 Work 正文；实现按 T0–T4，不能以本次文档修改宣称权限或工具模式已部署。
+
 ## 3. 规格分工：一处定义，其他地方引用
 
 | 文件 | 维护什么 | 不负责什么 |

@@ -1,5 +1,7 @@
 # 双用户 VM 工作台：P0–P5 产品排期
 
+> 2026-09-21：本排期的 worktree/本地合并/项目锁目标已被 [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 与 [T0–T4](./t0-t4-gitea-workspaces.md) 替代；其余产品待办保持原范围。下方编号保留历史追溯，不再作为工作区新实现的要求。
+
 日期：2026-09-16。按 owner 澄清，本排期只覆盖讨论 Pi Agent 精简之前确认的产品 SPEC；不把提示词、上下文、搜索或 subagent 改造排入主线。
 
 主合同：[multi-user-vm.md](../spec/multi-user-vm.md)。本表替代 [旧混合计划](./plan-20260916.md) 中的产品优先级；旧文件保留作为 Pi/工具未完事项的交接记录。

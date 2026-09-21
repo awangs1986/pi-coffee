@@ -1,5 +1,7 @@
 # PI Coffee Backlog
 
+> **当前新增决策（2026-09-21）**：[ADR-0012](./docs/adr/0012-owner-privileges-and-gitea-checkouts.md) 接受 VM owner + 无限制 sudo、Gitea 代码权威与每 Conversation 独立 clone；[T0–T4](./docs/development/t0-t4-gitea-workspaces.md) 是五步实施队列，当前均未实施。替代以下历史工作区/本地合并条目时以该合同为准。
+
 > **2026-09-21 仓库拆分**：本文件保留历史产品 Backlog，但当前仓库的执行范围只包括 Agent Runtime。Web UI、统一网关、身份、固定路由、Relay 和 Server 部署进入 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)；新工作按两个仓库各自 Issue 追踪。
 
 > **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
@@ -85,7 +87,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-013` | `DECIDED` | Picode/PI Coffee 不管理 VM 生命周期。 | 不创建、销毁、快照、迁移或自动恢复 VM；这些是所有者的运维动作。 |
 | `D-014` | `DECIDED` | VM 快照是故障恢复手段；允许用户接受损坏并手动恢复快照。 | 0.1 要提供明确的 health、停止、恢复和验收步骤，而不是 VM 管理器。 |
 | `D-015` | `DECIDED` | VM 隔离是执行安全边界。 | 不复制 V5 的进程内 Guard、审批、权限等级或命令 sandbox。见 [ADR-0005](./docs/adr/0005-vm-isolation-replaces-in-process-sandbox.md)。 |
-| `D-016` | `DECIDED` | Worktree 是 Task/仓库组织机制，不是安全机制。 | Worktree 增强和 V5 worktree 迁移延后；不能用它替代 VM 隔离。 |
+| `D-016` | `SUPERSEDED` | 平台管理的 worktree 改为独立 Conversation clone；Gitea 负责协作和集成。 | ADR-0012 / GW-04～12 / T0–T4；V5 仍冻结。 |
 | `D-017` | `DECIDED` | 持久的上下文属于 User VM，不属于 Web VM/Control Plane。 | Transcript、Pi model context、Task 文件、插件状态和 worktree 内容不进控制面数据库。 |
 | `D-018` | `DECIDED` | Control Plane 只保留最小路由索引和有界 usage metadata。 | 可保存 user → fixed User VM、opaque ID、health、cursor、耗时/计数；不得保存 prompt、tool output、context 正文。 |
 | `D-019` | `DECIDED` | 术语中不引入独立的 “worker” 产品组件。 | 使用 **Agent Host** 表示 User VM 中的长期进程，使用 **Pi Session** 表示其会话；文档避免含义不清的 worker。 |
@@ -107,7 +109,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-025` | `DECIDED` | 一个浏览器标签页就是一个 Browser Shell。 | 不以多标签页作为主要交互模型；0.1 在一个 Shell 内切换多个 Task/Session。 |
 | `D-026` | `DECIDED` | 一个 Shell 可以有多个 Task、多个对话，体验类似本地 Codex/Cursor。 | Task/Session ID、cursor 和状态必须可恢复，不能只存在浏览器内存。 |
 | `D-027` | `DECIDED` | 刷新或关闭浏览器不打断 Host 中正在运行的 Pi Task。 | 浏览器断开只是 transport detach；重连后按 Session ID + Cursor replay/resync。 |
-| `D-028` | `DECIDED` | 同一 Task 的 worktree 写入串行；不同 Task 可以并行。 | 需要明确并发锁、冲突提示和 Task 生命周期，不把并行写入交给浏览器竞态。 |
+| `D-028` | `DECIDED` | 同一 Conversation 的 Checkout 写入串行，不同 Conversation 可并行。 | ADR-0012 取消项目级 merge 锁；跨主机接续新建独占分支，见 GW-06/10。 |
 | `D-029` | `DECIDED` | MVP 先做一个文本对话；多 Task/Session 属于 0.1。 | MVP 保持窄接口，避免提前引入复杂编排。 |
 
 ### 文件、图片和隐私

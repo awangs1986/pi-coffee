@@ -14,13 +14,13 @@ This document records the resolved decisions from the design conversation. It di
 ## Runtime topology
 
 - The **Control Plane/Web VM** runs Debian and hosts the Web Server, browser-facing session routing, the central LLM Relay, and minimal usage/routing metadata.
-- Each internal user has one long-lived **User VM** running Linux Mint Xfce Edition. The User VM hosts the Agent Host, Pi processes, native transcripts, context, task files, worktrees, and uploaded files.
+- Each internal user has one long-lived **User VM** running Linux Mint Xfce Edition. The User VM hosts the Agent Host, Pi processes, native transcripts, context, task files, checkouts, and uploaded files.
 - Picode does not create, destroy, snapshot, or repair VMs. The owner restores a VM snapshot manually when needed.
 - The Web Server and Agent Host are separate processes even when `npm start` runs both together for a local smoke test.
 
 ## Ownership and privacy
 
-- Durable conversation content stays in the User VM: transcript, model context, task/handoff evidence, plugin state, worktree contents, and inbox files.
+- Durable conversation content stays in the User VM: transcript, model context, task/handoff evidence, plugin state, checkout contents, and inbox files.
 - The Control Plane may retain only a routing index (user → fixed User VM, opaque IDs, health/cursors) and usage metadata. It must not persist prompt text, tool output, or context正文.
 - Browser disconnect is a transport change, not a session cancellation. A Host continues the Pi process and buffers enough Events for reconnection.
 
@@ -51,7 +51,7 @@ The Relay must not add a second model protocol, buffer an entire stream, or writ
 
 ## Files and images
 
-- 0.1 uploads are streamed to the current Task's User VM inbox, by default `.picode/inbox/` in that Task's worktree.
+- 0.1 uploads are streamed to the current Task's User VM inbox, by default `.picode/inbox/` in that Conversation's checkout.
 - A file is persistent in the User VM, checked for name/MIME/size and SHA-256, and never durably stored on the Control Plane.
 - Initial limits are 256 MiB per file and 1 GiB per batch.
 - Images retain the original bytes. If the selected model accepts image content, the Host sends an image block; otherwise it sends a safe path/reference so the agent can inspect it.
@@ -59,9 +59,9 @@ The Relay must not add a second model protocol, buffer an entire stream, or writ
 
 ## Execution model
 
-- VM isolation is the execution seam. Inside a User VM, Pi has the normal shell and file rights required by the owner.
+- VM isolation is the execution seam. Host/Pi runs as the VM owner with unrestricted passwordless sudo; T0 must verify this from the service process.
 - PI Coffee does not reproduce V5's in-process Guard, approval, permission-tier, or command sandbox stack.
-- Worktrees are later task/repository organization, not a security mechanism. They are not part of the first MVP.
+- [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) replaces platform-managed worktrees and local merge coordination with independent Conversation clones and Gitea PR integration. [T0–T4](../development/t0-t4-gitea-workspaces.md) is the pending implementation plan.
 
 ## Deployment automation
 

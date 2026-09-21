@@ -17,7 +17,8 @@ The frozen Picode V5 repository remains reference-only.
 - Treat [`docs/protocol.md`](./docs/protocol.md) and `src/shared/protocol.ts` as the external Server ↔ Host seam.
 - Preserve Host session lifetime across browser and gateway disconnects.
 - Do not add browser UI, Gitea OAuth, public routing or centralized upstream credentials to this repository.
-- Preserve VM ownership of transcripts, contexts, worktrees, uploads and artifacts.
+- Preserve VM ownership of transcripts, contexts, checkouts, uploads and artifacts; synchronized code belongs in Gitea.
+- Follow ADR-0012 and `docs/spec/gitea-workspaces.md` for owner privileges, Gitea authority and the T0–T4 migration; do not treat accepted design as deployed behavior.
 - Use red → green at the public seam and run `npm run check` before reporting completion.
 - Keep credentials, cookies, VM snapshots and user transcripts out of commits and Issues.
 - Product mode documentation uses only Chat/Work; retired slash modes stay in Git history.
