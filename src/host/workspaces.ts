@@ -1,13 +1,20 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, readFile, writeFile, rename, readdir, realpath, rm, stat } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute, normalize } from "node:path";
+import { mkdir, readFile, writeFile, rename, readdir, realpath, rm, stat, cp } from "node:fs/promises";
+import { join, resolve, relative, isAbsolute, normalize, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 const exec = promisify(execFile);
-export interface Project { id: string; name: string; path: string; branch: string }
-export interface Conversation { id: string; projectId: string; cwd: string; branch: string; archived: boolean; createdAt: string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
+export interface Project { id: string; name: string; path: string; branch: string; repoUrl?: string; repoId?: string; webUrl?: string }
+export interface Conversation { id: string; projectId: string; cwd: string; branch: string; archived: boolean; createdAt: string; startSha?: string; lastRemoteSha?: string; lastRemoteAt?: string; syncError?: string; pullRequest?: PullRequest; legacyCwd?:string; migrationBranch?:string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
 interface Artifact { path:string; modifiedAt:string; size:number; available:boolean }
+export interface PullRequest { number:number; url:string; state:string; target:string; source:string }
+export interface WorkspaceOptions { ownerId?: string; forge?: CodeForge }
+export interface CodeForge {
+  createRepository?(name:string):Promise<{repoId:string;name:string;repoUrl:string;webUrl:string;branch:string}>;
+  migrateRepository?(name:string,sourceUrl:string):Promise<{repoId:string;name:string;repoUrl:string;webUrl:string;branch:string}>;
+  createPullRequest(project:Project,source:string,target:string,title:string):Promise<PullRequest>;
+}
 const privateName=(name:string)=> /^(\.git|\.pi|\.coffee|\.ssh|\.aws|\.env(?:\..*)?|\.npmrc|\.netrc|auth\.json|credentials(?:\..*)?)$/i.test(name);
 const pythonCommand=process.platform === "win32" ? "python" : "python3";
 const LF=String.fromCharCode(10),BACKSLASH=String.fromCharCode(92);
@@ -21,17 +28,21 @@ const displayPath=(path:string)=> {
   const parts=path.split('/').flatMap(part=>part.split(BACKSLASH));
   return !parts.some(part=>part==='..' || privateName(part));
 };
-interface State { version: 1; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[] }
-interface Proposal { token: string; sessionId: string; source: string; target: string; diff: string; expires: number }
+interface State { version: 2; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[] }
 const slug = (v: unknown) => { if(typeof v !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(v)) throw new Error('Use a project name containing letters, numbers, - or _ (1–64 characters)');return v; };
 export class Workspaces {
-  private state: State = {version:1,projects:[],conversations:[]};
+  private state: State = {version:2,projects:[],conversations:[]};
   private tails = new Map<string, Promise<unknown>>();
   private saveTail: Promise<void> = Promise.resolve();
-  private proposals = new Map<string, Proposal>();
   private initialized = false;
   private loading?: Promise<void>;
-  constructor(readonly root: string) { this.root = resolve(root); }
+  private readonly ownerId:string;
+  private readonly forge?:CodeForge;
+  constructor(readonly root: string, options:WorkspaceOptions={}) {
+    this.root = resolve(root);
+    this.ownerId=slug(options.ownerId ?? process.env.PI_COFFEE_VM_ID ?? 'vm');
+    this.forge=options.forge;
+  }
   private async load() {
     if(this.initialized)return;
     if(!this.loading)this.loading=this.loadState();
@@ -42,8 +53,8 @@ export class Workspaces {
     await mkdir(join(this.root,'.coffee'),{recursive:true,mode:0o700});
     try {
       const data=JSON.parse(await readFile(join(this.root,'.coffee','state.json'),'utf8'));
-      if(data.version!==1 || !Array.isArray(data.projects) || !Array.isArray(data.conversations)) throw new Error('Unsupported workspace metadata');
-      this.state=data;
+      if(![1,2].includes(data.version) || !Array.isArray(data.projects) || !Array.isArray(data.conversations)) throw new Error('Unsupported workspace metadata');
+      this.state={...data,version:2};
     } catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
     let interrupted=false;
     for(const c of this.state.conversations) if(c.runState==="running") {c.runState="interrupted";interrupted=true;}
@@ -68,7 +79,7 @@ export class Workspaces {
     this.tails.set(name,next);
     try {return await next;} finally {if(this.tails.get(name)===next)this.tails.delete(name);}
   }
-  private conversationLock(id:string) { return 'project:'+this.conversation(id).projectId; }
+  private conversationLock(id:string) { return 'conversation:'+id; }
   private git(cwd:string,args:string[],maxBuffer=2*1024*1024) { return exec('git',['-c','core.hooksPath=/dev/null',...args],{cwd,timeout:120000,maxBuffer,env:{...process.env,GIT_TERMINAL_PROMPT:'0'}}).then(r=>args.includes("-z") ? r.stdout : r.stdout.trim()); }
   private async gitBounded(cwd:string,args:string[],maxBuffer:number):Promise<string> {
     try {return await this.git(cwd,args,maxBuffer);}
@@ -84,64 +95,138 @@ export class Workspaces {
       throw error;
     }
   }
+  private async remoteBranchSha(cwd:string,branch:string,remote='origin'):Promise<string|undefined> {
+    const row=await this.git(cwd,['ls-remote','--heads',remote,`refs/heads/${branch}`]);
+    return row ? row.split(/\s+/)[0] : undefined;
+  }
+  private async pushAndConfirm(cwd:string,branch:string,localSha:string,args:string[]):Promise<string> {
+    let pushError:unknown;
+    try {await this.git(cwd,['push',...args]);} catch(error) {pushError=error;}
+    let remoteSha:string|undefined,lastReadError:unknown;
+    for(const delay of [0,100,300]) {
+      if(delay)await new Promise(resolvePromise=>setTimeout(resolvePromise,delay));
+      try {remoteSha=await this.remoteBranchSha(cwd,branch);lastReadError=undefined;} catch(error) {lastReadError=error;}
+      if(remoteSha===localSha)return remoteSha;
+    }
+    if(pushError)throw pushError;
+    if(lastReadError)throw lastReadError;
+    throw new Error('Remote did not confirm the checkpoint SHA');
+  }
   private project(id:string) { const p=this.state.projects.find(p=>p.id===id);if(!p)throw new Error('Unknown project');return p; }
   private conversation(id:string) { const c=this.state.conversations.find(c=>c.id===id);if(!c)throw new Error('Unknown workspace');return c; }
   async list() { await this.load();await this.saveTail;return structuredClone(this.state); }
   async lookup(id:string) { await this.load();return this.state.conversations.find(c=>c.id===id); }
+  async registerProject(name:unknown,repoUrl:string,branch='main',repoId?:string,webUrl?:string) {return this.mutate(async()=>{
+    const safe=slug(name);this.assertProjectAvailable(safe,repoId);return this.registerProjectUnlocked(safe,repoUrl,branch,repoId,webUrl);
+  });}
+  async bindProjectRepository(projectId:string,repoUrl:string,repoId?:string,webUrl?:string) {return this.mutate(async()=>{
+    const p=this.project(projectId);const registered=await this.validateRepository(repoUrl,p.branch);
+    p.repoUrl=registered;p.repoId=repoId ?? p.repoId;p.webUrl=webUrl ?? p.webUrl;await this.save();return p;
+  });}
+  async migrationPlan(id:string) {await this.load();const c=this.conversation(id),p=this.project(c.projectId);const dirty=Boolean(await this.git(c.cwd,['status','--porcelain=v1','--untracked-files=all']).catch(()=>''));
+    return {required:!c.startSha || !samePath(c.cwd,join(this.root,'checkouts',c.id)),dirty,remoteBound:Boolean(p.repoUrl),legacyCwd:c.cwd,branch:c.branch,runState:c.runState ?? 'idle'};
+  }
+  async migrateConversation(id:string) {return this.mutate(async()=>{
+    const c=this.conversation(id),p=this.project(c.projectId);if(!p.repoUrl)throw new Error('Bind the legacy Project to Gitea before migration');
+    if(c.runState==='running')throw new Error('Stop the Conversation before migration');
+    if(c.startSha && samePath(c.cwd,join(this.root,'checkouts',c.id)))return c;
+    const legacyCwd=c.cwd,head=await this.git(legacyCwd,['rev-parse','HEAD']);
+    const branch=`coffee/${this.ownerId}/${id}`;
+    if(c.migrationBranch && c.migrationBranch!==branch)throw new Error('Legacy migration metadata does not match this VM identity');
+    if(!c.migrationBranch){c.migrationBranch=branch;await this.save();}
+    const published=await this.remoteBranchSha(legacyCwd,branch,p.repoUrl);
+    if(published && published!==head)throw new Error('Conversation branch already exists on Gitea at a different SHA');
+    if(!published)await this.git(legacyCwd,['push',`--force-with-lease=refs/heads/${branch}:`,p.repoUrl,`HEAD:refs/heads/${branch}`]);
+    const temporary=join(this.root,'.coffee','migration',randomUUID()),destination=join(this.root,'checkouts',id);
+    if(await stat(destination).then(()=>true,()=>false))throw new Error('Migration destination already exists; inspect it before retrying');
+    await mkdir(join(this.root,'.coffee','migration'),{recursive:true});await mkdir(join(this.root,'checkouts'),{recursive:true});
+    try {
+      await this.git(this.root,['-c','protocol.file.allow=always','clone','--origin','origin','--branch',branch,'--',p.repoUrl,temporary]);
+      if(await this.git(temporary,['rev-parse','HEAD'])!==head)throw new Error('Migrated remote branch does not match the legacy head');
+      await cp(legacyCwd,temporary,{recursive:true,force:true,filter:source=>basename(source)!=='.git'});
+      await rename(temporary,destination);
+      c.legacyCwd=legacyCwd;c.cwd=destination;c.branch=branch;c.startSha=head;c.lastRemoteSha=head;c.lastRemoteAt=new Date().toISOString();delete c.migrationBranch;delete c.syncError;await this.save();return c;
+    } catch(error) {await rm(temporary,{recursive:true,force:true});throw error;}
+  },()=>this.conversationLock(id));}
   async discover() { return this.mutate(async()=> {
+    if(!this.forge?.createRepository)throw new Error('Gitea project adapter is required to import local repositories');
     for(const dir of await readdir(this.root,{withFileTypes:true})) {
-      if(!dir.isDirectory() || dir.name.startsWith('.') || this.state.projects.some(p=>p.path===join(this.root,dir.name))) continue;
+      if(!dir.isDirectory() || dir.name.startsWith('.')) continue;
+      let path:string,branch:string;
       try {
-        const path=await realpath(join(this.root,dir.name));
+        path=await realpath(join(this.root,dir.name));
         if(!samePath(await this.git(path,['rev-parse','--show-toplevel']),path))continue;
-        const branch=await this.git(path,['symbolic-ref','--short','HEAD']);
-        this.state.projects.push({id:randomUUID(),name:dir.name,path,branch});
-      } catch { /* Not a standalone Git project. */ }
+        branch=await this.git(path,['symbolic-ref','--short','HEAD']);
+      } catch {continue; /* Not a standalone Git project. */}
+      if(this.state.projects.some(project=>project.name===dir.name))continue;
+      const registration=await this.forge.createRepository(slug(dir.name));
+      await this.git(path,['push',registration.repoUrl,`HEAD:refs/heads/${branch}`]);
+      this.state.projects.push({id:registration.repoId,name:dir.name,path:'',branch,repoUrl:registration.repoUrl,repoId:registration.repoId,webUrl:registration.webUrl});
     }
     await this.save();return structuredClone(this.state.projects);
   }); }
   async createProject(name:unknown, url?:string, archive?:string) { return this.mutate(async()=> {
-    const safe=slug(name);const path=join(this.root,safe);await mkdir(path); // Never reuse or overwrite an existing directory.
+    const safe=slug(name);this.assertProjectAvailable(safe);
+    if(url && this.forge?.migrateRepository) {
+      const registration=await this.forge.migrateRepository(safe,url);
+      const p={id:registration.repoId,name:safe,path:'',branch:registration.branch,repoUrl:registration.repoUrl,repoId:registration.repoId,webUrl:registration.webUrl};this.state.projects.push(p);await this.save();return p;
+    }
+    if(url && !this.forge)return this.registerProjectUnlocked(safe,url);
+    if(!this.forge?.createRepository)throw new Error('Gitea project adapter is not configured');
+    const registration=await this.forge.createRepository(safe);
+    const path=join(this.root,'.coffee','imports',randomUUID());await mkdir(path,{recursive:true});
     try {
-      if(url) {
-        if(!/^(https?:\/\/|ssh:\/\/|git@[a-zA-Z0-9.-]+:)/.test(url) || /[\r\n\0]/.test(url))throw new Error('Only HTTP(S) or SSH Git URLs are supported');
-        if((/^https?:/.test(url) && new URL(url).username) || (/^(https?|ssh):/.test(url) && new URL(url).password))throw new Error('Use VM Git credential storage, not URL credentials');
-        await this.git(this.root,['-c','protocol.file.allow=never','clone','--',url,path]);
-      } else {
-        if(archive) await exec(pythonCommand,[fileURLToPath(new URL('./import-zip.py',import.meta.url)),archive,path],{timeout:60000,maxBuffer:1024*1024});
-        await this.git(path,['init','-b','main']);
-      }
-      let branch=await this.git(path,['symbolic-ref','--short','HEAD']);
-      try { await this.git(path,['rev-parse','HEAD']); } catch {
-        await this.git(path,['add','--all']);
-        await this.git(path,['-c','user.name=PI Coffee','-c','user.email=coffee@localhost','commit','--allow-empty','-m','Initialize project']);
-      }
-      const p={id:randomUUID(),name:safe,path,branch};this.state.projects.push(p);await this.save();return p;
-    } catch(e) { /* Retain failed import for inspection; never remove unknown concurrent user work. */ throw new Error(`Project creation failed; inspect ${path} before retrying. ${e instanceof Error ? e.message.slice(0,300) : ''}`); }
+      if(archive)await exec(pythonCommand,[fileURLToPath(new URL('./import-zip.py',import.meta.url)),archive,path],{timeout:60000,maxBuffer:1024*1024});
+      await this.git(path,['init','-b',registration.branch]);
+      await this.git(path,['var','GIT_AUTHOR_IDENT']).catch(()=>{throw new Error('Configure Git user.name and user.email in the VM before initializing a repository');});
+      await this.git(path,['add','--all']);await this.git(path,['commit','--allow-empty','-m','Initialize project']);
+      await this.git(path,['remote','add','origin',registration.repoUrl]);await this.git(path,['push','-u','origin',registration.branch]);
+      const p={id:registration.repoId,name:safe,path:'',branch:registration.branch,repoUrl:registration.repoUrl,repoId:registration.repoId,webUrl:registration.webUrl};this.state.projects.push(p);await this.save();return p;
+    } catch(e) {throw new Error(`Project creation failed; the Gitea repository was retained for inspection. ${e instanceof Error ? e.message.slice(0,300) : ''}`);}
+    finally {await rm(path,{recursive:true,force:true});}
   }); }
+  private async registerProjectUnlocked(name:string,repoUrl:string,branch='main',repoId?:string,webUrl?:string) {
+    const normalized=await this.validateRepository(repoUrl,branch);
+    const project={id:repoId ?? randomUUID(),name,path:'',branch,repoUrl:normalized,...(repoId?{repoId}:{}),...(webUrl?{webUrl}:{})};this.state.projects.push(project);await this.save();return project;
+  }
+  private assertProjectAvailable(name:string,repoId?:string) {
+    if(this.state.projects.some(project=>project.name===name || (repoId && project.repoId===repoId)))throw new Error('Project is already registered');
+  }
+  private async validateRepository(repoUrl:string,branch:string) {
+    if(!repoUrl || /[\r\n\0]/.test(repoUrl))throw new Error('Repository URL is required');
+    const normalized=/^(https?:\/\/|ssh:\/\/|git@[a-zA-Z0-9.-]+:)/.test(repoUrl) ? repoUrl : resolve(repoUrl);
+    if(/^https?:/.test(normalized) && (new URL(normalized).username || new URL(normalized).password))throw new Error('Use VM Git credential storage, not URL credentials');
+    await this.git(this.root,['-c','protocol.file.allow=always','ls-remote','--exit-code','--heads',normalized,branch]);return normalized;
+  }
   async createConversation(projectId:string, branch?:string, id=randomUUID()) { return this.mutate(async()=> {
     if(!/^[a-zA-Z0-9-]{1,100}$/.test(id))throw new Error('Invalid conversation ID');
     if(this.state.conversations.some(c=>c.id===id))throw new Error('Conversation already exists');
     const p=this.project(projectId);const from=branch || p.branch;
-    await this.git(p.path,['check-ref-format','--branch',from]);
-    // A manually cloned empty repository has no commit to attach a worktree to.
-    // Initialize only its unborn default branch, leaving the user's index/files untouched.
-    if(from===p.branch && await this.git(p.path,['symbolic-ref','--short','HEAD']).catch(()=>'')===p.branch &&
-      !await this.git(p.path,['rev-parse','--verify','HEAD']).then(()=>true,()=>false)) {
-      try {await this.git(p.path,['var','GIT_AUTHOR_IDENT']);await this.git(p.path,['var','GIT_COMMITTER_IDENT']);}
-      catch {throw new Error('Configure Git user.name and user.email in the VM before initializing this empty project');}
-      await this.git(p.path,['commit','--allow-empty','--only','-m','Initialize project']);
+    await this.git(p.path || this.root,['check-ref-format','--branch',from]);
+    if(p.repoUrl) {
+      const cwd=join(this.root,'checkouts',id);await mkdir(join(this.root,'checkouts'),{recursive:true});
+      if(await stat(cwd).then(()=>true,()=>false))throw new Error('Checkout destination already exists; inspect it before retrying');
+      const ownedBranch=`coffee/${this.ownerId}/${id}`;
+      try {
+        await this.git(this.root,['-c','protocol.file.allow=always','clone','--origin','origin','--branch',from,'--',p.repoUrl,cwd]);
+        const head=await this.git(cwd,['rev-parse','HEAD']);
+        if(await this.remoteBranchSha(cwd,ownedBranch))throw new Error('Conversation branch already exists on Gitea; use a new Conversation ID');
+        await this.git(cwd,['checkout','-b',ownedBranch]);
+        await this.pushAndConfirm(cwd,ownedBranch,head,['--set-upstream',`--force-with-lease=refs/heads/${ownedBranch}:`,'origin',`HEAD:refs/heads/${ownedBranch}`]);
+        const baseline:Record<string,string>={};
+        for(const path of (await this.git(cwd,['ls-files','-z'])).split('\0').filter(Boolean).slice(0,5000)) {
+          if(!/\.(png|jpe?g|gif|webp|svg|md|pdf)$/i.test(path))continue;
+          try{const info=await stat(join(cwd,path));baseline[path]=`${info.mtimeMs}:${info.size}`;}catch{}
+        }
+        const c={id,projectId,cwd,branch:ownedBranch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString(),baseline};
+        this.state.conversations.push(c);await this.save();return c;
+      } catch(error) {
+        await rm(cwd,{recursive:true,force:true});
+        throw error;
+      }
     }
-    const head=await this.git(p.path,['rev-parse','--verify',`refs/heads/${from}^{commit}`]);
-    const cwd=join(this.root,'.worktrees',id);await mkdir(join(this.root,'.worktrees'),{recursive:true});
-    const ownedBranch=`coffee/${id}`;await this.git(p.path,['worktree','add','-b',ownedBranch,cwd,head]);
-    const baseline:Record<string,string>={};
-    for(const path of (await this.git(cwd,['ls-files','-z'])).split('\0').filter(Boolean).slice(0,5000)) {
-      if(!/\.(png|jpe?g|gif|webp|svg|md|pdf)$/i.test(path))continue;
-      try{const info=await stat(join(cwd,path));baseline[path]=`${info.mtimeMs}:${info.size}`;}catch{}
-    }
-    const c={id,projectId,cwd,branch:ownedBranch,archived:false,createdAt:new Date().toISOString(),baseline};this.state.conversations.push(c);await this.save();return c;
-  },()=>'project:'+projectId); }
+    throw new Error('Project must be registered to Gitea before creating a code Conversation');
+  },()=>`conversation:${id}`); }
   async cwd(id:string) { const c=await this.lookup(id);if(!c)throw new Error('Create a project conversation first');if(c.archived || c.workspaceRemoved)throw new Error('Restore the archived conversation first (pending deletion cannot be resumed)');return c.cwd; }
   async markRun(id:string, runState:"running"|"idle"|"interrupted") {return this.mutate(async()=>{
     const c=this.state.conversations.find(c=>c.id===id);if(!c)return;
@@ -158,15 +243,108 @@ export class Workspaces {
     const values=new Set(this.state.legacyArchived ?? []);if(archived)values.add(id);else values.delete(id);this.state.legacyArchived=[...values];await this.save();return {id,archived,legacy:true};
   },()=>'legacy:'+id);}
   async archive(id:string, archived:boolean, quiesced=false) {return this.mutate(async()=> {const c=this.conversation(id);if(c.workspaceRemoved)throw new Error("Deletion partially completed; retry permanent deletion");c.archived=archived;c.quiesced=archived && quiesced;await this.save();return c;},()=>this.conversationLock(id));}
-  /** Read-only change view for the browser worktree panel: committed + working-tree changes against the project default branch. */
+  async syncStatus(id:string, refresh=true) {return this.mutate(async()=>{
+    const c=this.conversation(id);
+    if(c.workspaceRemoved)throw new Error('Checkout has been removed');
+    const localSha=await this.git(c.cwd,['rev-parse','HEAD']);
+    const dirty=Boolean(await this.git(c.cwd,['status','--porcelain=v1','--untracked-files=all']));
+    let remoteSha:string|undefined;
+    try {
+      if(refresh)await this.git(c.cwd,['fetch','--prune','origin']);
+      const remote=await this.git(c.cwd,['ls-remote','--heads','origin',`refs/heads/${c.branch}`]);
+      remoteSha=remote ? remote.split(/\s+/)[0] : undefined;
+      let state:'unpublished'|'synced'|'ahead'|'behind'|'diverged' = remoteSha ? 'diverged' : 'unpublished';
+      if(remoteSha===localSha)state='synced';
+      else if(remoteSha) {
+        const remoteAncestor=(await this.gitResult(c.cwd,['merge-base','--is-ancestor',remoteSha,localSha])).code===0;
+        const localAncestor=(await this.gitResult(c.cwd,['merge-base','--is-ancestor',localSha,remoteSha])).code===0;
+        state=remoteAncestor ? 'ahead' : localAncestor ? 'behind' : 'diverged';
+      }
+      c.lastRemoteSha=remoteSha;c.lastRemoteAt=new Date().toISOString();delete c.syncError;await this.save();
+      return {state,dirty,localSha,remoteSha,lastRemoteAt:c.lastRemoteAt,branch:c.branch};
+    } catch(error) {
+      c.syncError=error instanceof Error ? error.message.slice(0,500) : 'Remote status failed';await this.save();
+      return {state:'unknown' as const,dirty,localSha,remoteSha:c.lastRemoteSha,lastRemoteAt:c.lastRemoteAt,branch:c.branch,error:c.syncError};
+    }
+  },()=>this.conversationLock(id));}
+  async checkpoint(id:string,paths:string[],message:string) {return this.mutate(async()=>{
+    const c=this.conversation(id);
+    if(c.archived)throw new Error('Restore the conversation before checkpointing');
+    if(c.runState==='running')throw new Error('Stop the conversation before checkpointing');
+    if(!Array.isArray(paths) || paths.length===0)throw new Error('Choose the code files to checkpoint');
+    const selected=[...new Set(paths)];
+    if(selected.some(path=>!displayPath(path) || path.split(/[\\/]/).some(privateName)))throw new Error('Checkpoint contains a private or invalid path');
+    if(typeof message!=='string' || !message.trim() || message.length>200)throw new Error('Checkpoint message is required (maximum 200 characters)');
+    await this.git(c.cwd,['var','GIT_AUTHOR_IDENT']).catch(()=>{throw new Error('Configure Git user.name and user.email in the VM before checkpointing');});
+    await this.git(c.cwd,['add','--',...selected]);
+    if((await this.gitResult(c.cwd,['diff','--cached','--quiet','--'])).code===0)throw new Error('Selected files contain no checkpoint changes');
+    await this.git(c.cwd,['commit','-m',message.trim(),'--',...selected]);
+    const localSha=await this.git(c.cwd,['rev-parse','HEAD']);
+    try {
+      const remoteSha=await this.pushAndConfirm(c.cwd,c.branch,localSha,['--set-upstream','origin',`HEAD:refs/heads/${c.branch}`]);
+      c.lastRemoteSha=remoteSha;c.lastRemoteAt=new Date().toISOString();delete c.syncError;await this.save();
+      const dirty=Boolean(await this.git(c.cwd,['status','--porcelain=v1','--untracked-files=all']));
+      return {state:'synced' as const,dirty,localSha,remoteSha,lastRemoteAt:c.lastRemoteAt,branch:c.branch};
+    } catch(error) {
+      c.syncError=error instanceof Error ? error.message.slice(0,500) : 'Checkpoint push failed';await this.save();throw error;
+    }
+  },()=>this.conversationLock(id));}
+  async pushCheckpoint(id:string) {return this.mutate(async()=>{
+    const c=this.conversation(id);if(c.archived)throw new Error('Restore the conversation before synchronizing');if(c.runState==='running')throw new Error('Stop the conversation before synchronizing');
+    const current=await this.git(c.cwd,['symbolic-ref','--short','HEAD']);if(current!==c.branch)throw new Error('Checkout is not on its assigned Conversation branch');
+    const localSha=await this.git(c.cwd,['rev-parse','HEAD']);
+    try {
+      const remoteSha=await this.pushAndConfirm(c.cwd,c.branch,localSha,['origin',`HEAD:refs/heads/${c.branch}`]);
+      c.lastRemoteSha=remoteSha;c.lastRemoteAt=new Date().toISOString();delete c.syncError;await this.save();
+      return {state:'synced' as const,dirty:Boolean(await this.git(c.cwd,['status','--porcelain=v1','--untracked-files=all'])),localSha,remoteSha,lastRemoteAt:c.lastRemoteAt,branch:c.branch};
+    } catch(error) {c.syncError=error instanceof Error ? error.message.slice(0,500) : 'Checkpoint push failed';await this.save();throw error;}
+  },()=>this.conversationLock(id));}
+  async openPullRequest(id:string,title:string) {return this.mutate(async()=>{
+    const c=this.conversation(id),p=this.project(c.projectId);
+    if(c.pullRequest?.state==='open')return c.pullRequest;
+    if(!this.forge)throw new Error('Gitea pull request adapter is not configured');
+    if(typeof title!=='string' || !title.trim() || title.length>200)throw new Error('Pull request title is required (maximum 200 characters)');
+    const status=await this.syncStatusUnlocked(c);
+    if(status.state!=='synced')throw new Error('Push and verify the Conversation checkpoint before creating a pull request');
+    c.pullRequest=await this.forge.createPullRequest(p,c.branch,p.branch,title.trim());await this.save();return c.pullRequest;
+  },()=>this.conversationLock(id));}
+  private async syncStatusUnlocked(c:Conversation) {
+    const localSha=await this.git(c.cwd,['rev-parse','HEAD']);
+    const remote=await this.git(c.cwd,['ls-remote','--heads','origin',`refs/heads/${c.branch}`]);
+    const remoteSha=remote ? remote.split(/\s+/)[0] : undefined;
+    return {state:remoteSha===localSha ? 'synced' as const : 'unsynced' as const,localSha,remoteSha};
+  }
+  async continueFrom(projectId:string,sourceBranch:string,expectedSha:string,id=randomUUID()) {return this.mutate(async()=>{
+    if(!/^[a-zA-Z0-9-]{1,100}$/.test(id))throw new Error('Invalid conversation ID');
+    if(!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(expectedSha))throw new Error('Expected remote SHA is invalid');
+    if(this.state.conversations.some(c=>c.id===id))throw new Error('Conversation already exists');
+    const p=this.project(projectId);if(!p.repoUrl)throw new Error('Project is not backed by Gitea');
+    await this.git(this.root,['check-ref-format','--branch',sourceBranch]);
+    const cwd=join(this.root,'checkouts',id);await mkdir(join(this.root,'checkouts'),{recursive:true});
+    if(await stat(cwd).then(()=>true,()=>false))throw new Error('Checkout destination already exists; inspect it before retrying');
+    try {
+      await this.git(this.root,['-c','protocol.file.allow=always','clone','--origin','origin','--branch',sourceBranch,'--',p.repoUrl,cwd]);
+      const head=await this.git(cwd,['rev-parse','HEAD']);
+      if(head!==expectedSha)throw new Error('Remote checkpoint SHA changed; inspect the source before continuing');
+      const branch=`coffee/${this.ownerId}/${id}`;
+      if(await this.remoteBranchSha(cwd,branch))throw new Error('Conversation branch already exists on Gitea; use a new Conversation ID');
+      await this.git(cwd,['checkout','-b',branch]);
+      await this.pushAndConfirm(cwd,branch,head,['--set-upstream',`--force-with-lease=refs/heads/${branch}:`,'origin',`HEAD:refs/heads/${branch}`]);
+      const c={id,projectId,cwd,branch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString()};this.state.conversations.push(c);await this.save();return c;
+    } catch(error) {await rm(cwd,{recursive:true,force:true});throw error;}
+  },()=>`conversation:${id}`);}
+  /** Read-only change view against the last fetched target branch. */
   async changes(id:string) {
     await this.load();
     const c=this.conversation(id),p=this.project(c.projectId);
     if(c.workspaceRemoved)throw new Error('Workspace has been removed');
     const source=await this.git(c.cwd,['rev-parse','HEAD']);
-    const target=await this.git(p.path,['rev-parse','HEAD']);
-    const base=await this.git(p.path,['merge-base',target,source]);
-    const statusRaw=await this.git(c.cwd,['status','--porcelain=v1','-z','--untracked-files=all']).catch(()=> '');
+    let stale=false;
+    if(p.repoUrl)try{await this.git(c.cwd,['fetch','--prune','origin']);}catch{stale=true;}
+    const target=p.repoUrl ? await this.git(c.cwd,['rev-parse',`refs/remotes/origin/${p.branch}`]) : await this.git(p.path,['rev-parse','HEAD']);
+    const base=await this.git(c.cwd,['merge-base',target,source]);
+    const trackedWorkingRaw=await this.git(c.cwd,['diff','--name-only','-z','HEAD','--']).catch(()=> '');
+    const untrackedRaw=await this.git(c.cwd,['ls-files','--others','--exclude-standard','-z']).catch(()=> '');
     const nameStatusRaw=await this.git(c.cwd,['diff','--no-ext-diff','--no-textconv','--name-status','--no-renames','-z',base,'--']);
     const numstatRaw=await this.git(c.cwd,['diff','--no-ext-diff','--no-textconv','--numstat','--no-renames','-z',base,'--']);
     const files=new Map<string,{path:string;status:string;additions:number|null;deletions:number|null}>();
@@ -181,11 +359,9 @@ export class Workspaces {
       const entry=files.get(path) ?? {path,status:'M',additions:null,deletions:null};
       entry.additions=add==='-' ? null : Number(add);entry.deletions=del==='-' ? null : Number(del);files.set(path,entry);
     }
-    const untracked:string[]=[];
-    for(const row of statusRaw.split('\0').filter(Boolean)) {
-      if(!row.startsWith('?? '))continue;
-      const path=row.slice(3);if(displayPath(path)){untracked.push(path);files.set(path,{path,status:'?',additions:null,deletions:null});}
-    }
+    const untracked=untrackedRaw.split('\0').filter(displayPath);
+    const checkpointPaths=new Set([...trackedWorkingRaw.split('\0').filter(displayPath),...untracked]);
+    for(const path of untracked)files.set(path,{path,status:'?',additions:null,deletions:null});
     const untrackedSet=new Set(untracked);
     const trackedPaths=[...files.keys()].filter(path=>!untrackedSet.has(path));
     const patchParts:string[]=[],statParts:string[]=[],checkOutputs:string[]=[];
@@ -208,8 +384,9 @@ export class Workspaces {
     const stat=statParts.filter(Boolean).join('\n');
     const limit=150000;
     return {
-      sessionId:id,projectId:c.projectId,branch:c.branch,source,target,base,
+      sessionId:id,projectId:c.projectId,branch:c.branch,source,target,base,stale,targetBranch:p.branch,refreshedAt:new Date().toISOString(),
       files:[...files.values()].sort((a,b)=>a.path.localeCompare(b.path)),
+      checkpointPaths:[...checkpointPaths].sort((a,b)=>a.localeCompare(b)),
       stat:stat || 'no changes',
       patch:patch.slice(0,limit),truncated:patch.length>limit,
       checks:[{
@@ -229,47 +406,24 @@ export class Workspaces {
     const hunk=lines.length===0 ? '@@ -0,0 +0,0 @@' : `@@ -0,0 +1,${lines.length} @@`;
     return ['diff --git a/'+path+' b/'+path,'new file mode 100644','index 0000000..0000000','--- /dev/null','+++ b/'+path,hunk,additions].join(LF)+(content.endsWith(LF) || lines.length===0 ? '' : LF+BACKSLASH+' No newline at end of file');
   }
-  async prepareMerge(id:string) {return this.mutate(async()=> {
-    const c=this.conversation(id),p=this.project(c.projectId);
-    if(c.archived)throw new Error('Restore the conversation first');
-    if(await this.git(p.path,['status','--porcelain']) || await this.git(c.cwd,['status','--porcelain']))throw new Error('Commit changes in the source and clean the target before merging');
-    if(await this.git(p.path,['symbolic-ref','--short','HEAD'])!==p.branch)throw new Error('Project target is not on its default branch');
-    const source=await this.git(c.cwd,['rev-parse','HEAD']),target=await this.git(p.path,['rev-parse','HEAD']);
-    const base=await this.git(p.path,['merge-base',target,source]);
-    const diff=await this.git(p.path,['diff','--stat',base,source]);
-    const patch=await this.git(p.path,['diff','--no-ext-diff','--no-textconv',base,source]);
-    for(const [key,v] of this.proposals) if(v.expires<Date.now())this.proposals.delete(key);
-    const proposal={token:randomUUID(),sessionId:id,source,target,diff:patch.slice(0,150000),expires:Date.now()+300000};
-    this.proposals.set(proposal.token,proposal);return {...proposal,stat:diff,truncated:patch.length>150000};
-  },()=>this.conversationLock(id));}
-  proposalSession(token:string):string {const p=this.proposals.get(token);if(!p)throw new Error("Merge confirmation expired");return p.sessionId;}
-  async merge(token:string) {return this.mutate(async()=> {
-    const proposal=this.proposals.get(token);this.proposals.delete(token);
-    if(!proposal || proposal.expires<Date.now())throw new Error('Merge confirmation expired or already used; inspect a new diff');
-    const c=this.conversation(proposal.sessionId),p=this.project(c.projectId);
-    if(c.archived || await this.git(c.cwd,['rev-parse','HEAD'])!==proposal.source || await this.git(p.path,['rev-parse','HEAD'])!==proposal.target || await this.git(p.path,['symbolic-ref','--short','HEAD'])!==p.branch || await this.git(p.path,['status','--porcelain']) || await this.git(c.cwd,['status','--porcelain'])) throw new Error('Source/target changed; inspect a new diff');
-    try {
-      const name=await this.git(p.path,['config','user.name']).catch(()=> 'PI Coffee');
-      const email=await this.git(p.path,['config','user.email']).catch(()=> 'coffee@localhost');
-      await this.git(p.path,['-c',`user.name=${name}`,'-c',`user.email=${email}`,'merge','--no-edit','--',proposal.source]); return {ok:true}; }
-    catch { return {ok:false,conflict:true,message:'Merge failed or conflicted. Inspect the target workspace; nothing was reset or overwritten automatically.'}; }
-  },()=>this.conversationLock(this.proposalSession(token)));}
   async deleteWorkspace(id:string, confirmation:string, deleteHistory:()=>Promise<unknown>=async()=>{}) {return this.mutate(async()=> {
     const c=this.conversation(id),p=this.project(c.projectId);
     if(!c.archived || confirmation!==id)throw new Error('Delete requires an archived conversation and its exact ID confirmation');
     if(!c.workspaceRemoved) {
     if(await this.git(c.cwd,['status','--porcelain']))throw new Error('Workspace has uncommitted work; preserve it before deletion');
-    try {
-      const head=await this.git(c.cwd,['rev-parse','HEAD']);
-      await this.git(p.path,['merge-base','--is-ancestor',head,p.branch]);
-      await this.git(p.path,['merge-base','--is-ancestor',c.branch,p.branch]);
-    } catch {throw new Error('Unmerged commits remain; merge or preserve them before deletion');}
-    await this.git(p.path,['worktree','remove','--',c.cwd]);
+    const head=await this.git(c.cwd,['rev-parse','HEAD']);
+    if(p.repoUrl) {
+      const remote=await this.git(c.cwd,['ls-remote','--heads','origin',`refs/heads/${c.branch}`]).catch(()=>{throw new Error('Remote is unavailable; cannot prove the Checkout is recoverable');});
+      if(!remote || remote.split(/\s+/)[0]!==head)throw new Error('Unpushed commits remain; checkpoint them before deleting the Checkout');
+      await rm(c.cwd,{recursive:true});
+    } else {
+      throw new Error('Migrate this legacy workspace to a Gitea Checkout before deleting it');
+    }
     c.workspaceRemoved=true;await this.save();
     }
     await deleteHistory();
     // Keep the branch and uploaded files: they were not included in this destructive confirmation.
-    this.state.conversations=this.state.conversations.filter(v=>v.id!==id);await this.save();return {ok:true,retained:['branch','uploads','shared project']};
+    this.state.conversations=this.state.conversations.filter(v=>v.id!==id);await this.save();return {ok:true,retained:['remote branch','pull request','uploads','repository']};
   },()=>this.conversationLock(id));}
   async file(id:string,path:string) {
     const c=await this.lookup(id);if(!c)throw new Error('Unknown workspace');

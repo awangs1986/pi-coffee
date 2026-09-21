@@ -75,6 +75,8 @@ export interface HarnessExtensionOptions {
   /** Additional user/task manifests, read without executing extension code. */
   manifests?: readonly CapabilityManifest[];
   manifestDirectories?: readonly string[];
+  /** Host-verified User VM authority; injected as runtime scope, never baked into the generic Work body. */
+  ownerAuthority?:boolean;
 }
 
 /**
@@ -372,6 +374,11 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
       `Base tool table has ${toolsForMode(mode).length} tools; effective active tools (${active.length}): ${active.join(", ")}.`,
       `Active optional capabilities: ${catalog?.activeCapabilityIds().join(", ") || "none"}.`,
       "These are runtime facts, not additional permissions.",
+      ...((options.ownerAuthority ?? process.env.PI_COFFEE_VM_OWNER_AUTHORITY==='1') ? [
+        "Execution scope: this Agent runs as the VM owner with verified passwordless sudo.",
+        "Within an implementation request, reversible VM work and normal commit and push to the current Conversation branch are already authorized; do not request approval again.",
+        "Shared/default branch merge, force-push, remote deletion, and publication remain scoped to explicit user intent.",
+      ] : []),
     ].join("\n");
     const block = `${BLOCK_START}\n${prompt}\n\n## Runtime harness state\n\n${runtime}\n${BLOCK_END}`;
     const base = event.systemPrompt.replace(BLOCK_PATTERN, "").trimEnd();

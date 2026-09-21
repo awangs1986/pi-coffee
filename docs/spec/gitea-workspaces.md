@@ -1,6 +1,6 @@
 # Gitea 工作区与 VM 执行边界
 
-状态：设计已确认（2026-09-21），实现待 [T0–T4](../development/t0-t4-gitea-workspaces.md)。决策：[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md)。本文件是 Agent/Server 共用的工作区行为权威；Server 规格只引用，不维护另一套同步规则。
+状态：设计已确认（2026-09-21）；Agent/Server 代码已实现，部署与双 VM 验收见 [T0–T4](../development/t0-t4-gitea-workspaces.md)。决策：[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md)。本文件是 Agent/Server 共用的工作区行为权威；Server 规格只引用，不维护另一套同步规则。
 
 ## 权限与责任
 
@@ -55,6 +55,6 @@
 
 ## 实现状态与完成条件
 
-当前 `src/host/workspaces.ts` 仍采用 `git worktree`、Project 本地 HEAD、项目锁和本地 merge proposal；现有 systemd 以 owner 运行，但免密 sudo 与真实服务能力尚未验收。本文没有修改上述代码或主机权限。
+当前 `src/host/workspaces.ts` 已使用每 Conversation 独立 clone、远端独占分支、checkpoint/SHA 确认、Gitea PR、跨主机接续和保留旧目录的迁移器。Host API 与 Server UI 已移除平台本地 merge 动作；原生 Git 工具仍可由用户主动使用 `git worktree`。systemd 继续以 owner 运行，安装脚本可配置并校验 `NOPASSWD: ALL`，但是否已部署必须以目标 VM 的 `/healthz` capability 和 `npm run probe:owner-access` 为准。
 
-设计在本范围内闭环：本地执行 → checkpoint → 远端确认 → PR/merge → 新主机按 SHA 接续；同时明示未版本化数据/原生会话不能由 Gitea 恢复。完成必须满足 T0–T4 各自公共接缝测试、两仓 fresh-clone 检查和双用户/双 VM 故障实测；仅文档和单元测试不代表部署完成。
+设计和代码在本范围内形成闭环：本地执行 → checkpoint → 远端确认 → PR/merge → 新主机按 SHA 接续；同时明示未版本化数据/原生会话不能由 Gitea 恢复。T0–T3 的代码完成不自动关闭部署验收；T4 仍要求两仓 fresh-clone 检查和双用户/双 VM 故障实测。

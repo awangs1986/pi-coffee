@@ -3,6 +3,7 @@ import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
 import { DEFAULT_MAX_BATCH_BYTES, DEFAULT_MAX_FILE_BYTES, TransferServer } from "./host/transfer.js";
 import { Workspaces } from "./host/workspaces.js";
+import { GiteaClient } from "./host/gitea.js";
 import { resolvePiExtensions } from "./pi-extensions.js";
 import { resolvePiSkills, withCoffeeLspPath } from "./pi-skills.js";
 
@@ -13,7 +14,8 @@ void run().catch((error) => {
 
 async function run(): Promise<void> {
   const workdir = process.env.PI_COFFEE_WORKDIR ?? process.cwd();
-  const workspaces = process.env.PI_COFFEE_PROJECT_ROOT ? new Workspaces(process.env.PI_COFFEE_PROJECT_ROOT) : undefined;
+  const forge=process.env.PI_COFFEE_GITEA_URL && process.env.PI_COFFEE_GITEA_TOKEN && process.env.PI_COFFEE_GITEA_OWNER ? new GiteaClient({baseUrl:process.env.PI_COFFEE_GITEA_URL,token:process.env.PI_COFFEE_GITEA_TOKEN,owner:process.env.PI_COFFEE_GITEA_OWNER}) : undefined;
+  const workspaces = process.env.PI_COFFEE_PROJECT_ROOT ? new Workspaces(process.env.PI_COFFEE_PROJECT_ROOT,{ownerId:process.env.PI_COFFEE_VM_ID,forge}) : undefined;
   const transferTls = loadTls("PI_COFFEE_TRANSFER_TLS_CERT", "PI_COFFEE_TRANSFER_TLS_KEY");
   let host: HostServer | undefined;
   const transferBind = envString("PI_COFFEE_TRANSFER_BIND", "0.0.0.0");

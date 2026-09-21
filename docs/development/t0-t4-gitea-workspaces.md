@@ -1,6 +1,6 @@
 # T0–T4：完整 VM 权限与 Gitea 工作区迁移
 
-日期：2026-09-21。五项任务均为 **READY / 未实施**；设计文档已确认，不据此关闭实施工单。前置拆仓已完成；GitHub 同步不在本轮范围。
+日期：2026-09-21。T0–T3 的运行时代码与公共接缝测试已实现，T4 已移除平台 worktree/本地 merge 路径；部署、双 VM 故障矩阵和真实模型权限探针仍须按下表取证。前置拆仓已完成；GitHub 同步不在本轮范围。
 
 权威：[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md)、[GW-01～12](../spec/gitea-workspaces.md)。本计划替代旧 P0–P5/MV-02/MV-03 中 worktree/本地合并相关排期，不替代其余文件网关、Chat/Work、上下文恢复等待办。
 
@@ -11,6 +11,18 @@
 | T2 | Checkpoint、PR 与跨主机接续 | Agent | T1 | [pi-coffee #35](http://gitea:3000/awangs/pi-coffee/issues/35) |
 | T3 | Server 工作台与旧工作区迁移 | Server；Agent 配套 | T2 | [pi-coffee-server #2](http://gitea:3000/awangs/pi-coffee-server/issues/2) |
 | T4 | 双 VM 验收、删除旧实现与发布 | Agent；Server 联验 | T3 | [pi-coffee #36](http://gitea:3000/awangs/pi-coffee/issues/36) |
+
+## 2026-09-21 实现状态
+
+| 任务 | 已落地 | 尚未宣称通过的门槛 |
+|---|---|---|
+| T0 | owner capability 探测、Host health 字段、幂等 sudoers 安装脚本、部署探针、Work owner 授权上下文及测试 | 在目标 User VM 从 systemd Host 环境运行安装/探针；真实模型执行一次 sudo 与 Conversation 分支 push |
+| T1 | Gitea adapter、Project 登记/创建/迁移、独立 clone、精确起点、原子独占分支、v1→v2 元数据兼容及碰撞测试 | 对现有四入口逐一做部署环境导入；故障注入覆盖服务中断中的创建 |
+| T2 | 选择文件 checkpoint、普通 push、远端 SHA 复核、同步状态、幂等 PR、跨主机新分支接续、push 不确定结果复核 | 真实 Gitea smoke、PR 权限/关闭/冲突矩阵和两台 User VM 的接续演练 |
+| T3 | Host 加法 API、旧目录保留迁移器、Server 同步/checkpoint/PR/迁移 UI、Gateway 透明转发测试 | 在真实旧工作区完成预演、迁移、LSP 重启与回滚；新旧已部署版本兼容演练 |
+| T4 | Agent 删除平台 worktree 创建/移除、merge proposal/token/本地 merge；Server 删除旧控件；两仓本地检查 | 两仓 Gitea fresh clone、跨仓真实 Host smoke、2 用户 × 3 Conversation、离线/凭据/分叉/重启/快照/远端删除故障矩阵 |
+
+代码通过不替代右栏门槛。Issue 只在对应门槛有可复跑证据时关闭；尤其 T4 不因本地测试通过而关闭。
 
 ## T0 — 固定完整执行权限和授权语义
 
@@ -54,6 +66,6 @@
 
 退出条件：两仓各从 Gitea fresh clone 运行 `npm ci && npm run check`；公共 seam 跨仓 smoke、真实模型工具/LSP 探针、两 VM 故障矩阵和迁移回滚均有版本化证据；Issue 写入具体 commit、命令、结果及尚未满足项。依次发布兼容 Host → Server → 旧路径退出版本；部署不清理用户数据。未通过真机门槛不得以本地替身测试关闭 T4。
 
-## 本轮交付边界
+## 发布边界
 
-本轮只修改正式决策、术语、跨仓职责与任务排期，建立 Gitea 跟踪；不修改 sudoers、不切换线上 Host、不搬移任何现有 checkout、不自动合并 PR。实施进展与验收以五个工单为准。
+仓库提供 sudoers 安装器和旧 Checkout 迁移器，但不会在构建或升级时自动修改目标 VM、搬移存量目录或合并 PR。管理员显式运行部署步骤；实施进展与验收以五个工单及版本化证据为准。

@@ -22,6 +22,7 @@ sudo chmod 0640 /etc/pi-coffee/host.env
 sudoedit /etc/pi-coffee/host.env
 sed "s/REPLACE_WITH_VM_OWNER/$USER/g" deploy/uservm/pi-coffee-host.service | sudo tee /etc/systemd/system/pi-coffee-host.service >/dev/null
 sudo systemctl daemon-reload
+sudo ./deploy/uservm/install-owner-access.sh "$USER"
 sudo systemctl enable --now pi-coffee-host
 ```
 
@@ -33,11 +34,14 @@ it in Git or Issue evidence.
 
 ```bash
 curl -s http://127.0.0.1:8788/healthz
+npm run probe:owner-access
 journalctl -u pi-coffee-host -n 50 --no-pager
 ```
 
-The expected health role is `host`. A non-loopback bind without
-`PI_COFFEE_HOST_TOKEN` must fail closed.
+The expected health role is `host`; `capabilities.ownerEnvironment` and
+`capabilities.passwordlessRoot` must both be `true`. `probe:owner-access`
+must report the VM owner HOME and UID 0 through `sudo -n`. A non-loopback bind
+without `PI_COFFEE_HOST_TOKEN` must fail closed.
 
 The transfer listener defaults to port `53317`. The target unified Web file
 gateway is still being implemented; keep the deployed file route consistent
@@ -52,8 +56,25 @@ untrusted networks.
 - Host restart: completed native history remains; an in-flight turn is marked interrupted and is not replayed automatically.
 - VM recovery: owner restores the VM snapshot and then verifies Host token, native credentials and routes.
 
-## Accepted target: owner privileges and Gitea
+## Owner privileges and Gitea
 
-[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) requires the service owner to have unrestricted passwordless sudo, preserving that owner's HOME and Git/Pi configuration. The installation above does not yet provision or prove that capability. T0 adds idempotent validated sudoers setup and a probe from an actual Host child (`id`, `sudo -n id -u`); an interactive terminal check alone is insufficient. Do not deploy sudo-blocking service restrictions.
+[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) requires the service owner to have unrestricted passwordless sudo, preserving that owner's HOME and Git/Pi configuration. The installation above provisions it with an idempotent validated sudoers script, and Host startup probes `id` plus `sudo -n id -u`; an interactive terminal check alone is insufficient. Do not deploy sudo-blocking service restrictions.
 
-[T0–T4](../development/t0-t4-gitea-workspaces.md) also migrates code workspaces. Gitea restores only pushed code; keep VM-native history, unversioned files and credentials in the VM recovery plan. No existing checkout or live privilege configuration is changed by this documentation update.
+`install-owner-access.sh` validates the generated sudoers fragment with
+`visudo`, verifies the service owner/HOME when the unit exists, and runs the
+passwordless root probe as that owner. It is idempotent. Review the target VM
+and run it explicitly; package installation never changes sudoers by itself.
+
+Configure `PI_COFFEE_GITEA_URL`, `PI_COFFEE_GITEA_OWNER`,
+`PI_COFFEE_GITEA_TOKEN` and the stable `PI_COFFEE_VM_ID` in `host.env`. The API
+token stays in the environment and Git uses the owner's normal SSH or
+credential helper. To verify an expendable repository end to end:
+
+```bash
+npm run smoke:gitea-workspaces
+```
+
+The smoke creates and deletes a temporary private repository, checkpoints a
+file, creates a PR and continues the exact SHA through a second workspace root.
+Gitea restores only pushed code; keep VM-native history, unversioned files and
+credentials in the VM recovery plan.
