@@ -37,6 +37,16 @@ sudo systemctl enable --now pi-coffee-web pi-coffee-relay
 `hostToken`. The browser cannot choose a Host URL. Do not place secrets in this
 repository or in Issue evidence.
 
+Install the routing file so the systemd service can read it, then verify access
+before restarting Web. Replacing it through a root-owned temporary file must
+preserve the `pi-coffee` group.
+
+```bash
+sudo install -o root -g pi-coffee -m 0640 ./routes.json /etc/pi-coffee/routes.json
+sudo -u pi-coffee test -r /etc/pi-coffee/routes.json
+sudo systemctl restart pi-coffee-web
+```
+
 ## Probes
 
 ```bash
