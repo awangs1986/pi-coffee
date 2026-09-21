@@ -127,7 +127,7 @@ User VM research directory and future model context keeps its pointer and
 conclusion. `fetch_content`, `source_check`, and `get_search_content` from
 `pi-web-access` remain optional until their runner conformance is recorded.
 The `subagent` and `bg_wait` tools remain optional until activated through
-Harness `search_tools`, so the frozen Simple/Full base counts stay 8/10. Set
+Harness `search_tools` in the current compatibility runtime. This is not the target Chat/Work inventory. Set
 `PI_COFFEE_WEB=off` or `PI_COFFEE_WEB_ACCESS=off` to disable either Web layer;
 set `PI_COFFEE_SUBAGENTS=off` to keep only Harness; set
 `PI_COFFEE_EXTENSIONS=off` for a transport-only diagnostic, or provide a

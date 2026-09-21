@@ -129,8 +129,8 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [Web Server and browser shell](http://testpc:3000/awangs/pi-coffee/issues/4)
 - [End-to-end verification and runbook](http://testpc:3000/awangs/pi-coffee/issues/5)
 - [MVP → 0.1 handoff](http://testpc:3000/awangs/pi-coffee/issues/6)
-- [历史工单：Lean/Full prompt](http://testpc:3000/awangs/pi-coffee/issues/14)（当前设计见 Pi Agent 主 SPEC）
-- [历史工单：Simple/Full Harness 兼容工具表](http://testpc:3000/awangs/pi-coffee/issues/15)
+- [历史工单：提示词初版](http://testpc:3000/awangs/pi-coffee/issues/14)（当前设计见 Pi Agent 主 SPEC）
+- [历史工单：Harness 初版](http://testpc:3000/awangs/pi-coffee/issues/15)
 - [Harness future plan：可靠性验证与扩展工具](http://testpc:3000/awangs/pi-coffee/issues/16)
 - [pi-subagents 集成与 User VM 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/17)
 - [pi-subagents User VM/Web 可靠性验收](http://testpc:3000/awangs/pi-coffee/issues/18)
@@ -140,6 +140,6 @@ explicit non-goals behind the MVP → 0.1 plan.
 - [pi-subagents integration spec](./docs/spec/subagents-plugin.md)
 - [0.1 implementation tickets](http://testpc:3000/awangs/pi-coffee/issues)
 
-## Subagent-first research (2026-09-16)
+## Chat/Work 与研究能力
 
-**Simple/Lean does not use subagents**: Web searches run directly and retain only bounded summaries and evidence indexes. **Full** executes Web searches in a fresh native research child by default, not in the parent followed by a summarizer. `subagent`/`bg_wait` activation and native subagent commands require Full. Switching to Simple does not terminate existing Full background jobs. Native children share a hard launch gate: **3 running per root conversation, 5 per VM**, with excess launches queued. Configure a separate child model using `/subagents-model provider/model`; per-call models remain supported. Parent history receives bounded conclusions and evidence indexes. This uses the original Pi authentication and pi-subagents executor, not a new sandbox. See [the updated contract and Linux deployment requirements](./docs/spec/subagents-plugin.md).
+产品只有 Chat/Work。Chat 零系统提示词；Work 保留 Pi 原生 Base 并追加通用开发正文。模式运行时迁移尚未完成，工具及研究委派清单见 [Pi Agent 主规格](./docs/spec/pi-agent.md) 与[工具讨论](./docs/spec/work-tools.md)。现有子任务执行器、模型配置和部署要求见[子 Agent 接缝](./docs/spec/subagents-plugin.md)。

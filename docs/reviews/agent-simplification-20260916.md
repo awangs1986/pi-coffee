@@ -1,13 +1,13 @@
 # Agent 精简改动验证记录 — 2026-09-16
 
+> 2026-09-20 文档清理：本页涉及旧模式的段落/表项已撤下，未改写为 Chat/Work 的实现证据。原始记录用 `git show b027838:docs/reviews/agent-simplification-20260916.md` 追溯；当前模式只见 [Pi Agent 主规格](../spec/pi-agent.md)。其余内容仍是标题日期的历史快照。
+
 基线：origin/main `6b0fb498e4d8fe2cf0d1303069dbbd8e2d6fcf47`。工作位于固定会话分支，未推送或修改远端 Issue。本次只实施 owner 已确认的提示词、搜索和上下文恢复改动，不实施之前双用户 VM spec 的其他切片。
 
 ## 已运行
 
 - 基线 `npm ci && npm run check`：17 个测试文件，104 个测试通过。
-- 新需求先运行失败测试：三入口统一提示词/recall 驻留、即时有界搜索历史、本地上下文策略。
 - 最终 `npm run check`：20 个测试文件，112 个测试通过，包含 TypeScript 构建。
-- `npm run smoke:subagents`：真实 Pi 默认扩展加载通过；实际 simple 活动工具包括 8 个基础工具及 recall_folded。
 - `npm run smoke:web`：Web/内容工具及相关命令真实加载通过。
 - `test/context-rpc.test.ts` 启动真实锁定 Pi RPC 与本地哨兵 HTTP 服务：已有大历史生成 deterministic seed index，不访问模型；新超大输入在 provider 请求前被 abort，同样不访问模型；原历史保留。
 - 浏览器脚本 `node --check` 与纯状态反馈单测通过。

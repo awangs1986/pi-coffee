@@ -18,6 +18,8 @@ PI Coffee is the independent product in this repository. The current Picode Gite
 - Maintain the SPEC alongside discussions and changes: record confirmed decisions and rationale, unresolved questions, implementation status, and acceptance evidence under stable PA/WP IDs. Dated reviews do not replace the living contract; mark superseded statements and update entrypoints. See [`docs/development/workflow.md`](./docs/development/workflow.md).
 - Record scope/status changes in the corresponding Gitea Issue. If it is unreachable, record pending synchronization locally, not a claimed remote acceptance. Do not silently turn a planned 0.1 item into a V5 change.
 
+- Product mode documentation uses only Chat/Work. Retire superseded mode tables and commands into Git history; do not rename compatibility behavior as shipped Chat/Work. `test/documentation-modes.test.ts` guards Markdown terminology.
+
 ## Completion criterion
 
 A ticket is ready to close only when its acceptance evidence is recorded in the Issue and a fresh clone can run the documented check or deployment probe that demonstrates it.

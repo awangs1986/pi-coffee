@@ -38,7 +38,9 @@ Every confirmed discussion decision and behavior change must remain traceable:
 - Keep target behavior, current implementation, local test results and real-model/deployment acceptance separate. Fixing code without changing the design still requires updating the affected implementation/evidence status when it changes.
 - Maintain acceptance criteria in the SPEC. Link dated test/review evidence; update examples with their real tool schemas. A text assertion or stub test is not evidence that a model follows instructions.
 - Mark superseded decisions and link their replacement. Update entrypoints and cross-references rather than adding another contradictory “latest decision” banner.
-- If Gitea is unreachable, record the pending synchronization locally. Do not claim the Issue was read, updated, accepted or closed. Never include credentials or full private transcripts.
+- If Gitea is unreachable, record the pending synchronization locally. Do not claim the Issue was read, updated, accepted or closed. Never include credentials or complete private transcripts.
+
+Current product-mode documentation uses Chat/Work only. Superseded mode text lives in Git history; filenames and source citations may preserve historical names. The Markdown contract check runs within `npm run check`.
 
 ## Change loop
 
@@ -50,4 +52,4 @@ Every confirmed discussion decision and behavior change must remain traceable:
 
 ## Scope guardrails
 
-Keep this repository independent. V5 is a frozen reference, not a dependency or a patch target. Do not add sandbox/permission machinery to compensate for VM isolation. Do not put secrets, full transcripts, image bodies, or VM credentials into docs or tickets.
+Keep this repository independent. V5 is a frozen reference, not a dependency or a patch target. Do not add sandbox/permission machinery to compensate for VM isolation. Do not put secrets, complete transcripts, image bodies, or VM credentials into docs or tickets.

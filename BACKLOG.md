@@ -47,7 +47,8 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 ## Pi Agent 持续维护入口（2026-09-20）
 
-- [PA 主规格](./docs/spec/pi-agent.md)：PA-001～008 已确认原则；PA-Q01～05 未决；PA-AC 验收与当前检出实现分别记录。
+- [PA 主规格](./docs/spec/pi-agent.md)：已确认决定与 PA-Q 未决项、PA-AC 验收与当前检出实现分别记录；PA-011 精简 Work 工具集合，PA-012 要求 Skill + CLI 的完整 LSP 中间层。
+- [LSP 中间层](./docs/spec/lsp-middle-layer.md)：V1 CLI、Skill、TS/Python Profile、按需复用和 3×3 真实模型门槛已完成；故障/性能矩阵与 V2 编辑仍有待办。不采用 MCP，不依赖 pi-lens。2026-09-21 Gitea 连接失败，实现证据与依赖待同步。
 - [WP 提示词规格](./docs/spec/harness-prompt.md)：唯一正文、稳定行为规则、工程预算与持续维护的验收样例。
 - 下一步只按已确认范围推进：模式/工具清单问题先逐项对齐；上下文统计与真实模型调用质量仍需代码/实测证据。Work 正文已做本地验证，不等于新模式已发布。
 - Gitea 同步待恢复；下方 `HARNESS-001/002` 等 `DONE` 是当时的切片记录，不表示 Chat/Work 已完成。不要在本 Backlog 复制一套主规格正文。
@@ -128,8 +129,8 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-039` | `DECIDED` | 尽量复用 Gitea 上已有代码，但只复用兼容且可验证的模块。 | 不为“复用”把 V5 的 Guard、Worktree 或领域对象偷偷带入 MVP/0.1。 |
 | `D-040` | `DECIDED` | Rust 只在测出实际性能瓶颈后引入。 | 第一实现使用 Node/TypeScript；Rust 模块必须有基准、边界和回滚方案。 |
 | `D-041` | `LATER` | 除已明确登记的 Harness 基础表外，V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 每个后续迁移必须单独评审、单独验收；不得借 Harness ticket 偷渡其他模块。 |
-| `D-042` | `SUPERSEDED` | 历史方案：以 V3 结果为基线派生 Lean/Full 两份提示词。 | 当前目标见 [PA-002/004 与 WP SPEC](./docs/spec/harness-prompt.md)：Chat/Work 与唯一 Work 正文；不以本条要求回读 V3。旧交付见 `HARNESS-001`。 |
-| `D-043` | `SUPERSEDED` | 历史工具表：冻结 V5 引用上的 Simple 8 / Full 10，经 Pi 插件适配。 | 代码仍有兼容实现，但目标模式与工具清单归 [PA-002/005、PA-Q01](./docs/spec/pi-agent.md)；不能把旧 8/10 当新设计。旧交付见 `HARNESS-002`。 |
+| `D-042` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 当前目标见 [PA-002/004 与 WP SPEC](./docs/spec/harness-prompt.md)：Chat/Work 与唯一 Work 正文；不以本条要求回读 V3。旧交付见 `HARNESS-001`。 |
+| `D-043` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 代码仍有兼容实现，但目标模式与工具清单归 [PA-002/005、PA-Q01](./docs/spec/pi-agent.md)；不能把旧 8/10 当新设计。旧交付见 `HARNESS-002`。 |
 | `D-044` | `DECIDED` | 本地 Web 工具接 Serper Relay；有界完整证据先留 User VM，历史只保留摘要和索引。 | 实现/失败语义见 [Web SPEC](./docs/spec/web-search-plugin.md)；新模式工具/委派分配待 PA-Q01/04，旧基础表计数不是目标约束。 |
 
 ### 1.1 被替换的早期方案
@@ -171,8 +172,8 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
-| `HARNESS-001` | `DONE` | P0 | 交付原版 Pi 可用的 V3-derived Lean/Full prompt fixture、确定性渲染器和无虚假能力声明的测试。运行时 `/harness` 扩展接线另行 ticket。 | `MVP-005` | [#14](http://testpc:3000/awangs/pi-coffee/issues/14) |
-| `HARNESS-002` | `DONE` | P0 | 以冻结 V5 工具表实现原版 Pi Harness extension：Simple 8 / Full 10、V3 aliases、会话恢复、prompt 注入，以及 User VM-native `git`/`verify` 适配。 | `HARNESS-001`, `MVP-003` | [#15](http://testpc:3000/awangs/pi-coffee/issues/15) |
+| `HARNESS-001` | `DONE` | P0 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | `MVP-005` | [#14](http://testpc:3000/awangs/pi-coffee/issues/14) |
+| `HARNESS-002` | `DONE` | P0 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | `HARNESS-001`, `MVP-003` | [#15](http://testpc:3000/awangs/pi-coffee/issues/15) |
 | `CP-001` | `DONE` | P0 | Debian Control Plane 的透明 LLM Relay，唯一 key、双 API、JSON/SSE、models/compact、限量 metadata。**已随 `MVP-007` 提前交付**；`PERF-001`/`OBS-001` 仍归 0.1。 | `MVP-005` | [#7](http://testpc:3000/awangs/pi-coffee/issues/7) |
 | `ID-001` | `READY` | P0 | 内部 Gitea OAuth、logout/cookie 生命周期、固定 User VM/Host 路由、身份撤销和 fail-closed。 | `MVP-005` | [#8](http://testpc:3000/awangs/pi-coffee/issues/8) |
 | `DEP-001` | `READY` | P0 | Linux Mint Xfce User VM 的 Deployment Skill、固定 Pi 版本、systemd、一次性 enrollment、report/health/stop。 | `MVP-003`, `MVP-005` | [#9](http://testpc:3000/awangs/pi-coffee/issues/9) |
@@ -208,7 +209,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
-| `SUBAGENT-001` | `DONE` | P1 | 锁定并加载官方 `pi-subagents@0.63.0`；通过本地资源 Adapter 暴露其 skills/prompts；让 `search_tools` 可发现/按需激活 `subagent` 与 `bg_wait`，且 Harness Simple/Full 仍为 8/10。 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
+| `SUBAGENT-001` | `DONE` | P1 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
 | `SUBAGENT-002` | `READY` | P1 | 在真实 Linux Mint User VM + Web Shell 验证 foreground/background child、完成通知、停止/取消、浏览器断开后继续、Host 重启恢复和资源清理；未通过前不宣称生产可靠。 | `SUBAGENT-001`, `HARNESS-003` | [#18](http://testpc:3000/awangs/pi-coffee/issues/18) |
 
 ### 2.6 Web Search 扩展切片
@@ -307,7 +308,7 @@ MVP-001..005 (已完成)
 | 自动化 Deployment Skill、Pi 原生插件、模块化、Rust | [`docs/development/workflow.md`](./docs/development/workflow.md) | `D-036..D-040`, `DEP-001`, `ARCH-002`, `PERF-001/002` |
 | pi-web fork/改造/重写 | README、架构 seam 约束 | `D-038`, `ARCH-001`, `OPEN-009` |
 | V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001`, `HARNESS-003` |
-| 历史 Lean/Full 提示词与 Simple/Full 工具表 | [Harness 兼容说明](./docs/spec/harness-plugin.md)与历史审计；设计已替代 | `D-042..D-043`（SUPERSEDED），`HARNESS-001..002` 历史切片 |
+| 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | [Harness 兼容说明](./docs/spec/harness-plugin.md)与历史审计；设计已替代 | `D-042..D-043`（SUPERSEDED），`HARNESS-001..002` 历史切片 |
 | `pi-subagents` 上游扩展接入 Agent Host | [`docs/spec/subagents-plugin.md`](./docs/spec/subagents-plugin.md)、[`docs/research/pi-subagents-audit-20260903.md`](./docs/research/pi-subagents-audit-20260903.md) | `SUBAGENT-001..002`, `HARNESS-003` |
 | Web 搜索、Serper Relay、原生子 Agent 研究和 Markdown 封盘 | [`docs/spec/web-search-plugin.md`](./docs/spec/web-search-plugin.md)、[`docs/research/pi-web-access-audit-20260903.md`](./docs/research/pi-web-access-audit-20260903.md) | `D-044`, `WEB-001..002` |
 
@@ -317,7 +318,7 @@ MVP-001..005 (已完成)
 |---|---|
 | 2026-09-02 | 根据今天的多轮讨论建立本 Backlog；MVP 标记为当前 main 已实现，0.1 六个切片映射到 Gitea Issues #7–#12。 |
 | 2026-09-02 | 在项目 1 建立 `Backlog` 列并加入 Issue #13，作为后续功能 ticket 的默认入口。 |
-| 2026-09-02 | 根据 V3 三次提示词演化的维护者确认，完成 PI Coffee Lean/Full prompt fixture 与 `HARNESS-001`（Issue #14）。 |
+| 2026-09-02 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 |
 | 2026-09-03 | 复核 Gitea V5 基线 `778a3d5`，完成 PI-native Harness extension、8/10 工具表和 VM-native git/verify 适配，登记 `HARNESS-002`（Issue #15）。 |
 | 2026-09-02 | owner 补充 MVP 范围：包含 Codex 式白色主题 Web 界面（`MVP-006`）；MVP 部署形态为 User VM 内 Pi agent + 服务器端 Web/Relay（`MVP-007`），`CP-001` 由此提前进入 MVP。 |
 | 2026-09-03 | 建立 `HARNESS-003`（Issue #16）：先验证 10 个基础工具可靠性，再逐个接入扩展工具。 |
