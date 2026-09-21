@@ -77,8 +77,11 @@
               <div class="stats-note">占用与用量由 User VM 中的 Pi 统计；Pi 不区分系统提示 / 工具定义 / 对话三段。</div>
             </div>
           </div>
-          <button id="merge-workspace" class="btn small hidden">查看合并</button>
-          <button id="files-toggle" class="btn small">工作树</button>
+          <span id="sync-state" class="sync-state hidden" aria-live="polite"></span>
+          <button id="migrate-workspace" class="btn small hidden">迁移 Checkout</button>
+          <button id="checkpoint-workspace" class="btn small hidden">Checkpoint</button>
+          <button id="pull-request" class="btn small hidden">Gitea PR</button>
+          <button id="files-toggle" class="btn small">Checkout</button>
           <div class="topbar-meta" id="session-meta"></div>
         </header>
         <div class="conn-banner hidden" id="conn-banner" role="status">连接已断开，正在自动重连…（Host 上的任务不会被打断）</div>
@@ -164,7 +167,7 @@
           </section>
         </div>
       </main>
-      <aside id="workspace-panel" class="workspace-panel hidden" aria-label="工作区变更审查">
+      <aside id="workspace-panel" class="workspace-panel hidden" aria-label="Checkout 变更审查">
         <header class="wt-header">
           <div class="wt-tabs" role="tablist" aria-label="工作区审查">
             <button id="files-diff" class="wt-tab active" type="button" role="tab" aria-selected="true">Diff <span id="workspace-summary" class="wt-summary"></span></button>
@@ -172,7 +175,7 @@
           </div>
           <div class="wt-actions">
             <button id="wt-download" class="icon-btn small" type="button" aria-label="下载全部变更补丁" title="下载全部变更补丁"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg></button>
-            <button id="files-close" class="icon-btn small" type="button" aria-label="关闭工作树面板" title="关闭"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            <button id="files-close" class="icon-btn small" type="button" aria-label="关闭 Checkout 面板" title="关闭"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
           </div>
         </header>
         <div id="workspace-list" class="workspace-list" aria-label="变更文件列表"><p class="workspace-empty">打开项目对话以查看变更。</p></div>

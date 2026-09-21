@@ -1,6 +1,6 @@
 # ADR-0012: VM owner 权限与 Gitea 工作区（跨仓引用）
 
-日期：2026-09-21。状态：accepted；运行时待 T0–T4。
+日期：2026-09-21。状态：accepted；Server 运行时代码已迁移，部署验收待 T4。
 
 正式决策由 Agent 仓库单点维护：[ADR-0012](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/adr/0012-owner-privileges-and-gitea-checkouts.md)，完整合同见 [GW-01～12](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/gitea-workspaces.md)。
 

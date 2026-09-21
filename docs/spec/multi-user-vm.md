@@ -5,7 +5,7 @@
 - 架构变更：[ADR-0010](../adr/0010-unified-web-gateway-private-user-vms.md)。本变更覆盖下文和历史文档中“浏览器文件必须直连 VM”“首版仅内网 HTTP、不纳入公网访问”的冲突描述。
 - 原规格核查基线：`origin/main` @ `6b0fb498e4d8fe2cf0d1303069dbbd8e2d6fcf47`；本次文档修订基于工作分支远端 `a6d6f5a`，未覆盖其 Windows 兼容代码修复。
 - 本文仅保存决策，不保存原始访谈、用户会话或凭据。
-- 工作区决策由 [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 更新：Gitea 负责代码协作与 PR 合并；Host 管理独立 clone 和同步；Server 展示状态和链接。T0–T4 尚未实施，不能把本次规格修订当成已部署。
+- 工作区决策由 [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 更新：Gitea 负责代码协作与 PR 合并；Host 管理独立 clone 和同步；Server 展示状态和链接。T0–T3 代码已实现，仍不能把仓库状态当成目标 VM 已部署或双 VM 已验收。
 
 ## 0. Agent 设计的规格归属（2026-09-20）
 

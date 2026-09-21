@@ -24,4 +24,4 @@ can pass through this gateway unchanged. Cross-repository release order is:
 
 ## Planned workspace transition
 
-[ADR-0012](./adr/0012-owner-privileges-and-gitea-checkouts.md) keeps checkout/Git/Gitea code API operations in Host. Server displays Host-provided synchronization and PR state; OAuth credentials are not VM Git credentials. T1/T2 introduce additive workspace capabilities; T3 detects them before exposing new actions; T4 removes old local merge actions only after rollout and migration evidence. Any incompatible removal requires an explicit protocol compatibility decision. This document does not claim the new contract is already implemented.
+[ADR-0012](./adr/0012-owner-privileges-and-gitea-checkouts.md) keeps Checkout/Git/Gitea code API operations in Host. Server displays Host-provided synchronization and PR state; OAuth credentials are not VM Git credentials. The current UI forwards the additive status/checkpoint/PR/migration actions and no longer exposes old local merge actions. Deployment compatibility and migration evidence remain T4 acceptance work.

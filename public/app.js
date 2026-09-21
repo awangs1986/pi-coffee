@@ -52,7 +52,8 @@ let uploads = [];              // files transferred straight to the User VM (ADR
 let uploadLog = [];            // completed uploads for the current conversation: { name, size, path }
 let workspaceState = null, showArchived = false, workspaceRequestSeq = 0;
 let transfer = null;           // { url, scope, token, inbox, maxFileBytes, maxBatchBytes } from the Host
-let workspaceChanges = null;   // aggregate worktree status from `/api/workspace` action `changes`
+let workspaceChanges = null;   // aggregate Checkout status from `/api/workspace` action `changes`
+let workspaceSync = null;
 let selectedChangedPath = null, diffWrapped = true;
 let workspaceDetailOpen = false; // true while a Diff/Checks document replaces the change list
 let lastChangeCardSignature = '';
@@ -443,7 +444,7 @@ function openSessionMenu(session, anchor) {
   });
   if(archived) {
     const remove=el('button','popitem danger','永久删除…');remove.addEventListener('click',async()=> {
-      closeMenu();const confirmation=await askModal({title:'永久删除归档对话',text:`将删除对话历史和已合并且干净的 worktree；保留分支、上传文件及共享项目。未合并或未提交的成果会阻止删除。输入对话 ID 确认：${session.id}`,input:'',okLabel:'永久删除',danger:true});
+      closeMenu();const confirmation=await askModal({title:'永久删除归档对话',text:`将删除对话历史和已由远端 SHA 确认且干净的 Checkout；保留远端分支、PR、上传文件及 Repository。未同步或未提交的成果会阻止删除。输入对话 ID 确认：${session.id}`,input:'',okLabel:'永久删除',danger:true});
       if(confirmation!==session.id)return;
       try {await workspaceApi({action:'delete',id:session.id,confirmation});await loadWorkspace();send({v:1,type:'list_sessions'});}catch(e){toast(e.message);}
     });menuNode.append(remove);
@@ -646,7 +647,7 @@ function renderProjectContext() {
   ui.projectSelect.disabled = lockedToConversation;
   ui.startBranch.disabled = lockedToConversation;
   ui.projectSelect.title = activeProject ? activeProject.path : 'Gitea 仓库';
-  ui.startBranch.title = conversation ? `当前对话固定使用 ${conversation.branch}；不会迁移已有 worktree` : '新对话起始分支';
+  ui.startBranch.title = conversation ? `当前对话固定使用 ${conversation.branch}` : '新对话起始分支';
   ui.projectSelect.classList.toggle('locked', lockedToConversation);
   ui.startBranch.classList.toggle('locked', lockedToConversation);
 }
@@ -1530,7 +1531,7 @@ async function loadWorkspace() {
   try {
     const hadWorkspace = Boolean(workspaceState);
     const data=await workspaceApi();if(seq!==workspaceRequestSeq)return;workspaceState=data;
-    $('#project-controls').classList.remove('hidden');$('#files-toggle').classList.remove('hidden');$('#merge-workspace').classList.remove('hidden');
+    $('#project-controls').classList.remove('hidden');$('#files-toggle').classList.remove('hidden');
     if (!hadWorkspace && window.matchMedia('(min-width: 1100px)').matches) setWorkspaceOpen(true);
     const select=ui.projectSelect, old=select.value;select.replaceChildren();
     const all=document.createElement("option");all.value="";all.textContent="全部项目 / 旧对话";select.append(all);
@@ -1539,8 +1540,8 @@ async function loadWorkspace() {
     renderProjectContext();
     renderSessionList();
     const hasActive=activeId && data.conversations.some(c=>c.id===activeId);
-    if(hasActive) {const id=activeId;const grant=await workspaceApi({action:"files",id});if(activeId===id){transfer=grant;bindWorkspaceArtifacts();void refreshArtifactCards();void refreshWorkspaceChanges(false).then(()=>maybeRenderChangesCard()).catch(()=>undefined);}}
-    else {workspaceChanges=null;selectedChangedPath=null;if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();}
+    if(hasActive) {const id=activeId;const conversation=data.conversations.find(c=>c.id===id);$('#migrate-workspace').classList.toggle('hidden',Boolean(conversation?.startSha));$('#checkpoint-workspace').classList.toggle('hidden',!conversation?.startSha);$('#pull-request').classList.toggle('hidden',!conversation?.startSha);const grant=await workspaceApi({action:"files",id});if(activeId===id){transfer=grant;bindWorkspaceArtifacts();void refreshArtifactCards();void refreshWorkspaceStatus();void refreshWorkspaceChanges(false).then(()=>maybeRenderChangesCard()).catch(()=>undefined);}}
+    else {workspaceChanges=null;workspaceSync=null;renderSyncState();for(const id of ['migrate-workspace','checkpoint-workspace','pull-request'])$('#'+id).classList.add('hidden');selectedChangedPath=null;if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();}
   } catch(e) {if(workspaceState)toast(e.message);}
 }
 ui.projectSelect.addEventListener('change',()=>{showArchived=false;renderProjectContext();renderSessionList();});
@@ -1556,13 +1557,36 @@ $('#project-add').addEventListener('click',async()=> {
     const p=await workspaceApi(data);await loadWorkspace();ui.projectSelect.value=p.id;showArchived=false;renderProjectContext();renderSessionList();toast('项目已创建');
   } catch(e){toast(e.message);}
 });
-$('#merge-workspace').addEventListener('click',async()=> {
-  if(!activeId)return toast('请先打开项目对话');
+function renderSyncState() {
+  const node=$('#sync-state');if(!node)return;
+  if(!workspaceSync){node.textContent='';node.classList.add('hidden');return;}
+  const labels={synced:'已同步',unpublished:'未发布',ahead:'待推送',behind:'远端较新',diverged:'已分叉',unknown:'远端未知'};
+  node.textContent=`${labels[workspaceSync.state] || workspaceSync.state}${workspaceSync.dirty ? ' · 有本地改动' : ''}`;
+  node.title=workspaceSync.error || (workspaceSync.remoteSha ? `远端 ${workspaceSync.remoteSha.slice(0,12)} · ${workspaceSync.lastRemoteAt || ''}` : '远端分支尚未确认');node.classList.remove('hidden');node.dataset.state=workspaceSync.state;
+}
+async function refreshWorkspaceStatus() {
+  if(!activeId)return;workspaceSync=await workspaceApi({action:'status',id:activeId});renderSyncState();
+}
+$('#checkpoint-workspace').addEventListener('click',async()=>{
+  if(!activeId)return toast('请先打开代码对话');
   try {
-    const proposal=await workspaceApi({action:'merge_preview',id:activeId});
-    const ok=await askModal({title:'确认本地合并',text:`目标 ${proposal.target.slice(0,12)} ← 来源 ${proposal.source.slice(0,12)}\n${proposal.stat}\n\n${proposal.diff}${proposal.truncated ? '\nDiff 过长，请在 VM 检查完整内容后再操作。' : ''}`,okLabel:'确认合并'});
-    if(!ok || proposal.truncated)return;
-    const r=await workspaceApi({action:'merge',id:activeId,token:proposal.token});toast(r.ok ? '合并完成' : r.message);
+    const changes=workspaceChanges || await refreshWorkspaceChanges(false);const paths=changes?.checkpointPaths || [];
+    if(!paths.length){workspaceSync=await workspaceApi({action:'sync',id:activeId});renderSyncState();return toast('没有待提交代码；远端 SHA 已确认');}
+    const message=await askModal({title:'创建并推送 Checkpoint',text:`将提交当前审查中 ${paths.length} 个文件到 Conversation 分支。私密路径不会包含。`,input:'checkpoint: work in progress',okLabel:'提交并推送'});if(!message)return;
+    workspaceSync=await workspaceApi({action:'checkpoint',id:activeId,paths,message});renderSyncState();await refreshWorkspaceChanges(false);toast('Checkpoint 已由远端 SHA 确认');
+  }catch(e){await refreshWorkspaceStatus().catch(()=>undefined);toast(e.message);}
+});
+$('#pull-request').addEventListener('click',async()=>{
+  if(!activeId)return toast('请先打开代码对话');
+  try {const title=await askModal({title:'创建 Gitea PR',text:'PR 合并在 Gitea 中完成。',input:'PI Coffee Conversation changes',okLabel:'创建 / 打开'});if(!title)return;const pr=await workspaceApi({action:'pull_request',id:activeId,title});window.open(pr.url,'_blank','noopener,noreferrer');toast(`PR #${pr.number} · ${pr.state}`);}catch(e){toast(e.message);}
+});
+$('#migrate-workspace').addEventListener('click',async()=>{
+  if(!activeId)return;
+  try {
+    const conversation=workspaceState.conversations.find(c=>c.id===activeId),project=workspaceState.projects.find(p=>p.id===conversation?.projectId);if(!conversation || !project)return;
+    if(!project.repoUrl){const repoUrl=await askModal({title:'绑定 Gitea Repository',text:'填写无凭据的 clone URL。旧目录会保留用于回滚。',input:'',okLabel:'验证并绑定'});if(!repoUrl)return;await workspaceApi({action:'bind_project',projectId:project.id,repoUrl});}
+    const plan=await workspaceApi({action:'migration_plan',id:activeId});const ok=await askModal({title:'迁移为独立 Checkout',text:`旧目录：${plan.legacyCwd}\n本地改动：${plan.dirty?'有，将复制':'无'}\n迁移完成前不会删除旧目录。`,okLabel:'开始迁移'});if(!ok)return;
+    await workspaceApi({action:'migrate',id:activeId});await loadWorkspace();toast('Checkout 已迁移；旧目录仍保留');
   }catch(e){toast(e.message);}
 });
 function fileEndpoint(route,path) {
@@ -1604,7 +1628,7 @@ function changedFilesCard(data) {
   const add=data.files.reduce((sum,file)=>sum+(typeof file.additions==='number' ? file.additions : 0),0);
   const del=data.files.reduce((sum,file)=>sum+(typeof file.deletions==='number' ? file.deletions : 0),0);
   const card=el('section','changes-card');
-  card.setAttribute('aria-label','本轮工作树变更');
+  card.setAttribute('aria-label','本轮 Checkout 变更');
   const head=el('div','changes-card-head');
   head.append(
     el('strong','changes-card-title',`已编辑 ${data.files.length} 个文件`),
@@ -1708,7 +1732,7 @@ function renderWorkspaceDiff(data, path=selectedChangedPath) {
   const detail=$('#workspace-detail');detail.replaceChildren();
   detail.append(reviewHead(selectedChangedPath || '全部变更'));
   const meta=el('div','workspace-diff-meta');
-  meta.append(el('span','','branch '+data.branch),el('span','','base '+data.base.slice(0,12)),el('span','','target '+data.target.slice(0,12)));
+  meta.append(el('span','','branch '+data.branch),el('span','','base '+data.base.slice(0,12)),el('span','','target '+data.target.slice(0,12)),el('span',data.stale?'workspace-warning':'',data.stale?'远端刷新失败 · 基线可能陈旧':'刷新 '+data.refreshedAt));
   detail.append(meta);
   const file=data.files.find((item) => item.path===selectedChangedPath);
   detail.append(el('pre','workspace-stat',selectedChangedPath ? file ? `${file.path}\n${changeFileStats(file)}` : selectedChangedPath : data.stat));
@@ -1728,7 +1752,7 @@ function renderWorkspaceChecks(data) {
     card.append(head,el('pre','workspace-check-output',check.output || (check.ok ? 'clean' : '无输出')));
     detail.append(card);
   }
-  detail.append(el('p','workspace-note','当前 Checks 是工作树的本地 git diff --check；不会自动运行测试或远程 CI。'));
+  detail.append(el('p','workspace-note','当前 Checks 是 Checkout 的本地 git diff --check；不会自动运行测试或远程 CI。'));
 }
 async function showWorkspacePreview(path) {
   if(!workspaceState || !transfer || !activeId){toast('请先打开项目对话');return;}

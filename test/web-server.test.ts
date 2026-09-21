@@ -25,8 +25,8 @@ class FakeHost {
         return;
       }
       if (request.url === "/api/workspace") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ projects: [], conversations: [] }));
+        if(request.method==="POST") {let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{response.writeHead(200,{"content-type":"application/json"});response.end(JSON.stringify({forwarded:JSON.parse(body)}));});return;}
+        response.writeHead(200, { "content-type": "application/json" });response.end(JSON.stringify({ projects: [], conversations: [] }));
         return;
       }
       if (request.url === "/api/revoke-files" && request.method === "POST") {
@@ -135,6 +135,11 @@ async function connect(url: string, options?: ConstructorParameters<typeof WebSo
 }
 
 describe("Web gateway seam", () => {
+  it("forwards Checkout synchronization actions without implementing Git in the gateway",async()=>{
+    host=new FakeHost();await host.start();web=new WebServer({host:"127.0.0.1",port:0,hostUrl:host.url(),hostToken:"host-token"});await web.start();const base=`http://127.0.0.1:${web.address().port}`;
+    const response=await fetch(`${base}/api/workspace`,{method:"POST",headers:{origin:base,"content-type":"application/json"},body:JSON.stringify({action:"checkpoint",id:"c1",paths:["src/a.ts"],message:"checkpoint"})});
+    expect(response.status).toBe(200);expect(await response.json()).toEqual({forwarded:{action:"checkpoint",id:"c1",paths:["src/a.ts"],message:"checkpoint"}});
+  });
   it("proxies Host frames, keeps Host state across browser disconnects, and forwards future frame types", async () => {
     host = new FakeHost();
     await host.start();

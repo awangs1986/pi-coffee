@@ -56,9 +56,9 @@ describe('Gitea context strip', () => {
   });
 });
 
-describe('worktree review surfaces', () => {
-  it('is a single-purpose changes panel like the Arena worktree: Diff/Checks header, file list, View all changes', () => {
-    for (const id of ['files-diff', 'files-checks', 'files-close', 'wt-download', 'workspace-summary', 'workspace-list', 'workspace-detail', 'view-all-changes']) {
+describe('Checkout review and Gitea synchronization surfaces', () => {
+  it('shows synchronization, checkpoint and real pull request actions beside Diff/Checks', () => {
+    for (const id of ['files-diff', 'files-checks', 'files-close', 'wt-download', 'workspace-summary', 'workspace-list', 'workspace-detail', 'view-all-changes', 'sync-state', 'checkpoint-workspace', 'pull-request']) {
       expect(html).toContain(`id="${id}"`);
     }
     for (const id of ['files-tree', 'files-uploads', 'files-refresh', 'file-path', 'file-list', 'artifact-preview']) {
@@ -68,6 +68,12 @@ describe('worktree review surfaces', () => {
     expect(app).toContain('function middleTruncate(path,max=24)');
     expect(app).toContain('function closeWorkspaceDetail()');
     expect(app).toContain('async function downloadWorkspacePatch()');
+    expect(app).toContain("action:'checkpoint'");
+    expect(app).toContain("changes?.checkpointPaths || []");
+    expect(app).toContain("action:'pull_request'");
+    expect(app).toContain("data.stale?'远端刷新失败 · 基线可能陈旧'");
+    expect(app).not.toContain("action:'merge_preview'");
+    expect(app).not.toContain("action:'merge'");
     expect(css).toContain('.wt-file');
     expect(css).toContain('.workspace-panel.detail-open .workspace-list');
   });
