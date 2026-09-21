@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ResearchArtifactStore, pointerContext, renderResearchMarkdown } from "../src/web/research-artifact.js";
+import { ResearchArtifactStore, pointerContext, renderResearchMarkdown } from "../src/extensions/web-access/research-artifact.js";
 
 describe("research Markdown closure", () => {
   it("writes a User VM artifact atomically and returns a pointer", async () => {

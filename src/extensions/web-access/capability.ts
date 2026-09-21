@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ToolInfo } from "@earendil-works/pi-coding-agent";
-import type { CapabilityManifest } from "../capabilities/catalog.js";
+import type { CapabilityManifest } from "../../capabilities/catalog.js";
 
 const WEB_ACCESS_TOOL_NAMES = ["fetch_content", "source_check", "get_search_content"] as const;
 

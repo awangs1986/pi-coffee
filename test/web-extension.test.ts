@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { createWebExtension } from "../src/web/extension.js";
-import { MemorySearchTransport } from "../src/web/search.js";
-import { ResearchArtifactStore } from "../src/web/research-artifact.js";
+import { createWebExtension } from "../src/extensions/web-access/extension.js";
+import { MemorySearchTransport } from "../src/extensions/web-access/search.js";
+import { ResearchArtifactStore } from "../src/extensions/web-access/research-artifact.js";
 
 type Handler = (event: any, context: any) => unknown;
 

@@ -9,7 +9,7 @@
   },
   "pi": {
     "extensions": [
-      "./dist/src/web/extension.js",
+      "./dist/src/extensions/web-access/extension.js",
       "./dist/src/harness/extension.js"
     ]
   },

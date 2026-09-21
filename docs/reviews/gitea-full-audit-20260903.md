@@ -37,8 +37,8 @@ Issue 验收；在这些证据产生前，不应把 0.1 或 Web Search 称为生
 | Host/Pi | 原版 `@earendil-works/pi-coding-agent@0.84.4` RPC adapter、Session registry、原生 transcript 恢复 | `src/host/pi-adapter.ts`、`src/host/session.ts` |
 | Relay | Chat Completions/Responses 的 JSON/SSE 透传、models、compact、Serper route、限额和 token seam | `src/relay/server.ts`、`test/relay-server.test.ts` |
 | Native extensions | `context-fold@0.4.0`、可选 `pi-lens`/`rpiv-todo`/`pi-mcp-adapter`、`pi-subagents@0.63.0` | `src/pi-extensions.ts`、`package.json` |
-| Web research | 本地 `web_search` → Control Plane Serper Relay；可选 native child brief；User VM Markdown 封盘；后续 context 使用 pointer + conclusion | `src/web/extension.ts`、`src/web/research-artifact.ts`、`src/web/search.ts` |
-| pi-web-access | 通过 Pi 原生 extension manager + Jiti adapter 加载；冲突的 `web_search`、`/websearch`、`/curator` 注册被屏蔽，内容工具保留 | `src/web/pi-web-access-adapter.ts`、`docs/research/pi-web-access-audit-20260903.md` |
+| Web research | 本地 `web_search` → Control Plane Serper Relay；可选 native child brief；User VM Markdown 封盘；后续 context 使用 pointer + conclusion | `src/extensions/web-access/extension.ts`、`src/extensions/web-access/research-artifact.ts`、`src/extensions/web-access/search.ts` |
+| pi-web-access | 通过 Pi 原生 extension manager + Jiti adapter 加载；冲突的 `web_search`、`/websearch`、`/curator` 注册被屏蔽，内容工具保留 | `src/extensions/web-access/pi-web-access-adapter.ts`、`docs/research/pi-web-access-audit-20260903.md` |
 | Capability registry | manifest、trust/readiness、schema budget、执行 epoch 和持久设置 seam | `src/capabilities/` |
 | Deployment | systemd/env 模板和 Podman 两机 smoke 材料；不管理 VM 生命周期 | `deploy/`、`scripts/smoke-podman.mjs` |
 
@@ -64,7 +64,7 @@ Issue 验收；在这些证据产生前，不应把 0.1 或 Web Search 称为生
 
 1. **研究封盘脱敏（PR #28）**：`redactSecrets()` 现在覆盖
    `PI_COFFEE_UPSTREAM_KEY`、`PI_COFFEE_RELAY_TOKEN`、
-   `PI_COFFEE_SERPER_KEY` 和 `SERPER_API_KEY`。`src/web/extension.ts` 在
+   `PI_COFFEE_SERPER_KEY` 和 `SERPER_API_KEY`。`src/extensions/web-access/extension.ts` 在
    `pi.appendEntry` 或浏览器 custom message 之前也先脱敏结论，不再只有 Markdown
    文件被清洗。
 2. **Host 子进程密钥继承（PR #28）**：`buildHostChildEnv()` 使用显式

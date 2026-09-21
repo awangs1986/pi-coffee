@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MemorySearchTransport, RelaySearchTransport, normalizeWebSearchQuery, parseSearchBatch } from "../src/web/search.js";
+import { MemorySearchTransport, RelaySearchTransport, normalizeWebSearchQuery, parseSearchBatch } from "../src/extensions/web-access/search.js";
 
 describe("PI Coffee web search adapter", () => {
   it("normalizes bounded multi-query input", () => {

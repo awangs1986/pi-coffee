@@ -19,7 +19,7 @@ import {
   type TrustState,
 } from "../capabilities/settings.js";
 import { createSubagentsManifest } from "../subagents/capability.js";
-import { createWebAccessManifest } from "../web/capability.js";
+import { createWebAccessManifest } from "../extensions/web-access/capability.js";
 import {
   FULL_TOOLS,
   SIMPLE_TOOLS,
