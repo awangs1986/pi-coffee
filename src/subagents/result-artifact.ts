@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { redactSecrets } from "../web/research-artifact.js";
+import { redactSecrets } from "../extensions/web-access/research-artifact.js";
 
 export function boundSubagentResult(content: unknown, details?: unknown, root?: string): { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> } {
   const text = typeof content === "string" ? content : Array.isArray(content)

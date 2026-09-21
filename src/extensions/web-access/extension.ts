@@ -1,8 +1,8 @@
-import { subagentsAllowed } from "../harness/runtime-mode.js";
+import { subagentsAllowed } from "../../harness/runtime-mode.js";
 import type { ContextEvent, ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { registerCapabilityManifest } from "../capabilities/registry.js";
-import { invokeNativeSubagent } from "../subagents/delegation.js";
+import { registerCapabilityManifest } from "../../capabilities/registry.js";
+import { invokeNativeSubagent } from "../../subagents/delegation.js";
 import { ResearchArtifactStore, pointerContext, redactSecrets, type ResearchArtifactRef } from "./research-artifact.js";
 import {
   MemorySearchTransport,

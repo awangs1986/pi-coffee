@@ -9,7 +9,7 @@ import harnessExtension, { createHarnessExtension } from "../src/harness/extensi
 import { MemoryCapabilitySettingsStore } from "../src/capabilities/settings.js";
 import { FULL_TOOLS, SIMPLE_TOOLS } from "../src/harness/mode.js";
 import { renderHarnessPrompt } from "../src/harness/prompt.js";
-import { createWebExtension } from "../src/web/extension.js";
+import { createWebExtension } from "../src/extensions/web-access/extension.js";
 
 type Handler = (event: unknown, context: unknown) => unknown;
 
