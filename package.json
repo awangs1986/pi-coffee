@@ -26,7 +26,9 @@
     "smoke:toolchain": "npm run build && node scripts/smoke-toolchain.mjs",
     "smoke:toolchain:real": "npm run build && node scripts/smoke-real-agent-toolchain.mjs",
     "smoke:lsp-agent": "npm run build && node scripts/smoke-lsp-agent.mjs",
-    "smoke:web-access": "npm run build && node scripts/smoke-web-access.mjs"
+    "smoke:web-access": "npm run build && node scripts/smoke-web-access.mjs",
+    "probe:owner-access": "npm run build && node scripts/probe-owner-access.mjs",
+    "smoke:gitea-workspaces": "npm run build && node scripts/smoke-gitea-workspaces.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.4",

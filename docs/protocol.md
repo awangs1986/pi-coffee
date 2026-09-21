@@ -1,10 +1,38 @@
 # PI Coffee MVP protocol
 
-> 当前协议记录已实现的接口。工作区目标由 [GW-01～12](./spec/gitea-workspaces.md) 定义；T1/T2 加法扩展、T3 客户端迁移、T4 才退出本地 merge 接口。本文中的现有字段/动作在实际协议升级前仍是兼容合同，不能仅依据设计文档删除。
+> 当前协议记录已实现的接口。工作区合同由 [GW-01～12](./spec/gitea-workspaces.md) 定义；Host 和 Server 已切换到独立 Checkout、同步/PR/迁移动作，并退出平台本地 merge 接口。
 
 > **2026-09-19 目标拓扑变更，尚待实现**：见 [ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md)。默认只对外提供统一 HTTPS 入口，聊天和文件流由网关转到私网 VM；VM 不再要求浏览器直达。本文中的直连 Transfer 地址、双浏览器侧 TLS 和逐 VM 端口开放说明描述旧实现，不应据此配置新公网部署。当前代码／模板尚未完成文件网关，不能只关闭 VM 文件端口就声称迁移成功。网关与 Host 保持独立生命周期；文件流不在入口落盘。
 
 The Browser and Host use the same versioned JSON frame vocabulary. The Web Server validates the Browser frame and forwards it; it does not reinterpret Pi events and keeps no conversation state.
+
+## Workspace HTTP capability
+
+When `PI_COFFEE_PROJECT_ROOT` is configured, authenticated clients use
+`GET /api/workspace` for the v2 Project/Conversation registry and
+`POST /api/workspace` for actions. The Web gateway forwards these requests and
+does not execute Git.
+
+| Action | Required fields | Result |
+|---|---|---|
+| `project` | `name`, optional external `url` | Gitea-backed Project registration |
+| `import` | `name`, uploaded ZIP `scope`/`file` | Gitea-backed Project after bounded import |
+| `discover` | — | locally discovered repositories imported to Gitea |
+| `conversation` | `projectId`, optional `branch` | independent Checkout and reserved Conversation branch |
+| `status` | `id`, optional `refresh` | dirty and remote sync state/SHA/time |
+| `changes` | `id` | bounded diff/checks against fetched target branch |
+| `checkpoint` | `id`, selected `paths`, `message` | commit, normal push and exact remote SHA confirmation |
+| `sync` | `id` | retry normal push of the existing local checkpoint |
+| `pull_request` | `id`, `title` | idempotent real Gitea PR record |
+| `continue` | `projectId`, `sourceBranch`, `sourceSha`, optional new `id` | new Checkout/branch at the verified source SHA |
+| `bind_project` | `projectId`, credential-free `repoUrl` | bind a legacy Project before migration |
+| `migration_plan` / `migrate` | `id` | inspect or execute a legacy-to-Checkout migration while retaining the old directory |
+| `archive` / `restore` / `delete` | `id`; delete also needs exact `confirmation` | visibility or guarded local cleanup; remote branch/PR are retained |
+
+`merge_preview` and `merge` are no longer protocol actions. A client that
+needs integration opens the returned Gitea PR. Health reports
+`capabilities.giteaCheckouts`, `ownerEnvironment` and `passwordlessRoot`; the
+last two describe observed process capability rather than configuration intent.
 
 ## Connection sequence
 

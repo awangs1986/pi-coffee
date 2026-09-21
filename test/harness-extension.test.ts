@@ -375,4 +375,13 @@ describe("PI Coffee V5 harness extension", () => {
     expect(activation.details).toMatchObject({ ok: true, capabilityId: "web" });
     expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "web_search", "research_seal"]);
   });
+
+  it("treats owner sudo and normal Conversation branch pushes as an existing scoped authorization", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-authority-"));sessions.push(cwd);
+    const pi = new FakePi(cwd);createHarnessExtension({ settings:new MemoryCapabilitySettingsStore(), ownerAuthority:true })(pi.asExtensionApi());await pi.emit("session_start",{type:"session_start",reason:"startup"});
+    const result=await pi.emit("before_agent_start",{type:"before_agent_start",systemPrompt:"base"}) as {systemPrompt:string};
+    expect(result.systemPrompt).toContain("passwordless sudo");
+    expect(result.systemPrompt).toContain("normal commit and push to the current Conversation branch are already authorized");
+    expect(result.systemPrompt.toLowerCase()).toContain("shared/default branch merge, force-push, remote deletion, and publication remain scoped to explicit user intent");
+  });
 });

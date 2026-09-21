@@ -1,15 +1,26 @@
 import { Workspaces } from "../src/host/workspaces.js";
+import { execFile } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { WebSocket } from "ws";
 import { TransferServer } from "../src/host/transfer.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HistoryEntry, ImageInput } from "../src/shared/protocol.js";
 import { decodeServerFrame, encodeFrame, type ServerFrame } from "../src/shared/protocol.js";
 import { HostServer } from "../src/host/server.js";
 import { RpcPiSessionFactory, type PiSession, type PiSessionFactory } from "../src/host/pi-adapter.js";
+
+const exec=promisify(execFile);
+async function workspaceConversation(root:string,name:string) {
+  const source=join(root,`${name}-source`),remote=join(root,`${name}.git`);await mkdir(source);
+  await exec("git",["-c","user.name=Test","-c","user.email=test@localhost","init","-b","main"],{cwd:source});await writeFile(join(source,"README.md"),"base\n");
+  await exec("git",["-c","user.name=Test","-c","user.email=test@localhost","add","."],{cwd:source});await exec("git",["-c","user.name=Test","-c","user.email=test@localhost","commit","-m","base"],{cwd:source});await exec("git",["clone","--bare",source,remote],{cwd:root});
+  const workspaces=new Workspaces(join(root,`${name}-workspaces`),{ownerId:"vm-test"});const project=await workspaces.registerProject(name,remote);const conversation=await workspaces.createConversation(project.id);return {workspaces,project,conversation};
+}
 
 class FakePiSession implements PiSession {
   private readonly listeners = new Set<(event: unknown) => void>();
@@ -226,7 +237,7 @@ describe("Host WebSocket seam", () => {
     server = new HostServer({ port: 0, host: "127.0.0.1", factory: new FakeFactory() });
     await server.start();
     const response = await fetch(`http://127.0.0.1:${server.address().port}/healthz`);
-    expect(await response.json()).toEqual({ ok: true, role: "host", protocolVersion: 1 });
+    expect(await response.json()).toMatchObject({ ok: true, role: "host", protocolVersion: 1, capabilities:{ownerEnvironment:true} });
   });
 
   it("keeps a Pi session alive across browser disconnect and hands a new browser the durable history", async () => {
@@ -647,8 +658,7 @@ describe("Host WebSocket seam", () => {
   });
   it("refuses lifecycle operations for unknown/active children without stopping them, and deletes only quiesced archives",async()=>{
     const root=mkdtempSync(join(tmpdir(),"coffee-lifecycle-"));
-    const factory=new FakeFactory();const ws=new Workspaces(root);
-    const project=await ws.createProject("safe");const conversation=await ws.createConversation(project.id);
+    const factory=new FakeFactory();const {workspaces:ws,conversation}=await workspaceConversation(root,"safe");
     const pi=await factory.create({sessionId:conversation.id}) as FakePiSession;
     pi.background={known:true,active:1};
     server=new HostServer({port:0,token:"lifecycle",factory,workspaces:ws});await server.start();
@@ -656,7 +666,7 @@ describe("Host WebSocket seam", () => {
     try {
       expect((await post("archive")).status).toBe(409);expect(pi.stopped).toBe(false);
       const review=await post("changes");expect(review.status).toBe(200);expect((await review.json() as {sessionId:string}).sessionId).toBe(conversation.id);expect(pi.stopped).toBe(false);
-      expect((await post("merge_preview")).status).toBe(409);
+      expect((await post("status")).status).toBe(200);
       pi.background={known:false,active:0};expect((await post("archive")).status).toBe(409);expect(pi.stopped).toBe(false);
       pi.background={known:true,active:0};expect((await post("archive")).status).toBe(200);expect(pi.stopped).toBe(true);
       expect((await ws.lookup(conversation.id))?.quiesced).toBe(true);
@@ -665,10 +675,22 @@ describe("Host WebSocket seam", () => {
     }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
   });
 
+  it("routes Checkout status and legacy migration actions through the Host API",async()=>{
+    const root=mkdtempSync(join(tmpdir(),"coffee-migration-api-"));const factory=new FakeFactory();const {workspaces:ws,conversation}=await workspaceConversation(root,"migration-api");
+    const plan=vi.spyOn(ws,"migrationPlan").mockResolvedValue({required:true,dirty:true,remoteBound:true,legacyCwd:"/legacy",branch:"coffee/legacy",runState:"idle"});
+    const migrate=vi.spyOn(ws,"migrateConversation").mockResolvedValue({...conversation,legacyCwd:"/legacy"});
+    server=new HostServer({port:0,token:"migration",factory,workspaces:ws});await server.start();
+    const post=(action:string)=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:"POST",headers:{authorization:"Bearer migration","content-type":"application/json"},body:JSON.stringify({action,id:conversation.id})});
+    try {
+      const status=await post("status");expect(status.status).toBe(200);expect(await status.json()).toMatchObject({state:"synced",branch:conversation.branch});
+      const preview=await post("migration_plan");expect(preview.status).toBe(200);expect(await preview.json()).toMatchObject({required:true,dirty:true});expect(plan).toHaveBeenCalledWith(conversation.id);
+      const migrated=await post("migrate");expect(migrated.status).toBe(200);expect(await migrated.json()).toMatchObject({id:conversation.id,legacyCwd:"/legacy"});expect(migrate).toHaveBeenCalledWith(conversation.id);
+    }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+  });
+
   it("persists interruption after a real RPC process dies and reopens without replaying its run",async()=>{
     const root=mkdtempSync(join(tmpdir(),"coffee-host-crash-"));
-    const workspaces=new Workspaces(join(root,"projects"));
-    const project=await workspaces.createProject("demo"),conversation=await workspaces.createConversation(project.id);
+    const {workspaces,conversation}=await workspaceConversation(root,"demo");
     const factory=new RpcPiSessionFactory({cliPath:resolve("test/fixtures/fake-pi-rpc.mjs"),sessionDir:join(root,"sessions"),cwd:conversation.cwd});
     server=new HostServer({port:0,host:"127.0.0.1",factory,workspaces});await server.start();
     try {
@@ -680,7 +702,7 @@ describe("Host WebSocket seam", () => {
       expect(await frames.next()).toMatchObject({type:"event",event:{type:"agent_start"}});
       expect(await frames.next()).toMatchObject({type:"error",code:"pi_interrupted",fatal:true});
       await expect.poll(async()=> (await workspaces.list()).conversations.find(c=>c.id===conversation.id)?.runState).toBe("interrupted");
-      expect((await new Workspaces(join(root,"projects")).lookup(conversation.id))?.runState).toBe("interrupted");
+      expect((await new Workspaces(join(root,"demo-workspaces"),{ownerId:"vm-test"}).lookup(conversation.id))?.runState).toBe("interrupted");
       socket.close();await once(socket,"close");
       const reopened=await connect(server.address().port),next=new FrameQueue(reopened);
       reopened.send(encodeFrame({v:1,type:"open",sessionId:conversation.id}));

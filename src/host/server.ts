@@ -16,6 +16,7 @@ import {
 import type { PiSessionFactory } from "./pi-adapter.js";
 import { HostSession, HostSessionRegistry, SessionBusyError, type SessionSink } from "./session.js";
 import type { TransferServer } from "./transfer.js";
+import { inspectExecutionCapability, type ExecutionCapability } from "./execution-capability.js";
 
 export interface HostServerOptions {
   host?: string;
@@ -51,6 +52,7 @@ export class HostServer {
   private started = false;
   private readonly lifecycleLocks = new Set<string>();
   private readonly workspaces?: Workspaces;
+  private execution?:ExecutionCapability;
 
   constructor(options: HostServerOptions) {
     this.host = options.host ?? "127.0.0.1";
@@ -67,7 +69,7 @@ export class HostServer {
       if(request.url?.startsWith("/api/")) { void this.handleApi(request,response); return; }
       if (request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ ok: true, role: "host", protocolVersion: PROTOCOL_VERSION }));
+        response.end(JSON.stringify({ ok: true, role: "host", protocolVersion: PROTOCOL_VERSION, capabilities:{giteaCheckouts:Boolean(this.workspaces),ownerEnvironment:this.execution?.ownerEnvironment ?? false,passwordlessRoot:this.execution?.passwordlessRoot ?? false} }));
         return;
       }
       response.writeHead(404);
@@ -101,12 +103,12 @@ export class HostServer {
       if(req.method!=="POST") {json(res,405,{error:"Method not allowed"});return;}
       const input=await readJson(req);
       // Reject mutating lifecycle operations while the parent is streaming. External commands remain trusted VM operations.
-      const target=input.action==="merge" ? ws.proposalSession(input.token) : input.id;
-      if(target && !["files","changes"].includes(input.action)) {
+      const target=input.id;
+      if(target && !["files","changes","status"].includes(input.action)) {
         if(this.lifecycleLocks.has(target) || this.registry.get(target)?.isBusy)throw new Error("Stop the source conversation before changing its lifecycle");
         this.lifecycleLocks.add(target);locked=target;
       }
-      if(["archive","merge_preview","merge","delete"].includes(input.action) && target) {
+      if(["archive","checkpoint","pull_request","delete"].includes(input.action) && target) {
         const c=await ws.lookup(target);
         if(!(input.action==="delete" && c?.archived && c.quiesced)) {
           const opened=this.registry.get(target) ?? (await this.registry.open(target)).session;
@@ -126,13 +128,21 @@ export class HostServer {
           result={url:this.transfer.publicUrl(),scope:input.id,token:this.transfer.issueToken(input.id),inbox:this.transfer.inboxFor(input.id),maxFileBytes:this.transfer.limits.maxFileBytes,maxBatchBytes:this.transfer.limits.maxBatchBytes};break;
         }
         case "changes": result=await ws.changes(input.id);break;
+        case "status": result=await ws.syncStatus(input.id,input.refresh!==false);break;
         case "discover": result=await ws.discover();break;
         case "project": result=await ws.createProject(input.name,input.url);break;
+        case "bind_project": result=await ws.bindProjectRepository(input.projectId,input.repoUrl,input.repoId,input.webUrl);break;
         case "import": {
           if(!this.transfer || typeof input.scope!=="string" || typeof input.file!=="string")throw new Error("Upload a ZIP to a conversation inbox first");
           result=await ws.createProject(input.name,undefined,await this.transfer.importPath(input.scope,input.file));break;
         }
         case "conversation": result=await ws.createConversation(input.projectId,input.branch);break;
+        case "continue": result=await ws.continueFrom(input.projectId,input.sourceBranch,input.sourceSha,input.id);break;
+        case "migration_plan": result=await ws.migrationPlan(input.id);break;
+        case "migrate": result=await ws.migrateConversation(input.id);break;
+        case "checkpoint": result=await ws.checkpoint(input.id,input.paths,input.message);break;
+        case "sync": result=await ws.pushCheckpoint(input.id);break;
+        case "pull_request": result=await ws.openPullRequest(input.id,input.title);break;
         case "archive":
         case "restore": {
           if(await ws.lookup(input.id)) result=await ws.archive(input.id,input.action==="archive",true);
@@ -141,10 +151,6 @@ export class HostServer {
             result=await ws.archiveLegacy(input.id,input.action==="archive");
           }
           break;
-        }
-        case "merge_preview": result=await ws.prepareMerge(input.id);break;
-        case "merge": {
-          result=await ws.merge(input.token);break;
         }
         case "delete": {
           if(await ws.lookup(input.id)) result=await ws.deleteWorkspace(input.id,input.confirmation,()=>this.registry.delete(input.id));
@@ -179,6 +185,7 @@ export class HostServer {
 
   async start(): Promise<void> {
     if (this.started) return;
+    this.execution=await inspectExecutionCapability();
     // Fail closed: the Host transport carries prompts and Pi events. Without a
     // bearer token, anything that can reach the port owns the User VM's Pi.
     // Loopback-only binds are the documented local smoke exception.

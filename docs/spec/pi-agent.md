@@ -40,7 +40,7 @@
 
 ### VM 权限与代码协作边界
 
-[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 与 [GW-01～12](./gitea-workspaces.md) 明确 owner + 免密 sudo、独立 Checkout、Conversation 分支 checkpoint 预授权及 Gitea PR。这些是部署/工作区上下文，不进入项目中立的通用 Work 正文；实现按 T0–T4，不能以本次文档修改宣称权限或工具模式已部署。
+[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) 与 [GW-01～12](./gitea-workspaces.md) 明确 owner + 免密 sudo、独立 Checkout、Conversation 分支 checkpoint 预授权及 Gitea PR。这些是部署/工作区上下文，不进入项目中立的通用 Work 正文；实现已进入 T0–T4 代码，目标 VM 的实际权限仍以运行时探针为准。
 
 ## 3. 规格分工：一处定义，其他地方引用
 
