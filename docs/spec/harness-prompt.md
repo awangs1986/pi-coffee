@@ -52,7 +52,7 @@ Pi 原生提示词的最新源码依据是 `earendil-works/pi@c596d09d9cef6fdf0d
 - 正文：[`src/harness/prompts/software-development.md`](../../src/harness/prompts/software-development.md)。
 - renderer：[`src/harness/prompt.ts`](../../src/harness/prompt.ts)，`renderHarnessPrompt("work")` 为默认；renderer 的兼容别名不代表产品模式，具体代码不在设计文档重复。
 - 插件：[`src/harness/extension.ts`](../../src/harness/extension.ts)，通过公开 `before_agent_start` hook、原有块边界去重；运行时事实另行追加。
-- 构建：[`scripts/copy-public.mjs`](../../scripts/copy-public.mjs) 将同一正文复制到编译目录，不能维护源码/构建两份正文。
+- 构建：[`scripts/copy-runtime.mjs`](../../scripts/copy-runtime.mjs) 将同一正文复制到编译目录，不能维护源码/构建两份正文。
 
 **设计与实现状态**：Work 保留 Pi Base 并追加正文（PA-009）；当前 hook 已能追加，但 Chat/Work 运行时隔离尚未迁移。Chat 必须在最终 provider 请求中没有系统指令，不能只让本文 renderer 返回空字符串。
 

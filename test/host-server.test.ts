@@ -222,6 +222,13 @@ async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void
 }
 
 describe("Host WebSocket seam", () => {
+  it("advertises the external protocol version on its health endpoint", async () => {
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory: new FakeFactory() });
+    await server.start();
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/healthz`);
+    expect(await response.json()).toEqual({ ok: true, role: "host", protocolVersion: 1 });
+  });
+
   it("keeps a Pi session alive across browser disconnect and hands a new browser the durable history", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "127.0.0.1", factory, eventBufferSize: 32 });

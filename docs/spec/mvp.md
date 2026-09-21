@@ -77,7 +77,7 @@ From a fresh clone, the colleague can install dependencies, get a green `npm run
 
 ## Real-model evidence
 
-`scripts/smoke-real-model.mjs` drives the browser protocol against a running
+`pi-coffee-server/scripts/smoke-real-model.mjs` drives the browser protocol against a running
 stack whose Host has a real provider (the CPA relay via Pi's `models.json`, see
 the runbook) and asserts: streamed `text_delta` through `agent_settled`,
 strictly increasing cursors, exact bounded replay after a browser disconnect,

@@ -7,6 +7,7 @@ import {
   decodeClientFrame,
   encodeFrame,
   MAX_FRAME_BYTES,
+  PROTOCOL_VERSION,
   type ClientFrame,
   type HistoryEntry,
   type JsonValue,
@@ -66,7 +67,7 @@ export class HostServer {
       if(request.url?.startsWith("/api/")) { void this.handleApi(request,response); return; }
       if (request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ ok: true, role: "host" }));
+        response.end(JSON.stringify({ ok: true, role: "host", protocolVersion: PROTOCOL_VERSION }));
         return;
       }
       response.writeHead(404);

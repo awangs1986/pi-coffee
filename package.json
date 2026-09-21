@@ -1,8 +1,8 @@
 {
-  "name": "pi-coffee",
+  "name": "pi-coffee-agent",
   "version": "0.1.0",
   "private": true,
-  "description": "PI Coffee MVP: a thin web host for the original Pi coding agent",
+  "description": "PI Coffee Agent Runtime: Host, Pi extensions, tools, Skills and LSP",
   "type": "module",
   "bin": {
     "coffee-lsp": "./dist/src/lsp/bin.js"
@@ -17,20 +17,16 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-public.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json && node scripts/copy-runtime.mjs",
     "test": "vitest run",
     "check": "npm run build && npm test",
-    "start": "node dist/src/main.js all",
-    "start:host": "node dist/src/main.js host",
-    "start:web": "node dist/src/main.js web",
-    "start:relay": "node dist/src/main.js relay",
+    "start": "node dist/src/main.js",
+    "start:host": "node dist/src/main.js",
     "smoke:subagents": "npm run build && node scripts/smoke-subagents.mjs",
-    "smoke:web": "npm run build && node scripts/smoke-web.mjs",
     "smoke:toolchain": "npm run build && node scripts/smoke-toolchain.mjs",
     "smoke:toolchain:real": "npm run build && node scripts/smoke-real-agent-toolchain.mjs",
     "smoke:lsp-agent": "npm run build && node scripts/smoke-lsp-agent.mjs",
-    "smoke:workspace-browser": "npm run build && node scripts/smoke-workspace-browser.mjs",
-    "smoke:gitea-oauth": "npm run build && node scripts/smoke-gitea-oauth.mjs"
+    "smoke:web-access": "npm run build && node scripts/smoke-web-access.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.84.4",
@@ -52,10 +48,6 @@
   "devDependencies": {
     "@types/node": "22.19.19",
     "@types/ws": "8.18.1",
-    "dompurify": "^3.4.14",
-    "jsdom": "^30.1.0",
-    "marked": "^18.0.11",
-    "playwright": "1.63.0",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

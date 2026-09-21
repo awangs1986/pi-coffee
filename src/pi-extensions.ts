@@ -54,7 +54,7 @@ export function resolveHarnessExtension(): string {
 }
 
 export function resolveWebExtension(): string {
-  return join(moduleDirectory, "web", "extension.js");
+  return join(moduleDirectory, "extensions", "web-access", "extension.js");
 }
 
 /** Resolve the official package entry; Pi's loader handles its TypeScript source. */
@@ -64,7 +64,7 @@ export function resolvePiSubagentsExtension(): string {
 
 /** Resolve the official pi-web-access package entry. */
 export function resolvePiWebAccessExtension(): string {
-  return join(moduleDirectory, "web", "pi-web-access-adapter.js");
+  return join(moduleDirectory, "extensions", "web-access", "pi-web-access-adapter.js");
 }
 
 export function resolvePiWebAccessPackage(): string {

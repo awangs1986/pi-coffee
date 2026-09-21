@@ -31,7 +31,7 @@ describe("PI Coffee native extension selection", () => {
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
     expect(resolvePiSubagentsExtension()).toMatch(/[\\/]subagents[\\/]native-adapter\.js$/);
-    expect(resolvePiWebAccessExtension()).toMatch(/[\\/]web[\\/]pi-web-access-adapter\.js$/);
+    expect(resolvePiWebAccessExtension()).toMatch(/[\\/]extensions[\\/]web-access[\\/]pi-web-access-adapter\.js$/);
     expect(resolvePiWebAccessPackage()).toMatch(/node_modules[\\/]pi-web-access[\\/]index\.ts$/);
     expect(resolveContextFoldExtension()).toMatch(/[\\/]context[\\/]extension\.js$/);
   });
