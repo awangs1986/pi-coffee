@@ -1,5 +1,8 @@
 # PI Coffee Agent Runtime documentation map
 
+- [VM 完整权限与 Gitea 工作区决策](./adr/0012-owner-privileges-and-gitea-checkouts.md)
+- [工作区正式合同](./spec/gitea-workspaces.md) 与 [T0–T4 任务](./development/t0-t4-gitea-workspaces.md)：设计已确认，运行时待迁移。
+
 > **2026-09-21 仓库拆分**：本仓库只维护 User VM Agent Runtime。浏览器 UI、Web gateway、Gitea identity、固定路由和 Relay 已迁至 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)。拆分决定见 [ADR-0011](./adr/0011-split-agent-runtime-and-server-repositories.md)。
 
 > **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。退役模式说明已从当前文档撤下，历史由 Git 追溯；Chat 零系统提示词和模式迁移尚未在当前检出版本实现。

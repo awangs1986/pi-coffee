@@ -1,11 +1,6 @@
-# PI Coffee
+# PI Coffee Agent Runtime
 
-> **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
-
-> **Pi Agent 当前设计**：从[主 SPEC](./docs/spec/pi-agent.md)开始，Work 正文见[专项 SPEC](./docs/spec/harness-prompt.md)。产品目标仅 Chat/Work，Chat 不保留任何系统提示词；当前代码仍为旧模式兼容实现。工具名单、迁移等未决项与验收状态在主 SPEC 维护；[09-16 计划](./docs/development/plan-20260916.md)仅作历史追溯，不再用其旧模式描述推断 owner 的最新决定。
-
-
-PI Coffee is the small, independent web product line for talking to the original Pi coding agent. It is the experimental MVP track; the existing Picode V5 repository remains a frozen reference and is not a source of work for this track.
+PI Coffee 的 User VM 运行时领域词汇；网页与中央网关属于独立的 Server。
 
 ## Participants
 
@@ -38,7 +33,7 @@ The single browser tab that presents one user's collection of Tasks and Sessions
 _Avoid_: browser session, web worker
 
 **Task**:
-A user-level unit of work that may contain one or more Pi Sessions and a worktree/inbox in the User VM.
+A user-level objective pursued through one or more Conversations; it is not itself a repository or a filesystem directory.
 _Avoid_: HTTP request, prompt
 
 **Native Transcript**:
@@ -58,7 +53,7 @@ A focused child Pi Session launched by the optional `pi-subagents` extension for
 _Avoid_: worker, remote agent
 
 **Subagent Extension**:
-The locked upstream `pi-subagents` Module plus PI Coffee's small resource Adapter. It is loaded by the Host but its `subagent` and `bg_wait` tools are opt-in through Harness `search_tools`.
+The optional capability through which a parent Pi Session delegates bounded work to child Sessions.
 _Avoid_: V5 orchestration, Control Plane worker
 
 ## Conversation stream
@@ -80,7 +75,7 @@ Sending buffered Events after a Browser User reconnects with a prior Cursor.
 _Avoid_: retry, duplicate delivery
 
 **Bridge**:
-The Web Server module that validates browser Frames and forwards them to a Host connection without owning Pi state.
+The authenticated transport between Browser Shell and Host, without ownership of Pi session state.
 _Avoid_: proxy (when discussing session ownership)
 
 **LLM Relay**:
@@ -130,9 +125,39 @@ The existing latest Gitea version of Picode, kept unchanged while PI Coffee prov
 _Avoid_: legacy V5, source branch
 
 **Execution Seam**:
-The User VM isolation point at which Pi may use the owner's normal shell and file rights.
+The User VM boundary within which Pi has its owner's unrestricted execution authority, including root capability.
 _Avoid_: in-process sandbox, permission gate
 
-**Worktree**:
-A repository directory assigned to a Task for organizing changes; it is not a security control.
-_Avoid_: sandbox, permission scope
+## Code collaboration
+
+**Repository**:
+The Gitea repository that is authoritative for a project's shared, published code history.
+_Avoid_: local project directory, final public archive
+
+**Project**:
+PI Coffee's registration of a Repository for use by Conversations.
+_Avoid_: default-branch checkout, shared worktree
+
+**Conversation**:
+A Host-owned Pi Session and its work context; a code Conversation has one dedicated Checkout and Conversation Branch.
+_Avoid_: browser tab, cross-host code backup
+
+**Checkout**:
+The independent local copy of a Repository in which one Conversation edits and tests code.
+_Avoid_: managed worktree, security sandbox
+
+**Conversation Branch**:
+The code branch assigned exclusively to one Conversation and shared through Gitea.
+_Avoid_: shared writable branch, project default branch
+
+**Checkpoint**:
+A committed stage of code work whose remote synchronization status is explicitly known; local-only commits remain unsynchronized.
+_Avoid_: VM snapshot, conversation backup, passing test result
+
+**Integration**:
+The incorporation of a Conversation's code into a target branch through Gitea's pull request and merge process.
+_Avoid_: local project merge, Host merge proposal
+
+**Code Continuation**:
+A new Conversation on another host that starts from a verified remote code checkpoint, without inheriting the previous native session or unversioned files.
+_Avoid_: automatic session migration, shared branch takeover

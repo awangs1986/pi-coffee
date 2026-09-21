@@ -1,7 +1,7 @@
 # ADR-0011: Split Agent Runtime and Server repositories
 
 - Date: 2026-09-21
-- Status: accepted and implemented locally; Gitea synchronization required
+- Status: accepted and implemented; Gitea Agent `cbe0920`, Server `e6f1082`
 
 ## Decision
 

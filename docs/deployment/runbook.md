@@ -51,3 +51,9 @@ untrusted networks.
 - Idle Pi process stop: native conversation remains and resumes on next open.
 - Host restart: completed native history remains; an in-flight turn is marked interrupted and is not replayed automatically.
 - VM recovery: owner restores the VM snapshot and then verifies Host token, native credentials and routes.
+
+## Accepted target: owner privileges and Gitea
+
+[ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) requires the service owner to have unrestricted passwordless sudo, preserving that owner's HOME and Git/Pi configuration. The installation above does not yet provision or prove that capability. T0 adds idempotent validated sudoers setup and a probe from an actual Host child (`id`, `sudo -n id -u`); an interactive terminal check alone is insufficient. Do not deploy sudo-blocking service restrictions.
+
+[T0–T4](../development/t0-t4-gitea-workspaces.md) also migrates code workspaces. Gitea restores only pushed code; keep VM-native history, unversioned files and credentials in the VM recovery plan. No existing checkout or live privilege configuration is changed by this documentation update.
