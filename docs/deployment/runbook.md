@@ -89,3 +89,8 @@ Optionally select a registered disposable Gitea project with `PI_COFFEE_SMOKE_PR
 The probe uses real OAuth, creates Chat and Work, uploads/downloads an original PNG,
 reloads, archives/restores, and verifies cwd/branch/status. It retains archived synthetic
 directories and the remote task branch for inspection. Do not save credentials in evidence.
+
+
+2026-09-22：Conversation Workspace 部署于 `webserver:3000`，Agent 部署于 linux001/linux002。
+Agent 171 项、Server 40 项 clean-clone 检查通过；真实浏览器原图往返、Chat/Work 创建、实际分支/同步、路径复制、刷新、归档恢复与 VM 原生进程/清理通过。
+联合证据：[Agent review](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/conversation-workspaces-20260922.md)。

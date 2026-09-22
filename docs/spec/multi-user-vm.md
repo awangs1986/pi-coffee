@@ -142,7 +142,7 @@ WebSocket 建连前必须认证、授权并校验允许的 Origin。退出、用
 
 ## 4. 项目、对话与 Checkout
 
-本节目录与任务合同由 [Conversation Workspace SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/conversation-workspaces.md) CW-01～10 统一维护；一任务对应一 Conversation 和一所属 VM 本地目录，不增加任务包含多个对话的层级。Chat 在集中 `chats/` 下使用独立子目录，无须 Gitea 项目。新增合同为待实现目标，跟踪 [Server #3](http://gitea:3000/awangs/pi-coffee-server/issues/3)。
+本节目录与任务合同由 [Conversation Workspace SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/conversation-workspaces.md) CW-01～10 统一维护；一任务对应一 Conversation 和一所属 VM 本地目录，不增加任务包含多个对话的层级。Chat 在集中 `chats/` 下使用独立子目录，无须 Gitea 项目。本目录合同已实现并完成联合流程验收，跟踪 [Server #3](http://gitea:3000/awangs/pi-coffee-server/issues/3)。
 
 正式领域词汇由 [Agent CONTEXT](http://gitea:3000/awangs/pi-coffee/src/branch/main/CONTEXT.md) 维护。Repository 是 Gitea 代码权威，Project 是登记；代码 Conversation 拥有独立普通 clone（Checkout）及独占分支。Chat/非代码会话不被强制建仓。完整行为见 [GW-04～06](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/gitea-workspaces.md)。
 
