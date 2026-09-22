@@ -27,3 +27,17 @@ The frozen Picode V5 repository remains reference-only.
 
 A ticket is ready to close only when its acceptance evidence is recorded in the
 Issue and a fresh clone can run the documented check or deployment probe.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in Gitea `awangs/pi-coffee`. See [docs/agents/issue-tracker.md](./docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Use the five default triage labels. See [docs/agents/triage-labels.md](./docs/agents/triage-labels.md).
+
+### Domain docs
+
+Use a single-context layout: root `CONTEXT.md` and `docs/adr/`. See [docs/agents/domain.md](./docs/agents/domain.md) for consumer rules.
