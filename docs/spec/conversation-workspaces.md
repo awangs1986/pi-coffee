@@ -1,4 +1,4 @@
-# Conversation 工作目录与本地数据边界
+# 任务、Conversation 与 VM 本地工作目录
 
 状态：owner 已确认（2026-09-22）；本文件定义目标合同。除 Work 的独立 Gitea Checkout 外，Chat 目录、按 Conversation 归档的 research/artifact 和相关协议尚待实现，不能把本 SPEC 当作部署证据。
 
@@ -6,12 +6,13 @@
 
 ## 1. 术语与两个独立维度
 
-- **Conversation** 是本地目录、Pi Session、上传 scope 和 artifact 归属的最小单位。当前网页里的一个“任务/聊天”对应一个 Conversation；若以后一个 Task 聚合多个 Conversation，每个 Conversation 仍使用独立目录，不能共享可写 cwd。
+- **一个任务 = 一个 Conversation = 一个所属 VM 中的本地 Workspace 根目录**。Task 是面向用户的名称，Conversation 是 Host 中的对应对象；不再增加 Task 聚合多个 Conversation 的层级。同一 VM 可以有多个任务，每个任务使用不同目录和稳定 Conversation ID。
+- Pi 进程重启、重连或恢复不会产生新任务。内部 subagent 是任务内执行单元，不在任务列表中另造 Conversation/Workspace；其输出归属父任务。Pi 原生历史仍可保存在 VM 的 Session store，通过 ID 关联任务，不要求为了目录统一而搬移原生历史。
 - **运行模式**只有 `chat` / `work`，决定系统提示词和工具集合。
 - **Workspace 类型**只有 `chat` / `project`，决定 cwd 的来源和生命周期。它在 Conversation 创建时确定，不随运行模式切换而改变。
 - **Chat Workspace** 是无 Repository 的普通目录；**Project Workspace** 是 [GW-06](./gitea-workspaces.md) 定义的独立 Gitea Checkout。
 
-默认创建 Chat Conversation 时分配 Chat Workspace；创建 Work Conversation 时要求选择 Project 并分配 Project Workspace。运行模式切换只改变模型行为：Chat Workspace 切到 Work 后仍在原 Chat cwd 中工作，不获得 Git 同步语义；Project Workspace 切到 Chat 后仍保留原 Checkout。需要开发 Gitea 项目时必须显式新建/接续 Project Workspace，不能把 Chat 目录静默变成 Checkout，也不能覆盖其中的文件。
+默认创建 Chat Conversation 时分配 Chat Workspace；新建 Work 任务时选择 Gitea Project 和远端起始分支（默认展示仓库默认分支），确认后由 Host 自动 clone 并分配 Project Workspace。运行模式切换只改变模型行为：Chat Workspace 切到 Work 后仍在原 Chat cwd 中工作，不获得 Git 同步语义；Project Workspace 切到 Chat 后仍保留原 Checkout。需要开发 Gitea 项目时必须显式新建/接续 Project Workspace，不能把 Chat 目录静默变成 Checkout，也不能覆盖其中的文件。
 
 ## 2. 目录合同
 
@@ -38,13 +39,36 @@ User VM 使用一个共同工作根，推荐布局如下：
 | ID | 正式合同 |
 |---|---|
 | **CW-01** | 每个新 Conversation 必须先创建唯一 Workspace，再允许启动 Pi 或接收上传。Conversation ID 必须是已验证的不透明 ID；现有目录、符号链接或不完整创建均不能被自动接管。目录创建完成并校验后才原子发布元数据。 |
-| **CW-02** | `PI_COFFEE_WORK_ROOT` 推荐为 `/home/USER/work`；`PI_COFFEE_PROJECT_ROOT` 默认是其 `projects` 子目录，`PI_COFFEE_CHAT_ROOT` 默认是其 `chats` 子目录。显式路径必须绝对化、归 owner 所有且互不包含；服务启动时 fail closed。迁移期可以从既有 Project root 推导同级 `chats`，但最终状态必须写入部署配置。 |
+| **CW-02** | `PI_COFFEE_WORK_ROOT` 推荐为 `/home/USER/work`；`PI_COFFEE_PROJECT_ROOT` 默认是其 `projects` 子目录，`PI_COFFEE_CHAT_ROOT` 默认是其 `chats` 子目录。显式路径必须绝对化且归 owner 所有；Project root 与 Chat root 在解析实际路径后不能相同或互相包含，Work root 作为共同父目录允许包含二者；配置冲突时服务启动报错。迁移期可以从既有 Project root 推导同级 `chats`，但最终状态必须写入部署配置。 |
 | **CW-03** | Chat Workspace 的 cwd 是 `chats/<conversation-id>`。Project Workspace 的 cwd 继续是 `projects/checkouts/<conversation-id>`，其运行数据放在 `.pi-coffee/`，并写入该 Checkout 的 `.git/info/exclude`；平台 checkpoint 不得提交 `.pi-coffee/**`。若 reserved path 已被 Git 跟踪，自动 checkpoint 必须拒绝并明确报错。 |
 | **CW-04** | `inbox/` 保存用户上传和粘贴内容的原始 bytes，包括图片；`images/` 只保存生成或转换出的新图片，不为原图额外制作缩略图副本；`research/` 保存搜索/抓取证据；`artifacts/` 保存大工具输出、subagent 结果及其他系统证据。Agent 按用户任务主动创建的普通文件可以直接放在 cwd 中。 |
 | **CW-05** | Pi、read/edit/write/bash、Git、LSP、Web 搜索、subagent 和文件接口必须从 Host 的 Conversation 元数据解析同一个 cwd/data root。已登记 Conversation 不允许回退到全局 `PI_COFFEE_WORKDIR`、`getAgentDir()/pi-coffee/research` 或 `getAgentDir()/pi-coffee/subagent-results`。子任务继承父 Conversation 的 Workspace 归属，但保留自己的运行 ID。 |
 | **CW-06** | 工具 schema、绝对路径或历史消息都不能改变文件归属。Host 只接受当前已授权 Conversation ID，并在服务端解析路径；浏览器不能提交任意 cwd、VM 地址或本地根目录。 |
 
-Chat 根目录是集中管理入口，不是所有 Chat 共用的 cwd。两个 Chat Conversation 永远不能共享同一个可写子目录。
+Chat 根目录是集中管理入口，不是所有 Chat 共用的 cwd。两个 Chat Conversation 永远不能共享同一个可写子目录。Chat 创建、文件索引、归档/恢复和永久清理不依赖 Git 仓库、Gitea 连接或 Git 凭据；不能复用只接受 `projectId` 或只能用 `git ls-files` 的流程来冒充 Chat 支持。
+
+## 2.1 Work 创建与任务身份
+
+- **CW-07（选择与 clone）**：用户选择的起始分支是 clone 的代码来源，不是多个任务共用的写入分支。Host 从该远端分支确认精确起点 SHA，在独立 clone 中创建 `coffee/<vm-id>/<conversation-id>` 任务分支。即使两个任务选择同一 Project、同一起始分支，也有不同 cwd、独立 `.git` 和任务分支；不共享 Git alternates 或平台 worktree。
+- 创建过程对用户呈现“创建中 → 就绪 / 创建失败”。创建中禁止发 prompt 或上传；任务一旦就绪，无须用户再次手动 clone。Gitea 不可达、认证失败、分支消失或磁盘不足须显示具体原因；已经就绪的本地目录仍可离线工作，远端操作标阻塞。
+- 同一次创建使用稳定请求标识，重复点击或网络超时重试返回同一任务/创建结果。失败残留必须可定位和显式恢复/清理，不能接管未知目录、盲目重放 clone 或因刷新生成第二个任务。
+- **CW-08（稳定映射）**：Host 在 VM 持久记录 Conversation ID、所属 VM、Workspace 类型、完整 cwd 和创建状态；Project Workspace 另记录 Project/repository ID、起始分支/SHA、分配的任务分支及远端确认信息。任务名只作显示；重命名任务、项目改名、刷新、重连和模式切换均不改 ID/cwd。实际目录缺失时标“工作目录不可用”，禁止静默重建空目录、重新 clone 或回退到全局 cwd；恢复必须由用户明确选择。跨 VM 接续按 GW-10 创建新任务/新目录，不伪装成原任务已迁移。
+
+独立 clone 保证平台不共享本地文件和 Git 状态；同一 VM 的端口、外部数据库与其他服务仍可能共享。并行运行应用时按任务选不同端口、区分测试数据；首版不因此新增 VM、容器或端口编排服务。远端集成仍通过 Gitea PR，独立 clone 不消除合并冲突。
+
+## 2.2 前端必须展示的信息
+
+**CW-09（任务上下文）**：当前任务的上下文区必须让用户明确看到以下信息；完整路径可复制，长路径可折行或展开，不只显示 basename。字段来自固定路由和 Host 实际状态，Server 不另建权威工作区索引。
+
+| 字段 | Project Workspace / Work 新建任务 | Chat Workspace / Chat 新建任务 |
+|---|---|---|
+| VM | 所属 VM 名称/稳定标识，离线时明确标注 | 同左 |
+| 项目 | Gitea `owner/repository`，可打开项目 | 无项目 |
+| 本地路径 | 完整绝对 cwd | 完整绝对 cwd |
+| 分支 | 实际当前分支；创建详情保留起始分支/SHA，不能把起始分支当当前分支 | 不适用 |
+| 同步状态 | 本地改动、未推送/已同步、落后/分叉、失败或未知，并标最后远端核查时间 | 本地文件；不适用 Git 同步 |
+
+新建、切换任务、重连和 Git 操作完成后刷新实际状态。若 owner 在终端切换分支或进入 detached HEAD，UI 如实显示且提示与登记任务分支不符；自动 checkpoint/push 暂停，不偷偷切回或推送错误分支。断网或核查失败时保留最后确认值并标陈旧/未知，不把缓存的“已同步”冒充当前状态。工作目录、分支和同步信息与当前运行模式分开显示，切到 Chat 不隐藏仍存在的项目状态。
 
 ## 3. 文件进入、使用和展示
 
@@ -52,10 +76,10 @@ Chat 根目录是集中管理入口，不是所有 Chat 共用的 cwd。两个 C
 2. 文件字节可以按 [ADR-0010](../adr/0010-unified-web-gateway-private-user-vms.md) 经统一网关有界流式转发，但 Server/反向代理不得落盘、整文件缓存或记录正文。文件名、SHA-256、大小、MIME、进度可在当前请求中短暂传递；中央持久日志不得记录文件名、Workspace 路径或正文。
 3. 原始文件只在所属 User VM Workspace 持久化。小图片即使以内联 image block 送给模型，也必须先保存原始 bytes；模型请求只包含用户在本轮明确选择的文件/图片，不能自动扫描并附带整个 inbox 或 Workspace。
 4. 搜索 query 和模型请求会离开 User VM 到配置的 Relay/provider，这是功能所需的数据外发边界；本地文件不会因为启用 Web 搜索而自动发送给搜索服务。只有用户任务或 Agent 的显式工具调用可以读取并使用文件内容。
-5. Preview、tree、artifact index、download 和 import 都使用同一 Conversation scope。返回路径必须相对 Workspace；UI 可以显示 owner 可理解的本地路径，但不能把路径本身当成下载凭据。
+5. Preview、tree、artifact index、download 和 import 都使用同一 Conversation scope。文件引用路径相对 Workspace；Workspace 元数据按 CW-09 提供完整绝对 cwd 用于展示和复制，不能把该路径当成下载凭据。
 6. research、subagent 和大工具结果采用临时文件 + 原子 rename；文件默认 `0600`，目录默认 `0700`。写盘失败、磁盘满或配额失败必须明确报错，不能把完整结果退回模型历史或声称已归档。
 
-## 4. 泄露边界与防护
+## 4. 既有数据与执行边界
 
 | 风险 | 必须保证 | 明确边界 |
 |---|---|---|
@@ -72,7 +96,7 @@ Chat 根目录是集中管理入口，不是所有 Chat 共用的 cwd。两个 C
 - **创建**：先保留 Conversation ID，再创建目录、分类子目录和 `0700/0600` 权限；Project Workspace 完成 clone、branch 和远端 SHA 校验后才可运行。失败保留可诊断状态，不把半成品作为有效 Conversation。
 - **运行与重连**：浏览器断开不改变 cwd；Host/Pi 重启从持久元数据恢复同一路径。LSP 实例以 Workspace 为 key，模式切换不重建或改绑目录。
 - **归档**：只改变可见性，不强停已经运行的工作，也不删除 Workspace、Pi transcript、附件、research、artifact、图片、branch 或 PR。恢复后继续使用原 cwd；永久清理前另行 quiesce 并核对实际写入状态。
-- **永久清理**：必须先停止 Conversation 写入，并显示将删除的 Workspace、原生 transcript、附件/产物和远端对象范围。每类数据独立授权和报告；Chat 目录没有 Git“已同步”保护，不能把归档或历史存在当作备份。部分失败保留可重试状态，不复用该 Conversation ID。
+- **永久清理（CW-10）**：归档、删除列表项、退出登录和服务重启均不能触发文件夹删除；只有明确的“永久清理”操作才可删除任务目录。清理前必须停止该任务的 Pi、子进程/LSP 与上传等写入，并显示完整目标路径及原生历史、附件/产物和远端对象的去留。一次确认可以明确覆盖多类数据，无需为每个子目录重复询问。Project Workspace 复核未提交、未推送及未版本化文件；Chat Workspace 明示本地文件无 Git 备份。没有明确授权删除的文件必须保留，不能因代码已同步而顺带删除附件；默认保留远端 branch/PR。部分失败保留可重试状态，不复用该 Conversation ID。
 - **迁移**：既有 Project Checkout 保持路径。旧 `.pi-coffee/inbox/<session-id>`、全局 research 和 subagent artifacts 只有在归属可证实时迁入相应分类目录；校验成功前保留原件。旧无 Workspace Session 保持可读，用户选择 Chat 或 Project 归属后再启用写入。
 
 ## 6. 最小实现与验收
@@ -80,10 +104,18 @@ Chat 根目录是集中管理入口，不是所有 Chat 共用的 cwd。两个 C
 首轮只验证流程闭环，不扩展成文件治理平台：
 
 1. 创建两个 Chat Conversation，得到两个不同 cwd 和完整分类子目录；各自在一个目录写入文件，另一 Conversation 的 tree/download/import 接口不可见。
-2. 创建一个 Work Conversation，Gitea clone、Conversation branch、Git/LSP 行为不回归；`.pi-coffee/**` 不出现在平台 checkpoint 中。
+2. 同一 Gitea 项目/起始分支创建两个 Work 任务，验证独立 cwd、`.git` 和任务分支；在其中一个编辑/提交不改变另一个的文件/index/HEAD。Git/LSP 行为不回归，`.pi-coffee/**` 不进入平台 checkpoint。
 3. 上传文件、粘贴原图、执行 Web research 和产生一个超长 subagent/tool 结果，分别落到该 Conversation 的 `inbox`、`research`、`artifacts`；生成图片落到 `images`。Server 侧没有正文临时文件或 durable body。
 4. 模式切换后 cwd 不变；Chat Workspace 不会静默变成 Repository，Project Workspace 不会移动到 Chat 根。
 5. 归档后目录仍在，运行中的写入不被隐式中断；恢复后路径不变。永久清理前必须先 quiesce，并需要精确确认和按范围报告。
 6. 路径逃逸、过期/错 Conversation token、符号链接和未登记 Session 均 fail closed；旧目录迁移不会猜测归属。
+7. 前端验证 CW-09 五个字段，含完整路径复制、真实分支、断网陈旧状态、Chat 的“不适用”；clone 失败后能定位原因，同一创建请求重试不生成第二个任务。
+8. 重命名、刷新、重启后仍为同一任务/Conversation/cwd；目录缺失时明确不可用，不自动创建替代目录。
 
-实现完成前必须更新公开 Host Interface、Server 创建流程、部署 env 示例和对应 Gitea Issue，并从两仓 fresh clone 运行各自检查。真实双 VM 验收只需覆盖一个 Chat、一个 Work、一次文件流和一次重连，不重复 T4 已完成的 Gitea 故障矩阵。
+实现完成前必须更新公开 Host Interface、Server 创建流程、部署 env 示例和对应 Gitea Issue，并从两仓 fresh clone 运行各自检查。设计范围分别由 [Agent #46](http://gitea:3000/awangs/pi-coffee/issues/46) 与 [Server #3](http://gitea:3000/awangs/pi-coffee-server/issues/3) 跟踪。真实双 VM 验收只需覆盖一个 Chat、一个 Work、一次文件流和一次重连，不重复 T4 已完成的 Gitea 故障矩阵。
+
+## 7. 设计复核记录
+
+2026-09-22 owner 澄清本轮检查目标是“遗漏与合理性”。四项基础合同合理：一任务一 Conversation 一目录；Work 选择 Gitea 项目/起始分支后自动 clone；前端展示 VM/项目/完整路径/当前分支/同步状态；归档保留目录、永久清理才删除；同项目不同任务独立 clone。修正上一版 Task 一对多的错误定义，补齐 CW-07～10 的创建重试、稳定映射、实际状态展示和清理范围，并消除 CW-02 将共同父目录也禁止包含子目录的歧义。
+
+目录身份、运行模式、远端同步和原生历史的责任已可明确区分，没有需要先引入额外编排层才能实施的设计阻塞。当前剩余项属于 Agent #46 / Server #3 的实现与验收；文档检查和现有测试通过不证明新增行为已经部署。

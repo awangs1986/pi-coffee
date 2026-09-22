@@ -46,7 +46,7 @@ The Relay must not add a second model protocol, buffer an entire stream, or writ
 ## Browser model
 
 - One browser tab is a Browser Shell.
-- The Shell can host multiple Tasks and Pi Sessions in 0.1; the MVP UI starts with one conversation while the Host registry already supports more than one Session.
+- One Task corresponds to exactly one Conversation and one local Workspace on its owning User VM. The Shell lists multiple Tasks; reconnecting or restarting Pi resumes the same Task rather than creating another one.
 - Refreshing or closing the browser must not stop active Tasks. Reconnection uses opaque Session IDs and Event Cursors.
 
 ## Files and images
