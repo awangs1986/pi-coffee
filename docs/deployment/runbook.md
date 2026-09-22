@@ -58,6 +58,12 @@ untrusted networks.
 - Host restart: completed native history remains; an in-flight turn is marked interrupted and is not replayed automatically.
 - VM recovery: owner restores the VM snapshot and then verifies Host token, native credentials and routes.
 
+For the host-admin procedure, failure stops and the redacted evidence template,
+use [`vm-snapshot-rollback-task.md`](./vm-snapshot-rollback-task.md). Run
+`scripts/vm-snapshot-rollback-wizard.sh` when an operator wants a staged
+checklist and evidence draft. The first acceptance run targets the expendable
+`linux002` VM and must use an offline disk snapshot with no memory state.
+
 ## Owner privileges and Gitea
 
 [ADR-0012](../adr/0012-owner-privileges-and-gitea-checkouts.md) requires the service owner to have unrestricted passwordless sudo, preserving that owner's HOME and Git/Pi configuration. The installation above provisions it with an idempotent validated sudoers script, and Host startup probes `id` plus `sudo -n id -u`; an interactive terminal check alone is insufficient. Do not deploy sudo-blocking service restrictions.
