@@ -63,18 +63,17 @@ Key、Host token 与 Gitea token 哈希均不同。
 | 远端故障 | 将 Conversation remote 暂时改为不可达端点后，刷新状态为 `unknown`、保留 dirty 并报告 sync error；恢复 URL 后可继续。把 API token 与 Git credential store 同时替换为无效值后，checkpoint 返回 409；恢复凭据后普通 sync 成功，远端 SHA 精确一致。 |
 | 分叉与 branch 删除 | 独立本地/远端提交得到 `diverged`；普通 fetch + merge + sync 后回到 `synced`，未 force-push。删除远端 Conversation branch 后状态为 `unpublished`；普通 sync 重建 branch 并回到 `synced`。 |
 | 重启恢复 | 两个 Host 与 Web 均在验收数据存在时重启。Host 重启后两个真实会话分别恢复 26 与 31 条 history entry，均未截断。Web 重启不影响 Host 数据，但旧 Web Cookie 返回 401；两个用户重新 OAuth 后恢复各自 workspace/history。 |
+| VM 快照回滚 | Proxmox VM 105 在关机状态创建磁盘快照 `pi-coffee-t4-l002-20260922T113344Z`，写入 after marker 后原位回滚。回滚后 before marker、VM/SSH 身份、Host 三项 capability、Gitea user ID 6、路由/token、Conversation checkout SHA `c906e721…` 均匹配，after marker 消失，linux001 与 Transfer scope 隔离保持正常。应用侧以 `pi-coffee-t4-user2` 打开 `015745d9-…`，页面渲染 31 个 history entry、无截断提示，项目和分支匹配。脱敏证据见 [`linux002-snapshot-rollback-2026-09-22.md`](../deployment/evidence/linux002-snapshot-rollback-2026-09-22.md)。 |
 | 迁移与中断 | linux001 已有真实旧 worktree 保留 dirty/untracked/`.env` 的迁移证据；两台当前 Agent 全套均覆盖迁移中断重试、半成品保护与远端精确确认。 |
 
-本轮仍不能提供真实 VM snapshot rollback 证据：PI Coffee 按 ADR-0005/运行
-边界不控制虚拟化宿主，本执行环境也没有宿主快照 API。必须由 VM owner 在
-虚拟化平台执行一次快照 → 改动 → 回滚，再复核 machine-id、Host service、
-Conversation history 与 Git SHA。另一个发布约束是上表的 Gitea admin 例外；
-如果发布标准要求双向仓库不可见，需要把 `linux001` 迁移到普通 Gitea 用户后
-重跑仓库可见性探针。除这两项外，双 VM 的执行、LSP、同步、PR、scope 隔离
-和故障恢复路径均已实测。
+真实 VM snapshot rollback 已由虚拟化管理员执行，并由应用侧完成 Conversation
+UI 复核。快照恢复门槛已通过。剩余发布约束是上表的 Gitea admin 例外；如果
+发布标准要求双向仓库不可见，需要把 `linux001` 迁移到普通 Gitea 用户后重跑
+仓库可见性探针。除该项外，双 VM 的执行、LSP、同步、PR、scope 隔离和故障
+恢复路径均已实测。
 
 ## Issue 状态原则
 
-T0–T3 已具备目标机证据；T4 在 VM snapshot rollback 与普通用户对称仓库
-隔离完成前保持 open。不能用本地替身、管理员特权或 fresh-clone 检查替代
-这两个发布门槛。
+T0–T3 已具备目标机证据；T4 的 VM snapshot rollback 门槛已完成。`#36` 在
+普通用户对称仓库隔离完成或 owner 明确取消该门槛前保持 open。不能用管理员
+特权或 fresh-clone 检查替代普通用户的双向仓库可见性探针。
