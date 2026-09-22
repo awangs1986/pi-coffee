@@ -1,3 +1,4 @@
+import { WORK_TOOLS } from "../dist/src/harness/mode.js";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -19,24 +20,21 @@ async function probe(lensEnabled) {
   const workspace = join(root, 'workspace');
   const agentDir = join(root, 'agent');
   await mkdir(workspace); await mkdir(agentDir); await mkdir(join(workspace, '.picode'));
-  await writeFile(join(workspace, '.picode/verify.json'), JSON.stringify({ quick: ['node -e "if(require(\'fs\').readFileSync(\'marker.txt\',\'utf8\')!==\'beta\\n\')process.exit(1);console.log(\'VERIFY_OK\')"'] }));
   execFileSync('git', ['init', '-q', workspace]);
   const steps = [
     { name: 'write', args: { path: 'marker.txt', content: 'alpha\n' }, expected: /wrote/i },
     { name: 'read', args: { path: 'marker.txt' }, expected: /alpha/ },
     { name: 'edit', args: { path: 'marker.txt', edits: [{ oldText: 'alpha', newText: 'beta' }] }, expected: /replaced|edited|applied/i },
     { name: 'bash', args: { command: 'node -e "if(require(\'fs\').readFileSync(\'marker.txt\',\'utf8\')!==\'beta\\n\')process.exit(1);console.log(\'BASH_OK\')"' }, expected: /BASH_OK/ },
-    { name: 'grep', args: { pattern: 'beta', path: 'marker.txt' }, expected: /beta/ },
-    { name: 'find', args: { pattern: 'marker.txt', path: '.' }, expected: /marker.txt/ },
-    { name: 'ls', args: { path: '.' }, expected: /marker.txt/ },
+    { name: 'bash', args: { command: 'rg beta marker.txt' }, expected: /beta/ },
+    { name: 'bash', args: { command: 'find . -name marker.txt' }, expected: /marker.txt/ },
+    { name: 'bash', args: { command: 'ls .' }, expected: /marker.txt/ },
     { name: 'git', args: { action: 'status' }, expected: /marker.txt/ },
-    { name: 'verify', args: { action: 'run' }, expected: /overall: passed/ },
     { name: 'search_tools', args: { action: 'search', query: 'web' }, expected: /web:/ },
     { name: 'search_tools', args: { action: 'activate', capability_id: 'web' }, expected: /Activated web/ },
     { name: 'web_search', args: { query: 'fixture evidence', delegate: false }, expected: /example.com/ },
     { name: 'search_tools', args: { action: 'activate', capability_id: 'subagent' }, expected: /Activated subagent/ },
   ];
-  if (lensEnabled) steps.push({ name: 'search_tools', args: { action: 'search', query: 'lens' }, expected: /lens/i });
   let cursor = 0; let calls = 0; const missing = []; const observed = []; const requestTools = [];
   const server = createServer(async (req, res) => {
     try {
@@ -78,24 +76,17 @@ async function probe(lensEnabled) {
   let report;
   try {
     await client.start();
-    await client.prompt('/harness full');
-    await client.prompt('/verify profile quick');
+    await client.prompt('/work');
     await client.prompt('/toolchain-inspect work_baseline');
     await client.promptAndWait('Run the deterministic local toolchain fixture.', undefined, 90000);
-    // A controlled fixture variant separates login-shell PATH from Verify's runner.
-    const nodeQuoted = "'" + process.execPath.replaceAll("'", "'\\''") + "'";
-    await writeFile(join(workspace, '.picode/verify.json'), JSON.stringify({ quick: [nodeQuoted + ' -e "console.log(\'VERIFY_ABSOLUTE_OK\')"'] }));
-    cursor = steps.length;
-    steps.push({ name: 'verify', label: 'verify with absolute Node path', args: { action: 'run' }, expected: /overall: passed/ });
-    await client.promptAndWait('Verify the controlled absolute-runtime fixture.', undefined, 30000);
     await client.prompt('/toolchain-inspect after_activation');
     const snapshots = JSON.parse(await readFile(snapshotsPath, 'utf8'));
     const work = snapshots.find(s => s.label === 'work_baseline');
     const requiredLens = ['lens_diagnostics', 'lsp_diagnostics', 'module_report', 'read_symbol', 'read_enclosing', 'symbol_search', 'pi_lens_activate_tools'];
-    const lensMissingActive = lensEnabled ? requiredLens.filter(name => !work?.active.includes(name)) : [];
+    const unexpectedLensActive = lensEnabled ? requiredLens.filter(name => work?.active.includes(name)) : [];
     const checks = steps.map((step, i) => ({ tool: step.name, ...(step.label ? { label: step.label } : {}), ok: observed[i]?.tool === step.name && !observed[i]?.isError && step.expected.test(observed[i]?.text ?? ''), ...(!step.expected.test(observed[i]?.text ?? '') || observed[i]?.isError ? { detail: observed[i]?.text.slice(0, 350) ?? 'not executed' } : {}) }));
-    const firstRequestLens = lensEnabled ? requiredLens.filter(name => !requestTools[0]?.includes(name)) : [];
-    report = { lensEnabled, ok: checks.every(c => c.ok) && errors.length === 0 && missing.length === 0 && lensMissingActive.length === 0 && firstRequestLens.length === 0, checks, missing, lensMissingActive, lensMissingInModelRequest: firstRequestLens, snapshots, extensionErrors: errors, markerCorrect: (await readFile(join(workspace, 'marker.txt'), 'utf8')) === 'beta\n', requests: calls };
+    const firstRequestLens = lensEnabled ? requiredLens.filter(name => requestTools[0]?.includes(name)) : [];
+    report = { lensEnabled, ok: JSON.stringify(requestTools[0]) === JSON.stringify([...WORK_TOOLS, "recall_folded"]) && checks.every(c => c.ok) && errors.length === 0 && missing.length === 0 && unexpectedLensActive.length === 0 && firstRequestLens.length === 0, checks, missing, unexpectedLensActive, unexpectedLensInModelRequest: firstRequestLens, snapshots, extensionErrors: errors, markerCorrect: (await readFile(join(workspace, 'marker.txt'), 'utf8')) === 'beta\n', requests: calls };
   } catch (error) { report = { lensEnabled, ok: false, error: String(error), extensionErrors: errors, stderr: client.getStderr().slice(-1200) }; }
   finally { unsubscribe(); await client.stop(); server.closeAllConnections(); await new Promise(r => server.close(r)); await rm(root, { recursive: true, force: true }); }
   return report;

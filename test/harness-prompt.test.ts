@@ -52,8 +52,11 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
   });
 
   // These are existing renderer callers, not the new Chat/Work runtime modes.
-  it.each(["simple", "lean", "full"] as const)("keeps the legacy %s renderer compatible", (profile) => {
-    expect(renderHarnessPrompt(profile)).toBe(renderHarnessPrompt("work"));
+  it("renders Chat empty and rejects retired profiles", () => {
+    expect(renderHarnessPrompt("chat")).toBe("");
+    for (const profile of ["simple", "lean", "full", "standard", "tdd"]) {
+      expect(() => renderHarnessPrompt(profile as never)).toThrow("Unknown prompt profile");
+    }
   });
 
   it("distinguishes analysis from implementation and keeps planning proportional", () => {

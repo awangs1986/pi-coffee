@@ -1,6 +1,6 @@
 # Web 搜索：短摘要、来源索引与 VM 证据文件
 
-实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；产品只使用 Chat/Work；工具和委派分配待 PA-Q01/04，当前兼容分派不构成新设计。
+实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；产品只使用 Chat/Work；工具和委派分配已按 PA-Q01/04 落实。
 
 ## 边界
 
@@ -20,7 +20,7 @@
 
 ## Chat/Work 搜索边界
 
-Chat 按 PA-003 的基础工具与 Web 搜索范围设计，不因搜索而附加 Work 系统指令或自行扩展子任务工具。Work 的默认直接搜索还是研究委派仍待 PA-Q04，不能从兼容运行时继承默认政策。
+Chat 常驻 web_search，始终直接搜索，即使参数 delegate=true 也不创建子任务。Work 按需激活 Web，沿用已有默认研究委派；delegate=false 显式直接搜索。Chat 不附加 Work 系统指令或子任务工具。
 
 现有直接搜索、研究子 Pi、来源读取和短结论回传能力可复用。委派失败须明确报告，不能静默在父 Agent 重做；子进程不能递归委派。当前分派细节以 `src/extensions/web-access/extension.ts`、`src/harness/runtime-mode.ts` 和对应测试为准，旧产品分派文本已撤回 Git 历史（提交 `b027838`）。
 

@@ -75,8 +75,8 @@ export function loadCapabilityManifests(
 function parseManifest(value: unknown, conformanceFor: (id: string) => RunnerConformance): CapabilityManifest {
   if (!isRecord(value) || value.schemaVersion !== 1) throw new Error("schemaVersion must be 1");
   const harness = value.supportedHarness;
-  if (!Array.isArray(harness) || !harness.every((item): item is HarnessMode => item === "simple" || item === "full")) {
-    throw new Error("supportedHarness must contain simple/full");
+  if (!Array.isArray(harness) || !harness.every((item): item is HarnessMode => item === "chat" || item === "work")) {
+    throw new Error("supportedHarness must contain chat/work");
   }
   if (!Array.isArray(value.tools)) throw new Error("tools must be an array");
   const tools = value.tools.map((tool) => {

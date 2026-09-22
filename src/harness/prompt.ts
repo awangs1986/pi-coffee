@@ -1,18 +1,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-/** Legacy names remain renderer aliases, not additional product modes. */
-export type HarnessPromptProfile = "work" | "simple" | "lean" | "full";
+export type HarnessPromptProfile = "chat" | "work";
 
-/**
- * Render the single Work body. This does not select tools or implement Chat.
- * The existing Harness still uses its legacy mode routing; Chat's zero-system-
- * prompt contract requires a separate change at the public Pi extension seam.
- *
- * The packaged markdown is the single source of content. Strip author metadata,
- * normalize line endings, and reject unresolved markers before injection.
- */
+/** Packaged Work body; Chat never loads a system prompt. */
 export function renderHarnessPrompt(profile: HarnessPromptProfile = "work"): string {
+  if (profile === "chat") return "";
+  if (profile !== "work") throw new Error("Unknown prompt profile; use chat or work");
   const fileName = "software-development.md";
   const sourcePath = fileURLToPath(new URL(`./prompts/${fileName}`, import.meta.url));
   const source = readFileSync(sourcePath, "utf8");

@@ -10,9 +10,13 @@ export function registerHarnessMode(pi: ExtensionAPI, current: () => HarnessMode
   });
 }
 
-export function subagentsAllowed(pi: ExtensionAPI): boolean {
+export function currentHarnessMode(pi: ExtensionAPI): HarnessMode | undefined {
   const request: { mode?: HarnessMode } = {};
   pi.events?.emit(QUERY, request);
   // Standalone extensions without the Coffee harness retain their native behavior.
-  return request.mode !== "simple";
+  return request.mode;
+}
+
+export function subagentsAllowed(pi: ExtensionAPI): boolean {
+  return currentHarnessMode(pi) !== "chat";
 }

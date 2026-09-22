@@ -26,6 +26,11 @@ describe("Chat/Work documentation contract", () => {
     expect(retiredModeNames("Chat / Work [audit](docs/gitea-full-audit.md)")).toEqual([]);
   });
 
+  it("keeps retired mode aliases out of the runtime contracts", () => {
+    const contracts = ["harness/mode.ts", "harness/extension.ts", "harness/prompt.ts", "harness/runtime-mode.ts", "capabilities/catalog.ts", "capabilities/manifest-loader.ts", "capabilities/schema-budget.ts"];
+    for (const path of contracts) expect(retiredModeNames(readFileSync(join(root, "src", path), "utf8")), path).toEqual([]);
+  });
+
   it("keeps retired mode vocabulary out of every maintained Markdown document", () => {
     const hits = markdownFiles(root).flatMap((path) => readFileSync(path, "utf8").split("\n")
       .flatMap((line, index) => retiredModeNames(line).length ? [`${relative(root, path)}:${index + 1}`] : []));
