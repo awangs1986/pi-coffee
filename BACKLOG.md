@@ -116,12 +116,13 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 结论 | 交付影响 |
 |---|---|---|---|
-| `D-030` | `DECIDED` | 上传文件直接流入 owning User VM 的当前 Task inbox，默认 `.picode/inbox/`。 | Control Plane 不做 durable body 存储；上传过程支持断线/失败状态。 |
+| `D-030` | `DECIDED` | 上传文件直接流入 owning User VM 的当前 Conversation inbox；路径由其 Workspace 解析。 | Control Plane 不做 durable body 存储；上传过程支持断线/失败状态。Chat/Work 布局见 `D-045`。 |
 | `D-031` | `DECIDED` | 初始限制为单文件 256 MiB、单批次 1 GiB。 | 服务端强制限制，不能只依赖前端校验。 |
 | `D-032` | `DECIDED` | 文件校验 name、MIME 和 SHA-256，并留下可审计的有限元数据。 | 文件名要安全化；hash 用于重试/去重/验收，不把正文复制到控制面。 |
 | `D-033` | `DECIDED` | 图片保留原始 bytes。模型支持时发送 image block，否则发送 User VM 中的安全路径/reference。 | 不假设所有模型都支持视觉；需要 capability negotiation 和清晰的 UI 状态。 |
 | `D-034` | `DECIDED` | 不生成额外的缩略图/图片归档。 | 原图只在 User VM 持久化；Control Plane 不建立 thumbnail archive。 |
-| `D-035` | `DECIDED` | 下载/引用链接必须限定 owning user 和 Task。 | 不能用可猜测的全局文件 URL；过期、撤销和错误状态要有测试。 |
+| `D-035` | `DECIDED` | 下载/引用链接必须限定 owning user 和 Conversation。 | 不能用可猜测的全局文件 URL；过期、撤销和错误状态要有测试。 |
+| `D-045` | `DECIDED` | 每个 Conversation 在所属 User VM 有唯一 Workspace；Chat 集中于 `chats/<conversation-id>/`，Work 使用独立 Gitea Checkout。 | 附件、搜索证据、图片和工具产物按 Conversation 归档；运行模式切换不移动或静默转换 Workspace。见 [`conversation-workspaces.md`](./docs/spec/conversation-workspaces.md)。 |
 
 ### 部署、模块化和后续演进
 
@@ -185,7 +186,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `SHELL-001b` | `DONE` | P0 | **会话列表与历史来自 User VM 的 Pi 会话存储**（ADR-0008）：Host `list_sessions` / `history` 帧，按 id 用 `--session <file>` 恢复，浏览器零本地缓存，空闲 Pi 进程自动停止并可恢复。owner 决策：计算全在 Host、记录永久存 VM、每次打开可见历史。 | `MVP-006` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001a` | `DONE` | P0 | **Extension UI 走通到浏览器**：`ui_response` 帧、confirm/select/input/editor 对话框（排队、`Esc` 取消、刷新/换设备后重发挂起对话）、notify/setStatus/setWidget/set_editor_text 呈现；Host 经 RPC 子协议回写 Pi。真实 Pi 扩展验证通过。V5 插件在网页上可"问"可"答"的前提已就位。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001c` | `DONE` | P0 | **Codex 式体验 A/B/C**：完整 Markdown + 高亮 + 复制、工具卡（edit 用 Pi 记录的 patch）、工作过程折叠、重命名/删除/搜索/分组/列表推送、运行中排队与插话、模型/thinking 选择、斜杠命令面板、图片粘贴、用量与压缩、快捷键。缺口与排期见 [`docs/spec/web-shell-roadmap.md`](./docs/spec/web-shell-roadmap.md)。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
-| `FILE-001` | `READY` | P0 | Task inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Task 限定下载引用。**第一切片已交付（`FILE-001a`）**：ADR-0009，Host 提供 LocalSend v2 传输 API（53317，明文 HTTP，CORS），浏览器直传 User VM，B 不经手字节；限额、文件名安全化、SHA-256、进度事件、inbox 引用随 prompt 发送、Download API 下载。剩余：按 Gitea 身份的作用域（`ID-001`）、inbox 浏览面板、大图 path fallback 的模型侧策略。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
+| `FILE-001` | `READY` | P0 | Conversation inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Conversation 限定下载引用。**第一切片已交付（`FILE-001a`）**：ADR-0009，Host 提供 LocalSend v2 传输 API（53317，明文 HTTP，CORS），浏览器直传 User VM，B 不经手字节；限额、文件名安全化、SHA-256、进度事件、inbox 引用随 prompt 发送、Download API 下载。剩余：按 Gitea 身份的作用域（`ID-001`）、inbox 浏览面板、大图 path fallback 的模型侧策略，以及 `D-045` 的逐 Conversation 路径迁移。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
 | `OPS-001` | `READY` | P0 | Web/Relay/Host/Gitea/VM 故障语义、健康检查、浏览器断线连续性、手动快照恢复和发布验收。 | `CP-001`, `ID-001`, `DEP-001`, `FILE-001` | [#12](http://testpc:3000/awangs/pi-coffee/issues/12) |
 
 ### 2.3 0.1 横切子任务

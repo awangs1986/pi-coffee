@@ -8,7 +8,7 @@
 
 ## 新的历史合同
 
-1. 搜索完成后，先将完整的有界来源、URL、snippets 存成独立的 User VM Markdown 证据文件（目录 0700、文件 0600）。这不是聊天历史，也不自动加载进模型上下文。
+1. 搜索完成后，先将完整的有界来源、URL、snippets 存成所属 Conversation Workspace 的 `research/` Markdown 证据文件（Project Workspace 对应 `.pi-coffee/research/`；目录 0700、文件 0600）。这不是聊天历史，也不自动加载进模型上下文。
 2. 工具返回和会话 custom entry 只保存短摘要、精选来源索引、artifact 路径与元数据；工具文本最多 4096 字符。**完整结果不先进入当前轮历史。**
 3. 默认选择供应商排序中前三个不同 URL，保留短 snippets。这里“最优”是排序启发式，不是已核实事实；重要结论仍应打开原始来源验证。超长 URL 不截成错误引用，改指向证据文件。
 4. 不等待 `agent_end`，因此后续 turn、取消、没有最终回答也不会留下本次完整搜索结果在历史中。
@@ -28,8 +28,8 @@ Chat 常驻 web_search，始终直接搜索，即使参数 delegate=true 也不�
 
 ## 配置
 
-保留 `PI_COFFEE_SERPER_KEY`（仅 Relay）、`PI_COFFEE_SEARCH_URL`、`PI_COFFEE_RELAY_TOKEN`、`PI_COFFEE_RESEARCH_DIR`、`PI_COFFEE_WEB`、`PI_COFFEE_WEB_ACCESS`、`PI_COFFEE_WEB_SUBAGENT_AGENT`。
+保留 `PI_COFFEE_SERPER_KEY`（仅 Relay）、`PI_COFFEE_SEARCH_URL`、`PI_COFFEE_RELAY_TOKEN`、`PI_COFFEE_WEB`、`PI_COFFEE_WEB_ACCESS`、`PI_COFFEE_WEB_SUBAGENT_AGENT`。`PI_COFFEE_RESEARCH_DIR` 只允许旧无 Workspace Session 的兼容读取/迁移；已登记 Conversation 必须按 [Conversation Workspace SPEC](./conversation-workspaces.md)解析 `research/`，不能由全局环境变量覆盖到共享目录。
 
 ## 验证
 
-`test/web-extension.test.ts` 覆盖默认先委派且父不搜索、失败不静默回退、显式直接搜索与有界 brief、立即持久化短结果、多 turn/恢复、写盘失败和精炼脱敏。`test/research-artifact.test.ts` 覆盖 artifact 权限和路径边界。真实 Serper 质量、原生帐号和两台部署 VM 尚需实际验收，不以本地 stub 代替。
+`test/web-extension.test.ts` 覆盖默认先委派且父不搜索、失败不静默回退、显式直接搜索与有界 brief、立即持久化短结果、多 turn/恢复、写盘失败和精炼脱敏。`test/research-artifact.test.ts` 覆盖 artifact 权限和路径边界。当前实现仍默认写全局 Agent research 目录；改为按 Conversation 解析和跨 Conversation 拒绝属于 PA-013 的待实现验收。真实 Serper 质量、原生帐号和两台部署 VM 尚需实际验收，不以本地 stub 代替。

@@ -94,8 +94,8 @@ _Avoid_: user database, transcript index
 Bounded accounting information such as token counts, timing, and status that does not contain prompt or tool-output正文.
 _Avoid_: conversation log
 
-**Task Inbox**:
-The User VM location where files uploaded for a Task are retained.
+**Conversation Inbox**:
+The directory inside one Conversation's Workspace where uploaded and pasted originals are retained.
 _Avoid_: Control Plane upload store, temporary web directory
 
 **Image Message**:
@@ -139,8 +139,12 @@ PI Coffee's registration of a Repository for use by Conversations.
 _Avoid_: default-branch checkout, shared worktree
 
 **Conversation**:
-A Host-owned Pi Session and its work context; a code Conversation has one dedicated Checkout and Conversation Branch.
+A Host-owned Pi Session and its work context. Every Conversation has one dedicated Workspace; a code Conversation's Workspace is a Checkout with a Conversation Branch.
 _Avoid_: browser tab, cross-host code backup
+
+**Workspace**:
+The stable User VM directory owned by one Conversation. A Chat Workspace is an ordinary directory; a Project Workspace is an independent Checkout. Workspace type and Chat/Work runtime mode are separate dimensions.
+_Avoid_: shared chat directory, security sandbox, runtime mode
 
 **Checkout**:
 The independent local copy of a Repository in which one Conversation edits and tests code.
