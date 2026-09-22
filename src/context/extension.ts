@@ -1,3 +1,4 @@
+import { currentHarnessMode } from "../harness/runtime-mode.js";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createJiti } from "jiti/static";
 import { resolveContextFoldPackage } from "../pi-extensions.js";
@@ -15,7 +16,11 @@ export default async function contextExtension(pi: ExtensionAPI): Promise<void> 
       if (property === "on") return (name: string, handler: (...args: any[]) => any) => {
         if (name === "session_before_compact") hasCompactionHandler = true;
         const on = target.on as (name: string, handler: (...args: any[]) => any) => void;
-        on.call(target, name, name === "session_before_compact" ? protectLocalCompaction(handler) : handler);
+        const wrapped = name === "session_before_compact" ? protectLocalCompaction(handler) : handler;
+        on.call(target, name, (...args: any[]) => {
+          if (name === "context" && currentHarnessMode(pi) === "chat") return;
+          return wrapped(...args);
+        });
       };
       return Reflect.get(target, property, receiver);
     },

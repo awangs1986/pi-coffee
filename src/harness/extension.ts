@@ -1,3 +1,4 @@
+import { chatPayload } from "./chat-payload.js";
 import { registerHarnessMode } from "./runtime-mode.js";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -21,9 +22,8 @@ import {
 import { createSubagentsManifest } from "../subagents/capability.js";
 import { createWebAccessManifest } from "../extensions/web-access/capability.js";
 import {
-  FULL_TOOLS,
-  SIMPLE_TOOLS,
-  mapHarnessAlias,
+  WORK_TOOLS,
+  CHAT_TOOLS,
   promptProfileForMode,
   resolveToolTable,
   toolsForMode,
@@ -32,7 +32,6 @@ import {
 import { createNativeGitTool, type NativeCommandRunner } from "./native-git.js";
 import {
   createMemoryVerifyState,
-  createNativeVerifyTool,
   executeProfile,
   renderVerifyStatus,
   setVerifyProfile,
@@ -49,10 +48,9 @@ const BLOCK_END = "</pi_coffee_harness>";
 const BLOCK_PATTERN = /(?:\n\n)?<pi_coffee_harness>[\s\S]*?<\/pi_coffee_harness>/g;
 
 interface HarnessSessionState {
-  version: 1;
+  version: 2;
   mode: HarnessMode;
-  source?: "simple" | "full" | "standard" | "tdd";
-  baseline: "awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f";
+  source?: "command" | "migration" | "new";
 }
 
 interface PersistedVerifyState {
@@ -62,7 +60,7 @@ interface PersistedVerifyState {
 }
 
 interface PersistedCapabilityState {
-  version: 1;
+  version: 2;
   mode: HarnessMode;
   activeCapabilityIds: string[];
 }
@@ -79,12 +77,7 @@ export interface HarnessExtensionOptions {
   ownerAuthority?:boolean;
 }
 
-/**
- * PI Coffee's native Pi extension.
- *
- * Work instructions with the existing legacy tool-mode routing. Chat/Work
- * runtime separation is not implemented here yet. Isolation belongs to the VM.
- */
+/** Native Pi extension; the VM remains the execution boundary. */
 export default function harnessExtension(pi: ExtensionAPI): void {
   createHarnessExtension()(pi);
 }
@@ -95,14 +88,15 @@ export function createHarnessExtension(options: HarnessExtensionOptions = {}): (
 }
 
 function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOptions): void {
-  let mode: HarnessMode = "simple";
+  let mode: HarnessMode = "work";
   registerHarnessMode(pi, () => mode);
   let turn = 0;
+  let validState = true;
   let catalog: CapabilityCatalog | undefined;
   let epoch: ExecutionEpoch | undefined;
   const startupDiagnostics: string[] = [];
   const prompt = renderHarnessPrompt("work");
-  const verifyState = createMemoryVerifyState();
+  let verifyState = createMemoryVerifyState();
   const run: NativeCommandRunner = (command, args, options) => pi.exec(command, args, options);
   const persistVerify = (cwd: string, state: VerifyWorkspaceState): void => {
     pi.appendEntry<PersistedVerifyState>(VERIFY_ENTRY, { version: 1, cwd, state });
@@ -111,19 +105,19 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   const settings = options.settings ?? createDefaultSettingsStore(startupDiagnostics);
   const conformedCapabilities = options.conformedCapabilities ?? readCapabilitySet(process.env.PI_COFFEE_CONFORMED_CAPABILITIES);
 
-  pi.registerTool(createSearchToolsTool(pi, () => mode, () => catalog, () => turn));
+  pi.registerTool(createSearchToolsTool(pi, () => mode, () => catalog, () => turn, persistCapabilityState));
   pi.registerTool(createNativeGitTool({ run }));
-  pi.registerTool(createNativeVerifyTool({ run, state: verifyState, persist: persistVerify }));
 
-  function applyMode(nextMode: HarnessMode): ReturnType<typeof resolveToolTable> {
+  function applyMode(nextMode: HarnessMode, persist = true): ReturnType<typeof resolveToolTable> {
     const table = resolveToolTable(nextMode, pi.getAllTools().map((tool) => tool.name));
     if (table.ready) {
       pi.setActiveTools([...table.active]);
       mode = nextMode;
+      validState = true;
       if (epoch !== undefined) {
         epoch.rebuild({ harnessMode: nextMode }, table.active);
         catalog?.onEpochRebuild();
-        persistCapabilityState();
+        if (persist) persistCapabilityState();
       }
     }
     return table;
@@ -170,14 +164,14 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   function persistCapabilityState(): void {
     if (catalog === undefined) return;
     pi.appendEntry<PersistedCapabilityState>(CAPABILITY_ENTRY, {
-      version: 1,
+      version: 2,
       mode,
       activeCapabilityIds: catalog.activeCapabilityIds(),
     });
   }
 
   function restoreCapabilityState(ctx: ExtensionContext): void {
-    if (catalog === undefined) return;
+    if (catalog === undefined || mode === "chat") return;
     const state = lastEntryData(ctx, CAPABILITY_ENTRY, isPersistedCapabilityState);
     if (state === undefined || state.mode !== mode) return;
     const failures: string[] = [];
@@ -196,55 +190,46 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
 
   function persistMode(source: HarnessSessionState["source"]): void {
     pi.appendEntry<HarnessSessionState>(HARNESS_ENTRY, {
-      version: 1,
+      version: 2,
       mode,
       source,
-      baseline: "awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f",
     });
   }
 
+  async function switchMode(requested: string, ctx: ExtensionContext): Promise<void> {
+    if (!ctx.isIdle()) {
+      ctx.ui.notify("Wait for the current turn to finish before switching Chat/Work.", "warning");
+      return;
+    }
+    if (requested !== "chat" && requested !== "work") {
+      ctx.ui.notify("Unknown mode; use /chat, /work or /harness chat|work.", "error");
+      return;
+    }
+    const table = applyMode(requested);
+    if (!table.ready) {
+      ctx.ui.notify(`Cannot enter ${requested}: missing tools [${table.missing.join(", ")}]. Staying on ${mode}.`, "error");
+      return;
+    }
+    if (!catalog) buildCatalog();
+    persistMode("command");
+    ctx.ui.notify(`Mode: ${mode}; system prompt: ${promptProfileForMode(mode)}; active tools: ${table.active.join(", ")}.`, "info");
+  }
   pi.registerCommand("harness", {
-    description: "Show or switch PI Coffee harness: /harness [simple|lean|full] (compatibility aliases: standard|tdd)",
+    description: "Show or switch Chat/Work: /harness [chat|work]",
     handler: async (args, ctx) => {
       const requested = args.trim().toLowerCase();
-      if (requested.length === 0) {
-        const active = pi.getActiveTools();
-        const optional = catalog?.activeCapabilityIds() ?? [];
-        ctx.ui.notify(
-          `harness mode: ${mode}; prompt=${promptProfileForMode(mode)}; base=${toolsForMode(mode).length}; effective active tools (${active.length}): ${active.join(", ")}; capabilities: ${optional.join(", ") || "none"}`,
-          "info",
-        );
+      if (!requested) {
+        ctx.ui.notify(`Mode: ${mode}; system prompt: ${promptProfileForMode(mode)}; active tools: ${pi.getActiveTools().join(", ")}.`, "info");
         return;
       }
-
-      const alias = mapHarnessAlias(requested);
-      const nextMode: HarnessMode | undefined =
-        requested === "lean" ? "simple" : requested === "simple" || requested === "full" ? requested : alias?.mode;
-      if (nextMode === undefined) {
-        ctx.ui.notify(`unknown harness mode '${requested}'; valid: simple | lean | full (compatibility aliases: standard, tdd)`, "error");
-        return;
-      }
-
-      const table = applyMode(nextMode);
-      if (!table.ready) {
-        ctx.ui.notify(
-          `harness ${nextMode} is not ready: missing tools [${table.missing.join(", ")}]. Staying on '${mode}'.`,
-          "warning",
-        );
-        return;
-      }
-
-      if (requested === "standard") setVerifyProfile(ctx.cwd, "quick", verifyState, persistVerify);
-      if (requested === "tdd") setVerifyProfile(ctx.cwd, "tdd", verifyState, persistVerify);
-      if (requested === "simple" || requested === "lean") setVerifyProfile(ctx.cwd, "none", verifyState, persistVerify);
-      persistMode(requested as HarnessSessionState["source"]);
-      const compatibility = alias
-        ? ` Compatibility alias '${requested}' maps to '${nextMode}'${requested === "tdd" ? " + advisory tdd profile" : " + quick profile"}; no third tool table exists.`
-        : "";
-      ctx.ui.notify(
-        `harness mode set to '${nextMode}' with prompt '${promptProfileForMode(nextMode)}'. active tools (${table.active.length}): ${table.active.join(", ")}.${compatibility}`,
-        "info",
-      );
+      await switchMode(requested, ctx);
+    },
+  });
+  for (const name of ["chat", "work"] as const) pi.registerCommand(name, {
+    description: name === "chat" ? "Chat: no system prompt, four basic tools and web search" : "Work: software development, tool discovery and Skills",
+    handler: async (args, ctx) => {
+      if (args.trim()) { ctx.ui.notify(`Usage: /${name}`, "error"); return; }
+      await switchMode(name, ctx);
     },
   });
 
@@ -258,8 +243,8 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
           ctx.ui.notify("usage: /verify profile none|quick|tdd", "error");
           return;
         }
-        if (profile === "tdd" && mode !== "full") {
-          ctx.ui.notify("tdd profile is only reachable in /harness full", "warning");
+        if (profile === "tdd" && mode !== "work") {
+          ctx.ui.notify("tdd profile is only reachable in /work", "warning");
           return;
         }
         setVerifyProfile(ctx.cwd, profile, verifyState, persistVerify);
@@ -329,36 +314,46 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
     },
   });
 
-  pi.on("session_start", (_event, ctx) => {
-    const restoredMode = lastEntryData(ctx, HARNESS_ENTRY, isHarnessState)?.mode ?? "simple";
+  function restoreSession(_event: unknown, ctx: ExtensionContext): void {
+    const stored = lastEntryData(ctx, HARNESS_ENTRY, isStoredHarnessState);
+    // All pre-v2 sessions used software-development instructions. Preserve that
+    // meaning instead of relabelling their histories as zero-system Chat.
+    if (stored && stored.version !== 1 && !isHarnessState(stored)) {
+      validState = false;
+      pi.setActiveTools([]);
+      catalog = undefined;
+      epoch = undefined;
+      ctx.ui.notify("Unknown stored mode state. History is preserved; explicitly select /chat or /work.", "error");
+      return;
+    }
+    const migrated = stored !== undefined && stored.version === 1;
+    const restoredMode = stored?.version === 2 && isHarnessState(stored) ? stored.mode : "work";
     const restoredVerify = lastEntryData(ctx, VERIFY_ENTRY, (value): value is PersistedVerifyState =>
       isPersistedVerifyState(value) && value.cwd === ctx.cwd,
     );
+    verifyState = createMemoryVerifyState();
     if (restoredVerify) verifyState.set(ctx.cwd, restoredVerify.state);
-
-    const table = applyMode(restoredMode);
+    const table = applyMode(restoredMode, false);
     if (!table.ready) {
-      const fallback = applyMode("simple");
-      ctx.ui.notify(
-        `session harness '${restoredMode}' cannot be restored (missing: ${table.missing.join(", ")}); ` +
-          `using simple (${fallback.active.length}/${SIMPLE_TOOLS.length})`,
-        "warning",
-      );
+      mode = restoredMode;
+      pi.setActiveTools([]);
+      ctx.ui.notify(`Cannot restore ${mode}: missing tools [${table.missing.join(", ")}]. Repair the extension setup or select another mode.`, "error");
     }
-    const current = buildCatalog();
-    restoreCapabilityState(ctx);
+    buildCatalog();
+    if (!migrated) restoreCapabilityState(ctx);
+    if (migrated || !stored) persistMode(migrated ? "migration" : "new");
+    if (migrated) ctx.ui.notify("Session migrated to Work. History is preserved; optional capabilities must be activated again. Use /chat to switch explicitly.", "info");
     if (startupDiagnostics.length > 0) ctx.ui.notify(`capability discovery diagnostics: ${startupDiagnostics.join(" | ")}`, "warning");
-    // Keep the variable used so a future adapter can inspect the epoch through
-    // this closure without widening the Pi interface.
-    void current;
-  });
+  }
+  pi.on("session_start", restoreSession);
+  pi.on("session_tree", restoreSession);
 
   pi.on("turn_start", (event) => {
     turn = event.turnIndex;
   });
 
   pi.on("model_select", () => {
-    if (epoch === undefined) return;
+    if (epoch === undefined || !validState) return;
     const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name));
     if (!table.ready) return;
     pi.setActiveTools([...table.active]);
@@ -367,7 +362,27 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
     persistCapabilityState();
   });
 
-  pi.on("before_agent_start", (event) => {
+  pi.on("before_provider_request", (event, ctx) => {
+    if (!validState || !resolveToolTable(mode, pi.getAllTools().map(tool => tool.name)).ready) {
+      // before_agent_start precedes Pi's run controller; abort again here at
+      // the actual request seam so an invalid restoration cannot send a turn.
+      ctx.abort();
+      return;
+    }
+    return mode === "chat" ? chatPayload(event.payload) : undefined;
+  });
+
+  pi.on("before_agent_start", (event, ctx) => {
+    const table = resolveToolTable(mode, pi.getAllTools().map(tool => tool.name));
+    if (!validState || !table.ready) {
+      ctx.abort();
+      ctx.ui.notify(`Mode ${mode} is unavailable: missing ${table.missing.join(", ")}.`, "error");
+      return { systemPrompt: "" };
+    }
+    if (mode === "chat") {
+      pi.setActiveTools([...table.active]);
+      return { systemPrompt: "" };
+    }
     const active = pi.getActiveTools();
     const runtime = [
       `Active harness mode: ${mode}.`,
@@ -391,6 +406,7 @@ function createSearchToolsTool(
   currentMode: () => HarnessMode,
   getCatalog: () => CapabilityCatalog | undefined,
   currentTurn: () => number,
+  persist: () => void,
 ): ToolDefinition {
   return {
     name: "search_tools",
@@ -405,6 +421,7 @@ function createSearchToolsTool(
     }),
     async execute(_toolCallId, params) {
       const input = params as unknown as { action: "search" | "activate"; query?: string; capability_id?: string };
+      if (currentMode() !== "work") return { content: [{ type: "text", text: "Capability discovery is available in Work. Use /work." }], details: { ok: false, code: "mode-disabled" } };
       const activeCatalog = getCatalog();
       if (activeCatalog === undefined) return { content: [{ type: "text", text: "Capability catalog is not ready." }], details: { ok: false, code: "not-ready" } };
       if (input.action === "search") {
@@ -418,6 +435,7 @@ function createSearchToolsTool(
       const result = activeCatalog.activate(id, { currentTurn: currentTurn() });
       if (!result.ok) return { content: [{ type: "text", text: `Activation failed (${result.code}): ${result.message}` }], details: result };
       if (result.toolsAdded.length > 0) pi.setActiveTools([...new Set([...pi.getActiveTools(), ...result.toolsAdded])]);
+      persist();
       return {
         content: [{ type: "text", text: result.alreadyActive ? `Capability ${result.capabilityId} is already active.` : `Activated ${result.capabilityId}; its tools are available from the next model request.` }],
         details: result,
@@ -432,7 +450,7 @@ function lastEntryData<T>(
   customType: string,
   guard: (value: unknown) => value is T,
 ): T | undefined {
-  const entries = ctx.sessionManager.getEntries();
+  const entries = ctx.sessionManager.getBranch?.() ?? ctx.sessionManager.getEntries();
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     if (entry?.type === "custom" && entry.customType === customType && guard(entry.data)) return entry.data;
@@ -442,7 +460,7 @@ function lastEntryData<T>(
 
 function isHarnessState(value: unknown): value is HarnessSessionState {
   if (!isRecord(value)) return false;
-  return value.version === 1 && (value.mode === "simple" || value.mode === "full");
+  return value.version === 2 && (value.mode === "chat" || value.mode === "work");
 }
 
 function isPersistedVerifyState(value: unknown): value is PersistedVerifyState {
@@ -451,7 +469,7 @@ function isPersistedVerifyState(value: unknown): value is PersistedVerifyState {
 }
 
 function isPersistedCapabilityState(value: unknown): value is PersistedCapabilityState {
-  if (!isRecord(value) || value.version !== 1 || (value.mode !== "simple" && value.mode !== "full") || !Array.isArray(value.activeCapabilityIds)) return false;
+  if (!isRecord(value) || value.version !== 2 || (value.mode !== "chat" && value.mode !== "work") || !Array.isArray(value.activeCapabilityIds)) return false;
   return value.activeCapabilityIds.every((id) => typeof id === "string" && id.length > 0);
 }
 
@@ -520,7 +538,11 @@ function renderRunForCommand(run: { profile: VerifyProfile; overall: string; com
   return lines.join("\n");
 }
 
-export const V5_HARNESS_TOOL_COUNTS = Object.freeze({
-  simple: SIMPLE_TOOLS.length,
-  full: FULL_TOOLS.length,
+export const HARNESS_TOOL_COUNTS = Object.freeze({
+  chat: CHAT_TOOLS.length,
+  work: WORK_TOOLS.length,
 });
+
+function isStoredHarnessState(value: unknown): value is Record<string, unknown> {
+  return isRecord(value);
+}

@@ -50,22 +50,21 @@ const report = {
 
 try {
   if (scope !== "lens-only") {
-    const fullWorkspace = await createFixture(join(root, "full-stack"));
-    const fullInspection = await createInspectionExtension(join(root, "full-inspection"));
-    const fullExtensions = resolvePiExtensions({
+    const workWorkspace = await createFixture(join(root, "work-stack"));
+    const workInspection = await createInspectionExtension(join(root, "work-inspection"));
+    const workExtensions = resolvePiExtensions({
       ...process.env,
       PI_COFFEE_PI_LENS: "on",
     });
     report.runs.push(await runSession({
-      name: "full-stack",
-      workspace: fullWorkspace,
-      extensions: [...fullExtensions, fullInspection.extension],
-      inspectionPath: fullInspection.output,
+      name: "work-stack",
+      workspace: workWorkspace,
+      extensions: [...workExtensions, workInspection.extension],
+      inspectionPath: workInspection.output,
       environment: commonEnvironment,
       beforePrompt: async (client) => {
-        await client.prompt("/harness full");
-        await client.prompt("/verify profile quick");
-        await client.prompt("/toolchain-inspect configured-full");
+        await client.prompt("/harness work");
+        await client.prompt("/toolchain-inspect configured-work");
       },
       prompts: [
         {
@@ -300,7 +299,7 @@ function runCheck(workspace) {
 }
 
 function assess(runs) {
-  const full = runs.find((run) => run.name === "full-stack");
+  const work = runs.find((run) => run.name === "work-stack");
   const control = runs.find((run) => run.name === "pi-lens-control");
   const lensNames = [
     "lens_diagnostics", "symbol_search", "effective_config", "project_report",
@@ -308,23 +307,23 @@ function assess(runs) {
     "ast_grep_search", "ast_grep_replace", "ast_grep_outline", "lsp_navigation",
     "lens_diagnostic_mark",
   ];
-  const fullActive = new Set(full?.snapshots.find((item) => item.label === "configured-full")?.active ?? []);
+  const workActive = new Set(work?.snapshots.find((item) => item.label === "configured-work")?.active ?? []);
   const controlActive = new Set(control?.snapshots.find((item) => item.label === "before-agent-start")?.active ?? []);
-  const fullCalls = new Set(full?.toolCalls.map((call) => call.name) ?? []);
+  const workCalls = new Set(work?.toolCalls.map((call) => call.name) ?? []);
   const controlCalls = new Set(control?.toolCalls.map((call) => call.name) ?? []);
   const lspDiagnostics = control?.toolCalls.filter((call) => call.name === "lens_diagnostics") ?? [];
   const lspNavigation = control?.toolCalls.filter((call) => call.name === "lsp_navigation") ?? [];
   return {
-    autonomousToolDiscovery: (full?.promptResults.find((item) => item.id === "autonomous")?.toolCalls.length ?? 0) > 0,
-    fullStackLensActive: lensNames.filter((name) => fullActive.has(name)),
-    fullStackLensCalled: lensNames.filter((name) => fullCalls.has(name)),
+    autonomousToolDiscovery: (work?.promptResults.find((item) => item.id === "autonomous")?.toolCalls.length ?? 0) > 0,
+    workStackLensActive: lensNames.filter((name) => workActive.has(name)),
+    workStackLensCalled: lensNames.filter((name) => workCalls.has(name)),
     controlLensActive: lensNames.filter((name) => controlActive.has(name)),
     controlLensCalled: lensNames.filter((name) => controlCalls.has(name)),
-    harnessLensConflictObserved: lensNames.some((name) => controlActive.has(name)) && !lensNames.some((name) => fullActive.has(name)),
+    nativeLensExcludedByWorkContract: lensNames.some((name) => controlActive.has(name)) && !lensNames.some((name) => workActive.has(name)),
     lspDiagnosticsOutcome: lspDiagnostics.some((call) => call.result?.includes("inconclusive=1")) ? "inconclusive" : "see tool evidence",
     lspNavigationOutcome: lspNavigation.length > 0 && lspNavigation.every((call) => call.result?.includes('"status":"empty"')) ? "all queries empty" : "see tool evidence",
     diagnosticMarkOutcome: controlCalls.has("lens_diagnostic_mark") ? "called" : "not called: no real diagnostic identifier",
-    fullStackCheckPassed: full?.finalCheck.ok === true,
+    workStackCheckPassed: work?.finalCheck.ok === true,
     controlCheckPassed: control?.finalCheck.ok === true,
   };
 }

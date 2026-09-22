@@ -134,7 +134,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-040` | `DECIDED` | Rust 只在测出实际性能瓶颈后引入。 | 第一实现使用 Node/TypeScript；Rust 模块必须有基准、边界和回滚方案。 |
 | `D-041` | `LATER` | 除已明确登记的 Harness 基础表外，V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 每个后续迁移必须单独评审、单独验收；不得借 Harness ticket 偷渡其他模块。 |
 | `D-042` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 当前目标见 [PA-002/004 与 WP SPEC](./docs/spec/harness-prompt.md)：Chat/Work 与唯一 Work 正文；不以本条要求回读 V3。旧交付见 `HARNESS-001`。 |
-| `D-043` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 代码仍有兼容实现，但目标模式与工具清单归 [PA-002/005、PA-Q01](./docs/spec/pi-agent.md)；不能把旧 8/10 当新设计。旧交付见 `HARNESS-002`。 |
+| `D-043` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 运行时已迁移，当前模式与工具清单归 [PA-002/005、PA-Q01](./docs/spec/pi-agent.md)；不能把旧 8/10 当新设计。旧交付见 `HARNESS-002`。 |
 | `D-044` | `DECIDED` | 本地 Web 工具接 Serper Relay；有界完整证据先留 User VM，历史只保留摘要和索引。 | 实现/失败语义见 [Web SPEC](./docs/spec/web-search-plugin.md)；新模式工具/委派分配待 PA-Q01/04，旧基础表计数不是目标约束。 |
 
 ### 1.1 被替换的早期方案
@@ -335,3 +335,5 @@ MVP-001..005 (已完成)
 | 2026-09-03 | 交付 D（`SHELL-001a`）：Extension UI 对话框与即发即忘方法接到浏览器，挂起对话跨刷新重发；空会话不再进入共享列表，空闲回收时删除。发版 `v0.1.0-mvp.2`。 |
 | 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |
 | 2026-09-20 | 建立可持续维护的 Pi Agent 主 SPEC 与 WP 专项合同；标记 D-042/043 的旧模式设计已替代，D-037 升级为明确插件边界；保持工具清单等未决项，记录本地实现/验收差距。Gitea 不可达，尚未同步新决定或关闭工单。 |
+
+2026-09-22：HARNESS-001/002 完成 Chat/Work 运行时迁移、旧状态升级及请求边界验证；[证据](./docs/reviews/chat-work-migration-20260922.md)。T4 双用户门槛仍单独验收。

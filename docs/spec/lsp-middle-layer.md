@@ -1,6 +1,6 @@
 # LSP 中间层：Pi Skill 与 CLI
 
-状态：**V1 CLI、Skill、TypeScript/Python Profile 与按需复用已实现并实测**。关联 PA-007、PA-011、PA-012。模型工具表精简、Chat/Work 运行时隔离、压力/性能基准和 V2 WorkspaceEdit 仍未完成。实现使用 CLI，不使用 MCP，也不依赖 pi-lens。
+状态：**V1 CLI、Skill、TypeScript/Python Profile 与按需复用已实现并实测**。关联 PA-007、PA-011、PA-012。模型工具表精简与 Chat/Work 隔离已于 2026-09-22 完成；压力/性能基准和 V2 WorkspaceEdit 仍待验收。实现使用 CLI，不使用 MCP，也不依赖 pi-lens。
 
 ## 1. 目标与成功标准
 
@@ -165,7 +165,7 @@ pi-lens 不是必需依赖。现有 `pi-lens-analyze` 输出和退出码无法�
 | A / LSP-AC02 | 缺服务器、能力不支持、无版本 push、超时、崩溃、并发首次启动、取消、超量输出 | **部分**：稳定退出码、参数/能力错误、超时与诊断不确定语义已实现；取消、崩溃恢复和超量输出的完整故障矩阵待补 |
 | A / LSP-AC03 | 修改后复查不使用旧 hash；同名局部变量不会污染 references；跨文件 import alias、Unicode 前缀、CRLF、带空格路径定位正确 | **部分**：快照/hash、`--expect-sha256`、Unicode code-point 转换和同名符号真实模型场景已过；CRLF/空格路径专项样例待补 |
 | A / LSP-AC04 | 两个 worktree、monorepo 子项目、配置变更、新增/删除文件、浏览器断开与会话结束 | **部分**：最近语言配置路由、canonical root、Pi session/socket 隔离和 5 分钟空闲回收已实现；完整 worktree/配置变更矩阵待补 |
-| B / LSP-AC05 | 部署 CLI/Skill，迁移 Work 的精简工具集合，关闭 pi-lens 原生扩展发现；Work 中可见摘要，无 LSP 工具 schema，Chat 不注入该摘要 | **部分**：包 bin、Host PATH、`--skill` 注入、打包复制和真实 Pi `skill:lsp` 可见已过；精简工具表与 Chat 隔离仍待迁移 |
+| B / LSP-AC05 | 部署 CLI/Skill，迁移 Work 的精简工具集合，关闭 pi-lens 原生扩展发现；Work 中可见摘要，无 LSP 工具 schema，Chat 不注入该摘要 | **部分**：包 bin、Host PATH、`--skill` 注入、打包复制和真实 Pi `skill:lsp` 可见已过；精简工具表与 Chat 隔离已在真实 Pi HTTP 请求中验证 |
 | B / LSP-AC06 | `eidolon/gpt-5.6-terra` 只收到“修复跨文件 API 调用问题”等任务，自主读取 Skill、调用语义查询、编辑并验证 | **通过工程初值**：3 个 fixture × 3 次为 3/3、2/3、3/3；唯一失败正确修复并通过 `tsc`，但未调用 LSP，仍按失败保留 |
 | B / LSP-AC07 | 初次启动与连续 10 次查询的耗时、峰值内存、进程数、摘要/正文/结果字节数 | **部分**：默认 Unix socket 复用测试证明连续调用只启动一个服务器；完整冷/热延迟、内存和上下文预算基准待补 |
 | C / LSP-AC08 | Python Profile 的诊断、定义、引用与修改后刷新；V2 WorkspaceEdit 的预览、版本检查和失败恢复 | **V1 Python 通过，V2 待实现**：真实 `pyright@1.1.405` 诊断、跨文件定义、修改后 `clean` 已过；CLI 未宣传 rename/code actions |

@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createNativeGitTool, type NativeCommandResult, type NativeCommandRunner } from "../src/harness/native-git.js";
-import { FULL_TOOLS, SIMPLE_TOOLS, resolveToolTable } from "../src/harness/mode.js";
+import { WORK_TOOLS, CHAT_TOOLS, resolveToolTable } from "../src/harness/mode.js";
 import {
   createMemoryVerifyState,
   createNativeVerifyTool,
@@ -18,12 +18,12 @@ function result(stdout = "", stderr = "", code = 0): NativeCommandResult {
 }
 
 describe("PI Coffee V5 tool adapters", () => {
-  it("keeps the frozen base counts and fails closed when Full tools are absent", () => {
-    expect(SIMPLE_TOOLS).toHaveLength(8);
-    expect(FULL_TOOLS).toHaveLength(10);
-    const table = resolveToolTable("full", SIMPLE_TOOLS);
+  it("keeps the resident tool contracts and fails closed when Work tools are absent", () => {
+    expect(CHAT_TOOLS).toHaveLength(5);
+    expect(WORK_TOOLS).toHaveLength(6);
+    const table = resolveToolTable("work", CHAT_TOOLS);
     expect(table.ready).toBe(false);
-    expect(table.missing).toEqual(["git", "verify"]);
+    expect(table.missing).toEqual(["git", "search_tools"]);
   });
 
   it("keeps native git status/diff observable and leaves snapshots to the VM owner", async () => {

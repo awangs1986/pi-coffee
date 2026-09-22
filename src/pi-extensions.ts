@@ -35,8 +35,8 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
 
   const harness = resolveHarnessExtension();
   const extensions = isDisabled(env.PI_COFFEE_WEB)
-    ? [harness]
-    : [resolveWebExtension(), harness];
+    ? []
+    : [resolveWebExtension()];
   if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) {
     extensions.push(resolvePiSubagentsExtension());
   }
@@ -46,6 +46,7 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
   if (isEnabled(env.PI_COFFEE_RPIV_TODO)) extensions.push(resolveRpivTodoExtension(env));
   if (isEnabled(env.PI_COFFEE_PI_MCP_ADAPTER)) extensions.push(resolvePiMcpAdapterExtension(env));
   if (!isDisabled(env.PI_COFFEE_CONTEXT_FOLD)) extensions.push(resolveContextFoldExtension(env));
+  extensions.push(harness);
   return extensions;
 }
 

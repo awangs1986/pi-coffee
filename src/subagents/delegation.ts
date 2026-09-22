@@ -35,7 +35,7 @@ export async function invokeNativeSubagent(
   pi: ExtensionAPI,
   input: NativeSubagentInvocation,
 ): Promise<string | undefined> {
-  if (!subagentsAllowed(pi)) throw new Error("Subagents are disabled in Simple/Lean; switch to Full to delegate.");
+  if (!subagentsAllowed(pi)) throw new Error("Subagents are disabled in Chat; switch to Work to delegate.");
   if (process.env.PI_SUBAGENT_CHILD === "1") throw new Error("Research children cannot delegate recursively");
   if (input.signal?.aborted) return undefined;
   if (!capabilityManifestRegistrations(pi).some(r => r.manifest.id === "subagent" && r.manifest.runnerConformance === "passed" && r.conformanceSource === "local")) return undefined;

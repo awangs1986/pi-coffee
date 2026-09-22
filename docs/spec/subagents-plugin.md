@@ -1,6 +1,6 @@
 # 原生子 Agent：默认研究、独立模型、VM 并发准入
 
-实现合同更新：2026-09-16；规格归属更新：2026-09-20。Chat/Work 分配尚待确认；当前兼容分派见 `src/harness/runtime-mode.ts`。目标模式由 [Pi Agent 主 SPEC](./pi-agent.md) PA-002 定义；这里的模式分配、3/5 准入等现有行为不能未经确认整体映射成 Work 政策，见 PA-Q04。本次未修改执行器或配额。
+实现合同更新：2026-09-22。子 Agent 仅在 Work 按需激活；Chat 的直接工具和命令路径均拒绝委派。保留已有 3/5 准入、独立模型和输出界限；模式分配见 [Pi Agent 主 SPEC](./pi-agent.md) PA-Q04。
 
 ## 可复用的执行合同
 
@@ -53,7 +53,7 @@ Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作�
 要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。在依赖研究委派的配置中关闭 subagents 或替换扩展列表时，默认 Web 委派会明确失败；可恢复配置，或显式 `delegate=false`。原生认证仍由用户在 VM 终端配置。
 
 - `test/subagent-launcher.test.ts`：14 个独立进程/两个根对话，观测峰值 5、每根不超过 3；排队、等待中取消、SIGKILL 释放、禁止嵌套。
-- `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖当前兼容分派的能力激活、拒绝与直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。
+- `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖Chat/Work 分派的能力激活、拒绝与直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。
 - `test/subagent-result.test.ts`：Unicode/details 限量、0600 归档、写盘失败；其余测试覆盖事件注册、模型配置、失败无静默回退。
 - `npm run check`、`npm run smoke:subagents`、`npm run smoke:web`。
 
