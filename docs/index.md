@@ -1,7 +1,7 @@
 # PI Coffee Agent Runtime documentation map
 
 - [VM 完整权限与 Gitea 工作区决策](./adr/0012-owner-privileges-and-gitea-checkouts.md)
-- [工作区正式合同](./spec/gitea-workspaces.md) 与 [T0–T4 任务](./development/t0-t4-gitea-workspaces.md)：Agent/Server 实现及 webserver + linux001 单用户目标机验收已落地；[真实证据](./reviews/t0-t4-implementation-20260921.md)已记录。T4 仍等待第二用户、第二 User VM、2 × 3 Conversation 与快照恢复。
+- [工作区正式合同](./spec/gitea-workspaces.md) 与 [T0–T4 任务](./development/t0-t4-gitea-workspaces.md)：Agent/Server 实现、双 User VM、2 × 3 Conversation 与 VM 快照回滚均已落地；[真实证据](./reviews/t0-t4-implementation-20260921.md)已记录。T4 只剩普通用户对称仓库隔离门槛，除非 owner 明确取消该发布要求。
 
 > **2026-09-21 仓库拆分**：本仓库只维护 User VM Agent Runtime。浏览器 UI、Web gateway、Gitea identity、固定路由和 Relay 已迁至 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)。拆分决定见 [ADR-0011](./adr/0011-split-agent-runtime-and-server-repositories.md)。
 
