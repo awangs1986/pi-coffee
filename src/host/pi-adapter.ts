@@ -83,6 +83,7 @@ export interface RpcPiSessionFactoryOptions {
   /** Additional Pi skills loaded for every Host session. */
   skills?: string[];
   env?: Record<string, string>;
+  envForSession?: (id:string) => Promise<Record<string,string>>;
   cwdForSession?: (id: string, existing: boolean) => Promise<string>;
 }
 
@@ -143,7 +144,7 @@ export class RpcPiSessionFactory implements PiSessionFactory {
       model: this.options.model,
       env: {
         ...(this.options.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: this.options.agentDir }),
-        ...buildHostChildEnv(this.options.env),
+        ...buildHostChildEnv({...this.options.env,...await this.options.envForSession?.(options.sessionId)}),
         PI_COFFEE_ROOT_SESSION: options.sessionId,
       },
       args,

@@ -29,6 +29,7 @@ describe("Gitea-backed Conversation Checkouts", () => {
       const remote = await remoteRepository(root);
       const workspaces = new Workspaces(join(root, "workspaces"), { ownerId: "vm-a" });
       const project = await workspaces.registerProject("demo", remote);
+      expect(await workspaces.branches(project.id)).toEqual(["main"]);
       const first = await workspaces.createConversation(project.id, "main", "conversation-a");
       const second = await workspaces.createConversation(project.id, "main", "conversation-b");
 
@@ -55,7 +56,8 @@ describe("Gitea-backed Conversation Checkouts", () => {
       const second = new Workspaces(join(root, "vm-b"), { ownerId: "same-vm" });
       const secondProject = await second.registerProject("demo", remote);
       await expect(second.createConversation(secondProject.id, "main", "same-conversation")).rejects.toThrow("already exists");
-      await expect(stat(join(root, "vm-b", "checkouts", "same-conversation"))).rejects.toThrow();
+      expect((await stat(join(root, "vm-b", "checkouts", "same-conversation"))).isDirectory()).toBe(true);
+      expect((await second.lookup("same-conversation"))?.creationState).toBe("failed");
 
       const protectedPath=join(root,"vm-b","checkouts","preexisting");await mkdir(protectedPath,{recursive:true});await writeFile(join(protectedPath,"keep.txt"),"keep\n");
       await expect(second.createConversation(secondProject.id,"main","preexisting")).rejects.toThrow("destination already exists");
@@ -198,4 +200,27 @@ describe("Gitea-backed Conversation Checkouts", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+});
+
+it('retries task creation and rejects branch drift or runtime data in checkpoints',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'coffee-task-retry-'));
+  try {
+    const source=join(root,'source'),remote=join(root,'remote.git');await mkdir(source);
+    await git(source,['init','-b','main']);await writeFile(join(source,'README.md'),'base\n');await git(source,['add','.']);await git(source,['commit','-m','base']);await git(root,['clone','--bare',source,remote]);
+    const ws=new Workspaces(join(root,'projects'),{ownerId:'vm-a'});const p=await ws.registerProject('demo',remote);
+    const c=await ws.createConversation(p.id,'main','retry-task');
+    expect((await ws.createConversation(p.id,'main','retry-task')).cwd).toBe(c.cwd);
+    await ws.dataRoot(c.id);
+    await writeFile(join(c.cwd,'.pi-coffee/inbox/private.txt'),'local');
+    expect((await ws.changes(c.id)).checkpointPaths).not.toContain('.pi-coffee/inbox/private.txt');
+    await git(c.cwd,['config','user.name','Test']);await git(c.cwd,['config','user.email','test@localhost']);
+    await git(c.cwd,['checkout','-b','manual-branch']);
+    expect(await ws.syncStatus(c.id)).toMatchObject({state:'branch_mismatch',branch:'manual-branch'});
+    await writeFile(join(c.cwd,'code.txt'),'code');
+    await expect(ws.checkpoint(c.id,['code.txt'],'wrong branch')).rejects.toThrow('assigned');
+    await git(c.cwd,['checkout',c.branch]);
+    await expect(ws.checkpoint(c.id,['.pi-coffee/inbox/private.txt'],'private')).rejects.toThrow('private');
+    await ws.archive(c.id,true);
+    await expect(ws.deleteWorkspace(c.id,c.id)).rejects.toThrow();
+  } finally {await rm(root,{recursive:true,force:true});}
 });

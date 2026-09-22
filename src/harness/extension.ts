@@ -88,7 +88,7 @@ export function createHarnessExtension(options: HarnessExtensionOptions = {}): (
 }
 
 function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOptions): void {
-  let mode: HarnessMode = "work";
+  let mode: HarnessMode = process.env.PI_COFFEE_INITIAL_MODE==="chat" ? "chat" : "work";
   registerHarnessMode(pi, () => mode);
   let turn = 0;
   let validState = true;
@@ -327,7 +327,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
       return;
     }
     const migrated = stored !== undefined && stored.version === 1;
-    const restoredMode = stored?.version === 2 && isHarnessState(stored) ? stored.mode : "work";
+    const restoredMode = stored?.version === 2 && isHarnessState(stored) ? stored.mode : (!stored && process.env.PI_COFFEE_INITIAL_MODE==="chat" ? "chat" : "work");
     const restoredVerify = lastEntryData(ctx, VERIFY_ENTRY, (value): value is PersistedVerifyState =>
       isPersistedVerifyState(value) && value.cwd === ctx.cwd,
     );

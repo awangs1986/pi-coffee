@@ -163,3 +163,38 @@ events; unlike Pi events they are not part of the durable history.
 ## Lifetime rule
 
 Closing a Browser WebSocket detaches that Browser from the Session. It is not a stop command and must not interrupt Pi. The Host stops a Pi process only during Host shutdown or after the idle timeout above, and in both cases the conversation remains in Pi's session store.
+
+
+## Conversation Workspace additions (CW-01–10, 2026-09-22)
+
+The authenticated `/api/workspace` registry returns `vmId`, `capabilities.chatWorkspaces`,
+Projects and Conversations. A Conversation includes `workspaceKind: chat | project`,
+`cwd` (absolute display/copy path), `creationState: creating | ready | failed`, and optional
+`creationError`. Project workspaces also carry `startBranch`, `startSha`, assigned `branch`
+and last remote confirmation. Paths are resolved by Host; clients cannot supply a cwd.
+
+- `conversation`: pass a stable `id` and `workspaceKind`. `chat` needs no project; `project`
+  requires `projectId` and optional starting `branch`. Retry the same payload/ID after
+  uncertain transport or failed creation. Partial files stay at the reported path;
+  ready/missing directories are never silently recreated. Existing callers omitting
+  workspaceKind keep the Project behavior.
+- `branches`: `{projectId}` returns remote branch names for the creation picker.
+- `files`: `{id}` returns the scoped grant and cwd-relative inbox (`inbox` for Chat,
+  `.pi-coffee/inbox` for Project). Upload completion also returns `{path,sha256,fileName}`
+  in HTTP JSON, so a lost WebSocket event does not strand a completed upload.
+- `status`: Chat returns `state: local`; Project returns the **actual** `branch` and
+  `branch_mismatch` on drift/detached HEAD. Such state blocks checkpoint/push. Failed
+  remote checks return `unknown` plus the last confirmation time, never cached `synced`.
+- `archive`/`restore` change visibility only. Running Pi and children continue.
+- `delete`: archived ID and exact `confirmation` are mandatory. `includeLocalFiles:true`
+  explicitly covers the directory, attachments/research/artifacts/images and ignored
+  files. Dirty/unpushed Project code still blocks deletion. Host checks idle children,
+  stops idle Pi, closes its LSP and revokes upload grants before removing local data.
+  Failed creation can also be explicitly cleaned; tombstoned IDs cannot be reused.
+  Native history is deleted; remote branches/PRs/repositories and external legacy data remain.
+
+New Pi processes receive the registry cwd, `PI_COFFEE_DATA_ROOT`, initial Chat/Work mode
+and `PI_SUBAGENTS_TEMP_ROOT` under their data root. Restored mode overrides the initial
+default. Native sessions remain in their existing VM store. Proven old
+`.pi-coffee/inbox/<id>/...` references retain scoped **read-only** download/preview access;
+new uploads go to the task directory. Unattributed global evidence is not reassigned.

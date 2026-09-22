@@ -89,3 +89,11 @@ function exchange(socketPath: string, args: readonly string[], cwd: string, time
     });
   });
 }
+
+/** Stop only an existing task daemon; cleanup must never launch a new server. */
+export async function stopLspDaemon(sessionId:string, env:NodeJS.ProcessEnv=process.env):Promise<void> {
+  try {
+    const response=await exchange(lspDaemonSocket({...env,PI_COFFEE_ROOT_SESSION:sessionId}),['__shutdown'],process.cwd(),1000);
+    if(response.code!==0)throw new Error(response.stderr || 'LSP shutdown failed');
+  }catch(error){if(!['ENOENT','ECONNREFUSED'].includes((error as NodeJS.ErrnoException).code ?? ''))throw error;}
+}

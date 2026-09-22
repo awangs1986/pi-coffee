@@ -141,6 +141,15 @@ afterEach(async () => {
 });
 
 describe("Chat/Work migration", () => {
+  it('starts a new Chat workspace in Chat and retains an explicitly selected Work mode on resume',async()=>{
+    const previous=process.env.PI_COFFEE_INITIAL_MODE;process.env.PI_COFFEE_INITIAL_MODE='chat';
+    try{
+      const make=(entries:unknown[]=[])=>{const pi=new FakePi('/workspace',entries);createWebExtension({delegateByDefault:false})(pi.asExtensionApi());createHarnessExtension({settings:new MemoryCapabilitySettingsStore()})(pi.asExtensionApi());return pi;};
+      const pi=make();await pi.emit('session_start',{});expect(pi.getActiveTools()).toEqual([...CHAT_TOOLS]);
+      await pi.runCommand('work','');const resumed=make(pi.entries);await resumed.emit('session_start',{});expect(resumed.getActiveTools()).toEqual([...WORK_TOOLS]);
+    }finally{if(previous===undefined)delete process.env.PI_COFFEE_INITIAL_MODE;else process.env.PI_COFFEE_INITIAL_MODE=previous;}
+  });
+
   it("defaults to Work and switches to zero-system Chat with exactly five tools", async () => {
     const pi = new FakePi("/workspace");
     createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());

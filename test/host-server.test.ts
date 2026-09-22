@@ -656,7 +656,7 @@ describe("Host WebSocket seam", () => {
     await expect(frames.next()).resolves.toMatchObject({ type: "error", code: "not_open" });
     socket.close();
   });
-  it("refuses lifecycle operations for unknown/active children without stopping them, and deletes only quiesced archives",async()=>{
+  it("archives without stopping children and refuses deletion until all writers are quiescent",async()=>{
     const root=mkdtempSync(join(tmpdir(),"coffee-lifecycle-"));
     const factory=new FakeFactory();const {workspaces:ws,conversation}=await workspaceConversation(root,"safe");
     const pi=await factory.create({sessionId:conversation.id}) as FakePiSession;
@@ -664,15 +664,30 @@ describe("Host WebSocket seam", () => {
     server=new HostServer({port:0,token:"lifecycle",factory,workspaces:ws});await server.start();
     const post=(action:string,extra={})=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:"POST",headers:{authorization:"Bearer lifecycle","content-type":"application/json"},body:JSON.stringify({action,id:conversation.id,...extra})});
     try {
-      expect((await post("archive")).status).toBe(409);expect(pi.stopped).toBe(false);
+      expect((await post("archive")).status).toBe(200);expect(pi.stopped).toBe(false);
+      expect((await post("delete",{confirmation:conversation.id})).status).toBe(409);
       const review=await post("changes");expect(review.status).toBe(200);expect((await review.json() as {sessionId:string}).sessionId).toBe(conversation.id);expect(pi.stopped).toBe(false);
       expect((await post("status")).status).toBe(200);
-      pi.background={known:false,active:0};expect((await post("archive")).status).toBe(409);expect(pi.stopped).toBe(false);
-      pi.background={known:true,active:0};expect((await post("archive")).status).toBe(200);expect(pi.stopped).toBe(true);
-      expect((await ws.lookup(conversation.id))?.quiesced).toBe(true);
+      pi.background={known:false,active:0};expect((await post("delete",{confirmation:conversation.id})).status).toBe(409);expect(pi.stopped).toBe(false);
+      pi.background={known:true,active:0};expect((await ws.lookup(conversation.id))?.archived).toBe(true);
       expect((await post("delete",{confirmation:conversation.id})).status).toBe(200);
       expect(await ws.lookup(conversation.id)).toBeUndefined();
     }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+  });
+
+  it('creates a Chat directory idempotently through HTTP and grants its scoped inbox',async()=>{
+    const root=mkdtempSync(join(tmpdir(),'coffee-chat-api-')),factory=new FakeFactory(),workspaces=new Workspaces(join(root,'projects'));
+    const transfer=new TransferServer({host:'127.0.0.1',port:0,workdir:root,workspaces});await transfer.start();
+    server=new HostServer({port:0,token:'chat-api',factory,workspaces,transfer});await server.start();
+    const post=(value:unknown)=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:'POST',headers:{authorization:'Bearer chat-api','content-type':'application/json'},body:JSON.stringify(value)});
+    try{
+      const request={action:'conversation',id:'chat-api-task',workspaceKind:'chat'};
+      const first=await post(request);expect(first.status).toBe(200);const c=await first.json();expect(c).toMatchObject({id:request.id,workspaceKind:'chat',creationState:'ready',cwd:join(root,'chats',request.id)});
+      expect(await (await post(request)).json()).toEqual(c);
+      const grant=await (await post({action:'files',id:c.id})).json();expect(grant).toMatchObject({scope:c.id,inbox:'inbox'});
+      expect((await post({action:'files',id:'unknown'})).status).toBe(409);
+      expect(await (await post({action:'status',id:c.id})).json()).toMatchObject({state:'local'});
+    }finally{await server.close();server=undefined;await transfer.close();rmSync(root,{recursive:true,force:true});}
   });
 
   it("routes Checkout status and legacy migration actions through the Host API",async()=>{

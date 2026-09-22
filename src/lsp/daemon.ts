@@ -55,6 +55,14 @@ export async function runLspDaemon(socketPath: string, idleMs = DEFAULT_IDLE_MS)
     resetIdle();
     receive(socket, (request) => {
       chain = chain.then(async () => {
+        if(request.args.length===1 && request.args[0]==='__shutdown') {
+          clearTimeout(idleTimer);
+          await pool.close();
+          socket.end(JSON.stringify({code:0,stdout:'',stderr:''}));
+          await new Promise<void>(resolve=>server.close(()=>resolve()));
+          try{unlinkSync(socketPath);}catch{}
+          return;
+        }
         let stdout = "";
         let stderr = "";
         const code = await runCoffeeLsp([...request.args, "--no-daemon"], {

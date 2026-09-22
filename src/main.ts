@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { HostServer } from "./host/server.js";
 import { RpcPiSessionFactory } from "./host/pi-adapter.js";
@@ -13,9 +14,12 @@ void run().catch((error) => {
 });
 
 async function run(): Promise<void> {
+  process.umask(0o077); // Task evidence and native child artifacts belong to the VM owner.
   const workdir = process.env.PI_COFFEE_WORKDIR ?? process.cwd();
   const forge=process.env.PI_COFFEE_GITEA_URL && process.env.PI_COFFEE_GITEA_TOKEN && process.env.PI_COFFEE_GITEA_OWNER ? new GiteaClient({baseUrl:process.env.PI_COFFEE_GITEA_URL,token:process.env.PI_COFFEE_GITEA_TOKEN,owner:process.env.PI_COFFEE_GITEA_OWNER}) : undefined;
-  const workspaces = process.env.PI_COFFEE_PROJECT_ROOT ? new Workspaces(process.env.PI_COFFEE_PROJECT_ROOT,{ownerId:process.env.PI_COFFEE_VM_ID,forge}) : undefined;
+  const workRoot=process.env.PI_COFFEE_WORK_ROOT ?? workdir;
+  const workspaces = new Workspaces(process.env.PI_COFFEE_PROJECT_ROOT ?? join(workRoot,"projects"),{chatRoot:process.env.PI_COFFEE_CHAT_ROOT ?? join(workRoot,"chats"),ownerId:process.env.PI_COFFEE_VM_ID,forge});
+  await workspaces.list();
   const transferTls = loadTls("PI_COFFEE_TRANSFER_TLS_CERT", "PI_COFFEE_TRANSFER_TLS_KEY");
   let host: HostServer | undefined;
   const transferBind = envString("PI_COFFEE_TRANSFER_BIND", "0.0.0.0");
@@ -45,10 +49,15 @@ async function run(): Promise<void> {
     factory: new RpcPiSessionFactory({
       cwd: workdir,
       cwdForSession: workspaces ? async (id, existing) => {
-        if (await workspaces.lookup(id)) return workspaces.cwd(id);
+        if (await workspaces.lookup(id)) return workspaces.file(id,"");
         if (existing) return workdir;
-        throw new Error("Create a project conversation before prompting");
+        throw new Error("Create a Chat or Work task before prompting");
       } : undefined,
+      envForSession: async (id):Promise<Record<string,string>> => {
+        const c=await workspaces.lookup(id);
+        if(!c)return {};
+        return workspaces.runtimeEnvironment(id);
+      },
       agentDir: process.env.PI_COFFEE_AGENT_DIR,
       sessionDir: process.env.PI_COFFEE_SESSION_DIR,
       provider: process.env.PI_COFFEE_PROVIDER,

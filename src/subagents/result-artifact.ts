@@ -19,7 +19,7 @@ export function boundSubagentResult(content: unknown, details?: unknown, root?: 
   catch { return { content: [{ type: "text", text: "Subagent output was not serializable; inspect child state. No evidence file saved." }], details: { ...metadata, isError: true } }; }
   if (Buffer.byteLength(serialized) <= 4000) return { content: [{ type: "text", text: safeText }], details: metadata };
   try {
-    const dir = root ?? join(getAgentDir(), "pi-coffee", "subagent-results");
+    const dir = process.env.PI_COFFEE_DATA_ROOT ? join(process.env.PI_COFFEE_DATA_ROOT,"artifacts","subagents") : root ?? join(getAgentDir(), "pi-coffee", "subagent-results");
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const sha256 = createHash("sha256").update(serialized).digest("hex");
     const path = join(dir, `${sha256}.json`);

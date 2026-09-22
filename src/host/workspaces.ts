@@ -1,15 +1,15 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, readFile, writeFile, rename, readdir, realpath, rm, stat, cp } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute, normalize, basename } from "node:path";
+import { mkdir, readFile, writeFile, rename, readdir, realpath, rm, stat, cp, lstat, appendFile } from "node:fs/promises";
+import { join, resolve, relative, isAbsolute, normalize, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 const exec = promisify(execFile);
 export interface Project { id: string; name: string; path: string; branch: string; repoUrl?: string; repoId?: string; webUrl?: string }
-export interface Conversation { id: string; projectId: string; cwd: string; branch: string; archived: boolean; createdAt: string; startSha?: string; lastRemoteSha?: string; lastRemoteAt?: string; syncError?: string; pullRequest?: PullRequest; legacyCwd?:string; migrationBranch?:string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
+export interface Conversation { id: string; projectId?: string; workspaceKind?: "chat" | "project"; vmId?:string; creationState?:"creating"|"ready"|"failed"; creationError?:string; startBranch?:string; publishStarted?:boolean; directoryCreated?:boolean; cwd: string; branch: string; archived: boolean; createdAt: string; startSha?: string; lastRemoteSha?: string; lastRemoteAt?: string; syncError?: string; pullRequest?: PullRequest; legacyCwd?:string; migrationBranch?:string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; cleanupStarted?:boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
 interface Artifact { path:string; modifiedAt:string; size:number; available:boolean }
 export interface PullRequest { number:number; url:string; state:string; target:string; source:string }
-export interface WorkspaceOptions { ownerId?: string; forge?: CodeForge }
+export interface WorkspaceOptions { ownerId?: string; chatRoot?: string; forge?: CodeForge }
 export interface CodeForge {
   createRepository?(name:string):Promise<{repoId:string;name:string;repoUrl:string;webUrl:string;branch:string}>;
   migrateRepository?(name:string,sourceUrl:string):Promise<{repoId:string;name:string;repoUrl:string;webUrl:string;branch:string}>;
@@ -26,9 +26,9 @@ const samePath=(left:string,right:string)=> {
 const displayPath=(path:string)=> {
   if(!path || path.startsWith('/') || path.startsWith(BACKSLASH+BACKSLASH) || path.split('').some(char=>char.charCodeAt(0)<32))return false;
   const parts=path.split('/').flatMap(part=>part.split(BACKSLASH));
-  return !parts.some(part=>part==='..' || privateName(part));
+  return !parts.some(part=>part==='..' || part==='.pi-coffee' || privateName(part));
 };
-interface State { version: 2; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[] }
+interface State { version: 2; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[]; deletedIds?:string[] }
 const slug = (v: unknown) => { if(typeof v !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(v)) throw new Error('Use a project name containing letters, numbers, - or _ (1–64 characters)');return v; };
 export class Workspaces {
   private state: State = {version:2,projects:[],conversations:[]};
@@ -36,10 +36,13 @@ export class Workspaces {
   private saveTail: Promise<void> = Promise.resolve();
   private initialized = false;
   private loading?: Promise<void>;
+  readonly chatRoot:string;
   private readonly ownerId:string;
   private readonly forge?:CodeForge;
   constructor(readonly root: string, options:WorkspaceOptions={}) {
     this.root = resolve(root);
+    this.chatRoot=resolve(options.chatRoot ?? join(this.root,"..","chats"));
+    if(this.chatRoot===this.root || this.chatRoot.startsWith(this.root+"/") || this.root.startsWith(this.chatRoot+"/"))throw new Error("Chat and Project roots must be separate");
     this.ownerId=slug(options.ownerId ?? process.env.PI_COFFEE_VM_ID ?? 'vm');
     this.forge=options.forge;
   }
@@ -50,6 +53,10 @@ export class Workspaces {
   }
   private async loadState() {
     if(this.initialized) return;
+    await mkdir(this.root,{recursive:true,mode:0o700});
+    await mkdir(this.chatRoot,{recursive:true,mode:0o700});
+    const projectRoot=await realpath(this.root),chatRoot=await realpath(this.chatRoot);
+    if(chatRoot===projectRoot || chatRoot.startsWith(projectRoot+'/') || projectRoot.startsWith(chatRoot+'/'))throw new Error('Chat and Project roots must be separate');
     await mkdir(join(this.root,'.coffee'),{recursive:true,mode:0o700});
     try {
       const data=JSON.parse(await readFile(join(this.root,'.coffee','state.json'),'utf8'));
@@ -58,6 +65,7 @@ export class Workspaces {
     } catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
     let interrupted=false;
     for(const c of this.state.conversations) if(c.runState==="running") {c.runState="interrupted";interrupted=true;}
+    for(const c of this.state.conversations)if(c.creationState==='creating'){c.creationState='failed';c.creationError='Creation interrupted; retry the same task after inspecting retained files';interrupted=true;}
     if(interrupted)await this.save();
     this.initialized=true;
   }
@@ -112,10 +120,15 @@ export class Workspaces {
     if(lastReadError)throw lastReadError;
     throw new Error('Remote did not confirm the checkpoint SHA');
   }
-  private project(id:string) { const p=this.state.projects.find(p=>p.id===id);if(!p)throw new Error('Unknown project');return p; }
+  private project(id:string|undefined) { const p=this.state.projects.find(p=>p.id===id);if(!p)throw new Error('Unknown project');return p; }
   private conversation(id:string) { const c=this.state.conversations.find(c=>c.id===id);if(!c)throw new Error('Unknown workspace');return c; }
-  async list() { await this.load();await this.saveTail;return structuredClone(this.state); }
+  async list() { await this.load();await this.saveTail;return {...structuredClone(this.state),vmId:this.ownerId,capabilities:{chatWorkspaces:true}}; }
   async lookup(id:string) { await this.load();return this.state.conversations.find(c=>c.id===id); }
+  async branches(projectId:string):Promise<string[]> {
+    await this.load();const p=this.project(projectId);if(!p.repoUrl)throw new Error('Project has no Gitea repository');
+    const rows=await this.git(this.root,['ls-remote','--heads',p.repoUrl]);
+    return rows.split('\n').filter(Boolean).map(row=>row.split('\t')[1].replace(/^refs\/heads\//,'')).sort();
+  }
   async registerProject(name:unknown,repoUrl:string,branch='main',repoId?:string,webUrl?:string) {return this.mutate(async()=>{
     const safe=slug(name);this.assertProjectAvailable(safe,repoId);return this.registerProjectUnlocked(safe,repoUrl,branch,repoId,webUrl);
   });}
@@ -198,36 +211,96 @@ export class Workspaces {
     if(/^https?:/.test(normalized) && (new URL(normalized).username || new URL(normalized).password))throw new Error('Use VM Git credential storage, not URL credentials');
     await this.git(this.root,['-c','protocol.file.allow=always','ls-remote','--exit-code','--heads',normalized,branch]);return normalized;
   }
-  async createConversation(projectId:string, branch?:string, id=randomUUID()) { return this.mutate(async()=> {
+  private assertId(id:string) {
     if(!/^[a-zA-Z0-9-]{1,100}$/.test(id))throw new Error('Invalid conversation ID');
-    if(this.state.conversations.some(c=>c.id===id))throw new Error('Conversation already exists');
-    const p=this.project(projectId);const from=branch || p.branch;
-    await this.git(p.path || this.root,['check-ref-format','--branch',from]);
-    if(p.repoUrl) {
-      const cwd=join(this.root,'checkouts',id);await mkdir(join(this.root,'checkouts'),{recursive:true});
-      if(await stat(cwd).then(()=>true,()=>false))throw new Error('Checkout destination already exists; inspect it before retrying');
-      const ownedBranch=`coffee/${this.ownerId}/${id}`;
-      try {
-        await this.git(this.root,['-c','protocol.file.allow=always','clone','--origin','origin','--branch',from,'--',p.repoUrl,cwd]);
-        const head=await this.git(cwd,['rev-parse','HEAD']);
-        if(await this.remoteBranchSha(cwd,ownedBranch))throw new Error('Conversation branch already exists on Gitea; use a new Conversation ID');
-        await this.git(cwd,['checkout','-b',ownedBranch]);
-        await this.pushAndConfirm(cwd,ownedBranch,head,['--set-upstream',`--force-with-lease=refs/heads/${ownedBranch}:`,'origin',`HEAD:refs/heads/${ownedBranch}`]);
-        const baseline:Record<string,string>={};
-        for(const path of (await this.git(cwd,['ls-files','-z'])).split('\0').filter(Boolean).slice(0,5000)) {
-          if(!/\.(png|jpe?g|gif|webp|svg|md|pdf)$/i.test(path))continue;
-          try{const info=await stat(join(cwd,path));baseline[path]=`${info.mtimeMs}:${info.size}`;}catch{}
-        }
-        const c={id,projectId,cwd,branch:ownedBranch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString(),baseline};
-        this.state.conversations.push(c);await this.save();return c;
-      } catch(error) {
-        await rm(cwd,{recursive:true,force:true});
-        throw error;
-      }
+    if(this.state.deletedIds?.includes(id))throw new Error('Conversation was permanently deleted');
+  }
+  private async checkDirectory(c:Conversation) {
+    if(c.workspaceRemoved || c.cleanupStarted || c.creationState==='failed' || c.creationState==='creating')throw new Error(c.creationError || 'Workspace is not ready');
+    const info=await lstat(c.cwd).catch(()=>undefined);
+    if(!info?.isDirectory() || info.isSymbolicLink())throw new Error('Workspace directory unavailable; restore it explicitly');
+    return c.cwd;
+  }
+  async dataRoot(id:string) {
+    await this.load();const c=this.conversation(id);await this.checkDirectory(c);
+    const root=c.workspaceKind==='chat' ? c.cwd : join(c.cwd,'.pi-coffee');
+    await mkdir(root,{recursive:true,mode:0o700});
+    if(relative(await realpath(c.cwd),await realpath(root))!==(c.workspaceKind==='chat' ? '' : '.pi-coffee'))throw new Error('Workspace data directory is outside its registered path');
+    for(const dir of ['inbox','artifacts','research','images']) {
+      const path=join(root,dir);await mkdir(path,{recursive:true,mode:0o700});
+      if(relative(await realpath(root),await realpath(path))!==dir)throw new Error('Workspace data directory is outside its registered path');
     }
-    throw new Error('Project must be registered to Gitea before creating a code Conversation');
-  },()=>`conversation:${id}`); }
-  async cwd(id:string) { const c=await this.lookup(id);if(!c)throw new Error('Create a project conversation first');if(c.archived || c.workspaceRemoved)throw new Error('Restore the archived conversation first (pending deletion cannot be resumed)');return c.cwd; }
+    if(c.workspaceKind!=='chat') {
+      const exclude=resolve(c.cwd,await this.git(c.cwd,['rev-parse','--git-path','info/exclude']));
+      await mkdir(dirname(exclude),{recursive:true});
+      if(!(await readFile(exclude,'utf8').catch(()=>'' )).split('\n').includes('/.pi-coffee/'))await appendFile(exclude,'\n/.pi-coffee/\n');
+    }
+    return root;
+  }
+  async runtimeEnvironment(id:string):Promise<Record<string,string>> {
+    const c=await this.lookup(id);if(!c)throw new Error('Unknown workspace');
+    const root=await this.dataRoot(id),subagentRoot=join(root,'artifacts','subagent-runs');
+    await mkdir(subagentRoot,{recursive:true,mode:0o700});
+    return {PI_COFFEE_DATA_ROOT:root,PI_COFFEE_WORKSPACE_CWD:c.cwd,PI_COFFEE_INITIAL_MODE:c.workspaceKind==='chat'?'chat':'work',PI_SUBAGENTS_TEMP_ROOT:subagentRoot};
+  }
+  async createChatConversation(id=randomUUID()) {return this.mutate(async()=>{
+    this.assertId(id);let c=this.state.conversations.find(c=>c.id===id);
+    if(c && c.workspaceKind!=='chat')throw new Error('Creation ID belongs to a different task');
+    if(c && (!c.creationState || c.creationState==='ready')){await this.checkDirectory(c);return structuredClone(c);}
+    const cwd=join(this.chatRoot,id);
+    if(!c){
+      if(await lstat(cwd).then(()=>true,()=>false))throw new Error('Chat directory already exists; inspect it before retrying');
+      c={id,workspaceKind:'chat',vmId:this.ownerId,cwd,branch:'',archived:false,createdAt:new Date().toISOString(),creationState:'creating'};
+      this.state.conversations.push(c);await this.save();
+    }
+    try {
+      if(!c.directoryCreated){await mkdir(cwd,{mode:0o700});c.directoryCreated=true;await this.save();}
+      if(!(await lstat(cwd)).isDirectory())throw new Error('Chat directory unavailable');
+      c.creationState='ready';await this.dataRoot(id);delete c.creationError;await this.save();return structuredClone(c);
+    }catch(error){c.creationState='failed';c.creationError=`Creation failed; retained directory: ${cwd}. ${error instanceof Error ? error.message : 'Inspect before retrying'}`;await this.save();throw new Error(c.creationError);}
+  },()=>this.conversationLock(id));}
+  async createConversation(projectId:string, branch?:string, id=randomUUID()) {return this.mutate(async()=>{
+    this.assertId(id);const p=this.project(projectId),from=branch || p.branch;
+    let c=this.state.conversations.find(c=>c.id===id);
+    if(c && (c.projectId!==projectId || (c.startBranch && c.startBranch!==from)))throw new Error('Creation ID belongs to a different task');
+    if(c && (!c.creationState || c.creationState==='ready')){await this.checkDirectory(c);return structuredClone(c);}
+    if(!p.repoUrl)throw new Error('Project must be registered to Gitea before creating a code Conversation');
+    await this.git(this.root,['check-ref-format','--branch',from]);
+    const cwd=join(this.root,'checkouts',id),ownedBranch=`coffee/${this.ownerId}/${id}`;
+    await mkdir(join(this.root,'checkouts'),{recursive:true,mode:0o700});
+    if(!c) {
+      if(await lstat(cwd).then(()=>true,()=>false))throw new Error('Checkout destination already exists; inspect it before retrying');
+      c={id,projectId,workspaceKind:'project',vmId:this.ownerId,cwd,branch:ownedBranch,startBranch:from,archived:false,createdAt:new Date().toISOString(),creationState:'creating'};
+      this.state.conversations.push(c);await this.save();
+    }
+    c.creationState='creating';delete c.creationError;await this.save();
+    try {
+      if(!await lstat(cwd).then(()=>true,()=>false)) {
+        await this.git(this.root,['-c','protocol.file.allow=always','clone','--origin','origin','--branch',from,'--',p.repoUrl,cwd]);
+      } else {
+        if((await lstat(cwd)).isSymbolicLink() || await this.git(cwd,['remote','get-url','origin'])!==p.repoUrl)throw new Error('Failed creation directory changed; inspect it before retrying');
+        if(await this.git(cwd,['status','--porcelain']))throw new Error('Failed creation contains local changes; preserve them before retrying');
+      }
+      const head=await this.git(cwd,['rev-parse','HEAD']);
+      if(c.startSha && c.startSha!==head)throw new Error('Failed creation HEAD changed; inspect before retrying');
+      c.startSha=head;
+      const remote=await this.remoteBranchSha(cwd,ownedBranch);
+      if(remote && (!c.publishStarted || remote!==head))throw new Error('Conversation branch already exists on Gitea; use a new Conversation ID');
+      const current=await this.git(cwd,['symbolic-ref','--short','HEAD']);
+      if(current!==ownedBranch){if(current!==from)throw new Error('Failed creation branch changed');await this.git(cwd,['checkout','-b',ownedBranch]);}
+      c.publishStarted=true;await this.save();
+      await this.pushAndConfirm(cwd,ownedBranch,head,['--set-upstream',`--force-with-lease=refs/heads/${ownedBranch}:${remote ?? ''}`,'origin',`HEAD:refs/heads/${ownedBranch}`]);
+      c.lastRemoteSha=head;c.lastRemoteAt=new Date().toISOString();c.baseline={};
+      for(const path of (await this.git(cwd,['ls-files','-z'])).split('\0').filter(Boolean).slice(0,5000)) {
+        if(!/\.(png|jpe?g|gif|webp|svg|md|pdf)$/i.test(path))continue;
+        try {const info=await stat(join(cwd,path));c.baseline[path]=`${info.mtimeMs}:${info.size}`;}catch{}
+      }
+      c.creationState='ready';await this.dataRoot(id);await this.save();return structuredClone(c);
+    } catch(error) {
+      c.creationState='failed';c.creationError=`Creation failed; retained directory: ${cwd}. ${error instanceof Error ? error.message.slice(0,500) : 'Inspect before retrying'}`;await this.save();throw new Error(c.creationError);
+    }
+  },()=>this.conversationLock(id));}
+  async cwd(id:string) { const c=await this.lookup(id);if(!c)throw new Error('Create a task before prompting');if(c.archived || c.workspaceRemoved)throw new Error('Restore the archived conversation first (pending deletion cannot be resumed)');return this.checkDirectory(c); }
   async markRun(id:string, runState:"running"|"idle"|"interrupted") {return this.mutate(async()=>{
     const c=this.state.conversations.find(c=>c.id===id);if(!c)return;
     if(runState==="running" && c.archived)throw new Error("Conversation archived");
@@ -245,7 +318,10 @@ export class Workspaces {
   async archive(id:string, archived:boolean, quiesced=false) {return this.mutate(async()=> {const c=this.conversation(id);if(c.workspaceRemoved)throw new Error("Deletion partially completed; retry permanent deletion");c.archived=archived;c.quiesced=archived && quiesced;await this.save();return c;},()=>this.conversationLock(id));}
   async syncStatus(id:string, refresh=true) {return this.mutate(async()=>{
     const c=this.conversation(id);
-    if(c.workspaceRemoved)throw new Error('Checkout has been removed');
+    await this.checkDirectory(c);
+    if(c.workspaceKind==='chat')return {state:'local' as const,dirty:false,branch:'',lastRemoteAt:undefined,remoteSha:undefined};
+    const actualBranch=await this.git(c.cwd,['symbolic-ref','--short','HEAD']).catch(()=> 'detached HEAD');
+    if(actualBranch!==c.branch)return {state:'branch_mismatch' as const,dirty:true,branch:actualBranch,assignedBranch:c.branch,lastRemoteAt:c.lastRemoteAt,remoteSha:c.lastRemoteSha};
     const localSha=await this.git(c.cwd,['rev-parse','HEAD']);
     const dirty=Boolean(await this.git(c.cwd,['status','--porcelain=v1','--untracked-files=all']));
     let remoteSha:string|undefined;
@@ -269,11 +345,12 @@ export class Workspaces {
   },()=>this.conversationLock(id));}
   async checkpoint(id:string,paths:string[],message:string) {return this.mutate(async()=>{
     const c=this.conversation(id);
+    await this.assertCodeBranch(c);
     if(c.archived)throw new Error('Restore the conversation before checkpointing');
     if(c.runState==='running')throw new Error('Stop the conversation before checkpointing');
     if(!Array.isArray(paths) || paths.length===0)throw new Error('Choose the code files to checkpoint');
     const selected=[...new Set(paths)];
-    if(selected.some(path=>!displayPath(path) || path.split(/[\\/]/).some(privateName)))throw new Error('Checkpoint contains a private or invalid path');
+    if(selected.some(path=>!displayPath(path) || path.split(/[\\/]/).some(p=>privateName(p) || p==='.pi-coffee')))throw new Error('Checkpoint contains a private or invalid path');
     if(typeof message!=='string' || !message.trim() || message.length>200)throw new Error('Checkpoint message is required (maximum 200 characters)');
     await this.git(c.cwd,['var','GIT_AUTHOR_IDENT']).catch(()=>{throw new Error('Configure Git user.name and user.email in the VM before checkpointing');});
     await this.git(c.cwd,['add','--',...selected]);
@@ -290,7 +367,7 @@ export class Workspaces {
     }
   },()=>this.conversationLock(id));}
   async pushCheckpoint(id:string) {return this.mutate(async()=>{
-    const c=this.conversation(id);if(c.archived)throw new Error('Restore the conversation before synchronizing');if(c.runState==='running')throw new Error('Stop the conversation before synchronizing');
+    const c=this.conversation(id);await this.assertCodeBranch(c);if(c.archived)throw new Error('Restore the conversation before synchronizing');if(c.runState==='running')throw new Error('Stop the conversation before synchronizing');
     const current=await this.git(c.cwd,['symbolic-ref','--short','HEAD']);if(current!==c.branch)throw new Error('Checkout is not on its assigned Conversation branch');
     const localSha=await this.git(c.cwd,['rev-parse','HEAD']);
     try {
@@ -299,8 +376,14 @@ export class Workspaces {
       return {state:'synced' as const,dirty:Boolean(await this.git(c.cwd,['status','--porcelain=v1','--untracked-files=all'])),localSha,remoteSha,lastRemoteAt:c.lastRemoteAt,branch:c.branch};
     } catch(error) {c.syncError=error instanceof Error ? error.message.slice(0,500) : 'Checkpoint push failed';await this.save();throw error;}
   },()=>this.conversationLock(id));}
+  private async assertCodeBranch(c:Conversation) {
+    await this.checkDirectory(c);if(c.workspaceKind==='chat')throw new Error('Chat workspace has no Git synchronization');
+    if(await this.git(c.cwd,['symbolic-ref','--short','HEAD']).catch(()=> '')!==c.branch)throw new Error('Checkout is not on its assigned Conversation branch');
+    if(await this.git(c.cwd,['ls-files','--','.pi-coffee']))throw new Error('Runtime data is tracked; remove private .pi-coffee files from Git before checkpointing');
+  }
   async openPullRequest(id:string,title:string) {return this.mutate(async()=>{
     const c=this.conversation(id),p=this.project(c.projectId);
+    await this.assertCodeBranch(c);
     if(c.pullRequest?.state==='open')return c.pullRequest;
     if(!this.forge)throw new Error('Gitea pull request adapter is not configured');
     if(typeof title!=='string' || !title.trim() || title.length>200)throw new Error('Pull request title is required (maximum 200 characters)');
@@ -315,7 +398,7 @@ export class Workspaces {
     return {state:remoteSha===localSha ? 'synced' as const : 'unsynced' as const,localSha,remoteSha};
   }
   async continueFrom(projectId:string,sourceBranch:string,expectedSha:string,id=randomUUID()) {return this.mutate(async()=>{
-    if(!/^[a-zA-Z0-9-]{1,100}$/.test(id))throw new Error('Invalid conversation ID');
+    this.assertId(id);
     if(!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(expectedSha))throw new Error('Expected remote SHA is invalid');
     if(this.state.conversations.some(c=>c.id===id))throw new Error('Conversation already exists');
     const p=this.project(projectId);if(!p.repoUrl)throw new Error('Project is not backed by Gitea');
@@ -330,7 +413,7 @@ export class Workspaces {
       if(await this.remoteBranchSha(cwd,branch))throw new Error('Conversation branch already exists on Gitea; use a new Conversation ID');
       await this.git(cwd,['checkout','-b',branch]);
       await this.pushAndConfirm(cwd,branch,head,['--set-upstream',`--force-with-lease=refs/heads/${branch}:`,'origin',`HEAD:refs/heads/${branch}`]);
-      const c={id,projectId,cwd,branch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString()};this.state.conversations.push(c);await this.save();return c;
+      const c:Conversation={id,projectId,workspaceKind:'project',vmId:this.ownerId,creationState:'ready',startBranch:sourceBranch,cwd,branch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString()};this.state.conversations.push(c);await this.dataRoot(id);await this.save();return c;
     } catch(error) {await rm(cwd,{recursive:true,force:true});throw error;}
   },()=>`conversation:${id}`);}
   /** Read-only change view against the last fetched target branch. */
@@ -406,36 +489,53 @@ export class Workspaces {
     const hunk=lines.length===0 ? '@@ -0,0 +0,0 @@' : `@@ -0,0 +1,${lines.length} @@`;
     return ['diff --git a/'+path+' b/'+path,'new file mode 100644','index 0000000..0000000','--- /dev/null','+++ b/'+path,hunk,additions].join(LF)+(content.endsWith(LF) || lines.length===0 ? '' : LF+BACKSLASH+' No newline at end of file');
   }
-  async deleteWorkspace(id:string, confirmation:string, deleteHistory:()=>Promise<unknown>=async()=>{}) {return this.mutate(async()=> {
-    const c=this.conversation(id),p=this.project(c.projectId);
+  async deleteWorkspace(id:string, confirmation:string, deleteHistory:()=>Promise<unknown>=async()=>{}, includeLocalFiles=false) {return this.mutate(async()=> {
+    const c=this.conversation(id),p=c.workspaceKind==='chat' ? undefined : this.project(c.projectId);
+    if(c.runState==='running')throw new Error('Stop the conversation before deletion');
     if(!c.archived || confirmation!==id)throw new Error('Delete requires an archived conversation and its exact ID confirmation');
+    if(!c.workspaceRemoved && c.cleanupStarted && !await lstat(c.cwd).then(()=>true,()=>false))c.workspaceRemoved=true;
     if(!c.workspaceRemoved) {
+    if(c.cleanupStarted || c.creationState==='failed' || c.creationState==='creating') {
+      if(!includeLocalFiles)throw new Error('Confirm deletion of retained failed creation and local files');
+      const info=await lstat(c.cwd).catch(()=>undefined);
+      if(info?.isSymbolicLink())throw new Error('Failed creation path changed; inspect before cleanup');
+      if(info){c.cleanupStarted=true;await this.save();await rm(c.cwd,{recursive:true});}
+    } else {
+    await this.checkDirectory(c);
+    if(c.workspaceKind==='chat') {
+      if(!includeLocalFiles)throw new Error('Confirm deletion of local files, attachments and artifacts');
+      c.cleanupStarted=true;await this.save();await rm(c.cwd,{recursive:true});
+    } else {
+    if(!includeLocalFiles && (await this.scanFiles(c)).some(path=>path.startsWith('.pi-coffee/')))throw new Error('Confirm deletion of local files, attachments and artifacts');
     if(await this.git(c.cwd,['status','--porcelain']))throw new Error('Workspace has uncommitted work; preserve it before deletion');
+    if(!includeLocalFiles && await this.git(c.cwd,['ls-files','--others','--ignored','--exclude-standard']))throw new Error('Confirm deletion of ignored local files');
     const head=await this.git(c.cwd,['rev-parse','HEAD']);
-    if(p.repoUrl) {
+    if(p?.repoUrl) {
       const remote=await this.git(c.cwd,['ls-remote','--heads','origin',`refs/heads/${c.branch}`]).catch(()=>{throw new Error('Remote is unavailable; cannot prove the Checkout is recoverable');});
       if(!remote || remote.split(/\s+/)[0]!==head)throw new Error('Unpushed commits remain; checkpoint them before deleting the Checkout');
-      await rm(c.cwd,{recursive:true});
+      c.cleanupStarted=true;await this.save();await rm(c.cwd,{recursive:true});
     } else {
       throw new Error('Migrate this legacy workspace to a Gitea Checkout before deleting it');
+    }
+    }
     }
     c.workspaceRemoved=true;await this.save();
     }
     await deleteHistory();
-    // Keep the branch and uploaded files: they were not included in this destructive confirmation.
-    this.state.conversations=this.state.conversations.filter(v=>v.id!==id);await this.save();return {ok:true,retained:['remote branch','pull request','uploads','repository']};
+    // Remote objects are retained; local files are deleted only within the confirmed scope.
+    this.state.deletedIds=[...(this.state.deletedIds ?? []),id];this.state.conversations=this.state.conversations.filter(v=>v.id!==id);await this.save();return {ok:true,retained:c.workspaceKind==='chat' ? [] : ['remote branch','pull request','repository']};
   },()=>this.conversationLock(id));}
   async file(id:string,path:string) {
     const c=await this.lookup(id);if(!c)throw new Error('Unknown workspace');
-    const base=await realpath(c.cwd); const dest=await realpath(resolve(base,path || '.'));const rel=relative(base,dest);
+    await this.checkDirectory(c);const base=await realpath(c.cwd); const dest=await realpath(resolve(base,path || '.'));const rel=relative(base,dest);
     if(rel.startsWith('..') || isAbsolute(rel) || rel.split(/[\\/]/).some(privateName))throw new Error('Path outside workspace or Git internals');return dest;
   }
   async artifacts(id:string):Promise<Artifact[]> {
     await this.load();const c=this.conversation(id);if(c.workspaceRemoved)return [];
     const tracked=new Map((c.artifacts ?? []).map(a=>[a.path,{...a,available:false}]));
-    const files=(await this.git(c.cwd,['ls-files','--cached','--others','--exclude=node_modules/','--exclude=.venv/','--exclude=.git/','--exclude=.coffee/','--exclude=.pi/','--exclude=.cache/','-z'])).split('\0').filter(Boolean);
+    const files=await this.scanFiles(c);
     for(const path of files.slice(0,5000)) {
-      if(!/\.(png|jpe?g|gif|webp|svg|md|pdf)$/i.test(path) || path.split(/[\\/]/).some(p=>p.startsWith('.') || /secret|credential|token/i.test(p)))continue;
+      if(!/\.(png|jpe?g|gif|webp|svg|md|pdf)$/i.test(path) || path.split(/[\\/]/).some(p=>(p.startsWith('.') && p!=='.pi-coffee') || /secret|credential|token/i.test(p)))continue;
       try {
         const full=await this.file(id,path);const info=await stat(full);
         if(!info.isFile() || (c.baseline ? c.baseline[path]===`${info.mtimeMs}:${info.size}` : info.mtimeMs<Date.parse(c.createdAt)-1000))continue;
@@ -445,6 +545,18 @@ export class Workspaces {
     const index=[...tracked.values()].sort((a,b)=>b.modifiedAt.localeCompare(a.modifiedAt)).slice(0,200);
     if(JSON.stringify(index)!==JSON.stringify(c.artifacts ?? [])){c.artifacts=index;await this.save();}
     return structuredClone(index);
+  }
+  private async scanFiles(c:Conversation) {
+    await this.checkDirectory(c);const files:string[]=[],queue=[''];let visited=0;
+    while(queue.length && visited<5000) {
+      const dir=queue.shift()!;
+      for(const entry of await readdir(join(c.cwd,dir),{withFileTypes:true})) {
+        if(++visited>5000)break;
+        if(entry.isSymbolicLink() || privateName(entry.name) || ['node_modules','.venv','.cache'].includes(entry.name))continue;
+        const path=join(dir,entry.name);if(entry.isDirectory())queue.push(path);else if(entry.isFile())files.push(path);
+      }
+    }
+    return files;
   }
   async tree(id:string,path='') {
     const dir=await this.file(id,path);const entries=await readdir(dir,{withFileTypes:true});
