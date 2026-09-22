@@ -338,3 +338,5 @@ MVP-001..005 (已完成)
 | 2026-09-20 | 建立可持续维护的 Pi Agent 主 SPEC 与 WP 专项合同；标记 D-042/043 的旧模式设计已替代，D-037 升级为明确插件边界；保持工具清单等未决项，记录本地实现/验收差距。Gitea 不可达，尚未同步新决定或关闭工单。 |
 
 2026-09-22：HARNESS-001/002 完成 Chat/Work 运行时迁移、旧状态升级及请求边界验证；[证据](./docs/reviews/chat-work-migration-20260922.md)。T4 双用户门槛仍单独验收。
+
+2026-09-22：D-045 / PA-013 Conversation Workspace 已完成 Agent #46 / Server #3 联合实现与部署；[证据](./docs/reviews/conversation-workspaces-20260922.md)。Chat/Work 每任务独立目录，完整路径/分支/同步状态、原图及产物归属、归档保留与显式清理均进入公共 seam 验收。

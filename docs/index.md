@@ -46,6 +46,8 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 
 ## Dated research and evidence — not alternate current specifications
 
+- [Chat/Work Conversation 目录联合验收](./reviews/conversation-workspaces-20260922.md)：两仓 clean-clone 检查、真实浏览器与双 VM 目录/文件/原生 Pi/清理流程。
+
 - [工具链真实执行探针](./reviews/toolchain-smoke-20260921.md)：基础工具实调、pi-lens 注册/活动集合、环境缺项与可复跑命令。
 
 - [`work-prompt-20260920.md`](./reviews/work-prompt-20260920.md): pinned Codex and Claude Code references, Pi native prompt findings, adopted/rejected rules, subtraction of duplicated guidance, and explicit limitations.
