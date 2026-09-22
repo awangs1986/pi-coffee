@@ -2,7 +2,7 @@
 
 持续维护规格 · 修订：6 · 最近更新：2026-09-21。
 
-上位规格：[Pi Agent 主规格](./pi-agent.md)，对应 **PA-004 / PA-005 / PA-006 / PA-007 / PA-008 / PA-009 / PA-010**。Chat 零系统提示词、两模式边界、工具清单和迁移未决项由主规格统一维护，本文不重复定义。
+上位规格：[Pi Agent 主规格](./pi-agent.md)，对应 **PA-004 / PA-005 / PA-006 / PA-007 / PA-008 / PA-009 / PA-010**。Chat 零系统提示词、两模式边界、工具清单和迁移策略由主规格统一维护，本文不重复定义。
 
 本文规定 Work 正文应如何帮助模型完成任务，以及如何修改和验收它；不是某一轮“已经改好了”的汇报。
 
@@ -52,11 +52,11 @@ Pi 原生提示词的最新源码依据是 `earendil-works/pi@c596d09d9cef6fdf0d
 ## 4. 唯一正文与当前接入
 
 - 正文：[`src/harness/prompts/software-development.md`](../../src/harness/prompts/software-development.md)。
-- renderer：[`src/harness/prompt.ts`](../../src/harness/prompt.ts)，`renderHarnessPrompt("work")` 为默认；renderer 的兼容别名不代表产品模式，具体代码不在设计文档重复。
+- renderer：[`src/harness/prompt.ts`](../../src/harness/prompt.ts)，`renderHarnessPrompt("work")` 为默认；Chat 返回空字符串；退役 profile 被拒绝。
 - 插件：[`src/harness/extension.ts`](../../src/harness/extension.ts)，通过公开 `before_agent_start` hook、原有块边界去重；运行时事实另行追加。
 - 构建：[`scripts/copy-runtime.mjs`](../../scripts/copy-runtime.mjs) 将同一正文复制到编译目录，不能维护源码/构建两份正文。
 
-**设计与实现状态**：Work 保留 Pi Base 并追加正文（PA-009）；当前 hook 已能追加，但 Chat/Work 运行时隔离尚未迁移。Chat 必须在最终 provider 请求中没有系统指令，不能只让本文 renderer 返回空字符串。
+**设计与实现状态**：Work 保留 Pi Base 并追加正文（PA-009）；运行时已迁移，公开 hook 与 provider payload 清理共同落实 Chat 边界。Chat 必须在最终 provider 请求中没有系统指令，不能只让本文 renderer 返回空字符串。
 
 ## 5. 可调整的工程基线
 
@@ -76,7 +76,7 @@ Pi 原生提示词的最新源码依据是 `earendil-works/pi@c596d09d9cef6fdf0d
 
 | ID | 覆盖规则 | 证据 / 当前状态 |
 |---|---|---|
-| **WP-AC01** | WP-001～008 的关键约束、无旧模式/外部工具假设、兼容 renderer、字节预算 | `test/harness-prompt.test.ts`，本地通过；这是文本合同检查，不证明 LLM 遵守 |
+| **WP-AC01** | WP-001～008 的关键约束、无旧模式/外部工具假设、两模式 renderer、字节预算 | `test/harness-prompt.test.ts`，本地通过；这是文本合同检查，不证明 LLM 遵守 |
 | **WP-AC02** | WP-002 / WP-008：实际注入、重复幂等、动态状态、两步工具调用示例 | `test/harness-extension.test.ts`，示例通过真实 TypeBox schema 并执行发现/激活；本地通过；FakePi 不等于真实模型 |
 | **WP-AC03** | WP-008：源/构建正文一致，原生 Pi 扩展可加载，既有行为不回归 | 构建比对、`npm run check`、`npm run smoke:subagents`、`npm run smoke:web`；当次证据见评审；不代表 Chat 零提示词验收 |
 

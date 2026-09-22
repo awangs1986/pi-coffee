@@ -25,7 +25,7 @@ export function createWebAccessManifest(
     summary: "Fetch readable source content and inspect stored web-search results through the native pi-web-access extension",
     keywords: ["web", "fetch", "content", "source", "check", "research", "pi-web-access"],
     tools: tools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })),
-    supportedHarness: ["simple", "full"],
+    supportedHarness: ["chat", "work"],
     permissionSummary: "the upstream extension runs in the owning User VM; credentials and outbound provider access remain its configured responsibility",
     runnerConformance: conformedCapabilities.has("web-access") ? "passed" : "not_run",
     supportsProxyCall: false,

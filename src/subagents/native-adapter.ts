@@ -83,7 +83,7 @@ export default async function nativeAdapter(pi: ExtensionAPI): Promise<void> {
       };
       if (key === "registerCommand") return (name: string, command: any) => target.registerCommand(name, {
         ...command, async handler(args: string, ctx: any) {
-          if (!subagentsAllowed(pi)) { ctx.ui.notify("Subagents are disabled in Simple/Lean; use /harness full first.", "warning"); return; }
+          if (!subagentsAllowed(pi)) { ctx.ui.notify("Subagents are disabled in Chat; use /harness work first.", "warning"); return; }
           return command.handler(args, ctx);
         },
       });
@@ -93,7 +93,7 @@ export default async function nativeAdapter(pi: ExtensionAPI): Promise<void> {
         const adapted = ["subagent", "bg_wait"].includes(tool.name) ? boundedSubagentTool(tool, () => supervisor) : tool;
         const execute = adapted.execute;
         const guarded: ToolDefinition = { ...adapted, async execute(...args) {
-          if (!subagentsAllowed(pi)) throw new Error("Subagents are disabled in Simple/Lean; use /harness full first.");
+          if (!subagentsAllowed(pi)) throw new Error("Subagents are disabled in Chat; use /harness work first.");
           const result = await execute(...args);
           return { ...result, ...boundSubagentResult(result.content, result.details) };
         } };
@@ -117,7 +117,7 @@ export default async function nativeAdapter(pi: ExtensionAPI): Promise<void> {
   registerCapabilityManifest(pi, {
     manifest: { id: "subagent", kind: "pi-extension", origin: "suite", title: "Native subagents", summary: "Delegate research and independent tasks; 3 per conversation, 5 per VM, excess queues", keywords: ["subagent", "delegate", "research", "search", "parallel"],
       tools: bundle.map(({ name, description, parameters }) => ({ name, description, parameters })),
-      supportedHarness: ["full"], permissionSummary: "Native children run in the user VM; admission is resource scheduling, not a sandbox", runnerConformance: "passed" },
+      supportedHarness: ["work"], permissionSummary: "Native children run in the user VM; admission is resource scheduling, not a sandbox", runnerConformance: "passed" },
     initialTrust: "trusted", conformanceSource: "local",
   });
   pi.registerCommand("coffee-workspace-jobs", {description:"Host read-only lifecycle check; does not launch a child", handler:async(args,ctx)=>{

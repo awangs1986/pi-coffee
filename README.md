@@ -58,3 +58,18 @@ Important configuration:
 - [`docs/spec/lsp-middle-layer.md`](./docs/spec/lsp-middle-layer.md): `coffee-lsp` CLI and Skill.
 - [`docs/protocol.md`](./docs/protocol.md): external Host protocol.
 - [`docs/deployment/runbook.md`](./docs/deployment/runbook.md): User VM installation and probes.
+
+## Chat / Work
+
+New sessions default to Work. Use `/chat`, `/work`, or `/harness chat|work`;
+`/harness` shows the effective mode and tools. The Web command menu gets these
+commands from the Host automatically.
+
+Chat sends no system prompt and exposes read, edit, write, bash and web_search.
+Work keeps Pi Base, project guidance and Skills, adds the software-development
+body, and exposes read, edit, write, bash, git and search_tools (plus recall_folded
+when installed). Web and subagents are activated on demand; LSP uses the native
+Skill and CLI. Mode changes preserve conversation history.
+
+Pre-v2 development sessions migrate to Work with a notice and new v2 state;
+retired command aliases are rejected. See [migration evidence](docs/reviews/chat-work-migration-20260922.md).

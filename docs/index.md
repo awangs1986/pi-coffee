@@ -5,7 +5,7 @@
 
 > **2026-09-21 仓库拆分**：本仓库只维护 User VM Agent Runtime。浏览器 UI、Web gateway、Gitea identity、固定路由和 Relay 已迁至 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)。拆分决定见 [ADR-0011](./adr/0011-split-agent-runtime-and-server-repositories.md)。
 
-> **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。退役模式说明已从当前文档撤下，历史由 Git 追溯；Chat 零系统提示词和模式迁移尚未在当前检出版本实现。
+> **Pi Agent 固定设计入口**：[主 SPEC](./spec/pi-agent.md) 维护插件扩展、Chat/Work、工具克制、上下文问题、未决项和验收状态；[Work 提示词 SPEC](./spec/harness-prompt.md) 维护正文规则与行为验收。退役模式说明已从当前文档撤下，历史由 Git 追溯；Chat/Work 运行时和 Chat 零系统提示词已完成，见[迁移验收](./reviews/chat-work-migration-20260922.md)。
 
 > **Server 产品规格**：统一网关、工作台与 Web Shell 的正文已迁至 `pi-coffee-server`；本仓库的同名文档是迁移指针。Host Interface 仍以 [`protocol.md`](./protocol.md) 为准。
 
@@ -28,10 +28,10 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - [`context-recovery.md`](./spec/context-recovery.md): context ingress limits, local compaction, conservative request budgeting and failure behavior; new-mode allocation follows the main SPEC.
 - [`web-search-plugin.md`](./spec/web-search-plugin.md): Relay-backed search, bounded history and evidence artifacts; mode allocation follows the main SPEC.
 - [`subagents-plugin.md`](./spec/subagents-plugin.md): upstream executor adapter, admission/model/output contracts; does not decide the new mode mapping.
-- [`harness-plugin.md`](./spec/harness-plugin.md): native Git/Verify adapters and migration status; no separate product-mode table.
+- [`harness-plugin.md`](./spec/harness-plugin.md): native Git and explicit verification commands, with mode migration status; no separate product-mode table.
 
 - [Work 工具设计](./spec/work-tools.md)：已确认的精简集合、现有实现与迁移差距。
-- [LSP 中间层](./spec/lsp-middle-layer.md)：原生 Skill 发现、CLI 语义查询、按需语言服务器复用与项目验收；设计完成待实施。
+- [LSP 中间层](./spec/lsp-middle-layer.md)：原生 Skill 发现、CLI 语义查询、按需语言服务器复用与项目验收；CLI/Skill 已实现；详见规格中的验收边界。
 - [人工测试手册](./testing/work-prompt-manual.md)：owner 可执行的行为测试与结果模板。
 - [本轮设计审核](./reviews/chat-work-design-review-20260920.md)：确定问题、风险判断和验证边界。
 - [T0–T4 实现与验收证据](./reviews/t0-t4-implementation-20260921.md)：提交、全套/fresh-clone/真实 Gitea/跨仓结果及仍缺的双 VM 门槛。

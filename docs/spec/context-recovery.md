@@ -8,7 +8,7 @@
 
 1. **入口限量**：read/bash/grep/find/ls/git/verify 和内容获取工具返回的 content + details 超过 12000 UTF-8 字节时，先保存 VM 独立 artifact，历史接收至多 4000 字符预览和恢复路径。写盘失败只返回短错误，并警告原操作可能已执行，禁止声称已保存。subagent/bg_wait 和异步子任务通知另在原生适配器入口先归档大正文/details，只返回短摘要与索引。
 2. **搜索**：见 `web-search-plugin.md`，完整结果从不作为新搜索的默认工具历史返回。
-3. **折叠**：复用锁定的 context-fold@0.4.0，不改上游源码；当前兼容 Harness 使 recall_folded 常驻，unfold 不默认开放。这是旧工具表的实现状态，不授权向 Chat 增加工具；新模式的恢复入口/驻留归 PA-Q04/05。
+3. **折叠**：复用锁定的 context-fold@0.4.0，不改上游源码；Work 在已注册时常驻 recall_folded，unfold 不默认开放。Chat 不增加恢复工具，也不执行自动折叠 context 投影，避免注入恢复指导；本地手动压缩与最终请求预算保护仍保留。
 4. **硬压缩**：通过本地 adapter 调用原 context-fold 的确定性索引算法。未返回有效结果或报错时取消压缩，不能静默 fallback 到模型摘要。CONTEXTFOLD_COMPACT=native 或包级禁用在该 adapter 下会取消硬压缩；不要把它当作成功。
 5. **最终请求检查**：在 `before_provider_request` 对实际 payload 的系统信息、schema、消息和编码媒体进行保守估算：UTF-8 字节数 / 2；预算为 `(当前模型窗口 - min(maxTokens, 窗口/4)) × 0.85`。缺窗口配置或估算超预算则 abort 当前请求，显示恢复提示，不自动重放。这是估算和防护余量，不是跨供应商精确 token 计数；编码媒体可能被高估。模型配置虚报窗口仍需用户纠正。
 6. **手动恢复**：Web 通过既有 compact 控制帧直接请求 Pi RPC，不需要先向模型发送一句“请压缩”。Host 先检查已加载的 `context-recovery` 命令标记；扩展关闭/加载失败时拒绝，不走原生模型摘要。仅在任务停止后执行；完成 ACK 在操作成功之后发出，UI 分别显示成功、取消和失败。原历史保留，不自动续跑副作用任务。

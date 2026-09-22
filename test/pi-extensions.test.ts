@@ -17,15 +17,15 @@ import {
 import subagentsResourceExtension from "../src/subagents/extension.js";
 
 describe("PI Coffee native extension selection", () => {
-  it("loads context-fold last so deterministic compaction replaces Pi's native summary", () => {
+  it("loads Harness last to enforce the Chat boundary after packaged extensions", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
     ]);
     expect(extensions.every((path) => isAbsolute(path))).toBe(true);
     // Local extension entries point at the build output (`dist/src`); the
@@ -39,42 +39,42 @@ describe("PI Coffee native extension selection", () => {
   it("can disable only pi-subagents while retaining Harness", () => {
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
     ]);
   });
 
   it("can disable context-fold independently, leaving Pi native compaction available", () => {
     expect(resolvePiExtensions({ PI_COFFEE_CONTEXT_FOLD: "off" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
+      resolveHarnessExtension(),
     ]);
   });
 
   it("can disable the web adapters independently", () => {
     expect(resolvePiExtensions({ PI_COFFEE_WEB: "off" })).toEqual([
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_WEB_ACCESS: "off" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
     ]);
   });
 
