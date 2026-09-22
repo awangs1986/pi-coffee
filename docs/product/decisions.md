@@ -51,11 +51,13 @@ The Relay must not add a second model protocol, buffer an entire stream, or writ
 
 ## Files and images
 
-- 0.1 uploads are streamed to the current Task's User VM inbox, by default `.picode/inbox/` in that Conversation's checkout.
+- Every Conversation has one stable User VM Workspace. Chat Workspaces live under a centralized `chats/<conversation-id>/` root; Work uses the existing independent Gitea Checkout. Runtime Chat/Work mode changes do not move or silently convert that Workspace.
+- Uploads are streamed to the current Conversation's inbox. Search evidence, large tool/subagent results and generated images are stored in that same Conversation's `research`, `artifacts` and `images` areas; registered Conversations do not fall back to a global Agent directory.
 - A file is persistent in the User VM, checked for name/MIME/size and SHA-256, and never durably stored on the Control Plane.
 - Initial limits are 256 MiB per file and 1 GiB per batch.
 - Images retain the original bytes. If the selected model accepts image content, the Host sends an image block; otherwise it sends a safe path/reference so the agent can inspect it.
 - There is no thumbnail archive on the Control Plane and no malware sandbox in the User VM.
+- Product/API routing prevents accidental cross-Conversation access, but directories inside one trusted User VM are not OS security sandboxes: unrestricted Pi/Bash and the VM owner can access everything allowed to that Unix account. The complete contract is [`conversation-workspaces.md`](../spec/conversation-workspaces.md).
 
 ## Execution model
 

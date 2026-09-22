@@ -1,6 +1,6 @@
 # Pi Agent 主规格
 
-文档类型：**持续维护的设计规格（Living SPEC）** · 修订：5 · 最近更新：2026-09-22。
+文档类型：**持续维护的设计规格（Living SPEC）** · 修订：6 · 最近更新：2026-09-22。
 
 本文是 Pi Agent 部分的固定设计入口，记录已确认决定、理由、实现差距、未决项和验收依据。后续在此迭代，不另建一份按日期命名的“最新主规格”。评审记录可以按日期归档，但不能替代本文。
 
@@ -30,6 +30,7 @@
 
 | **PA-011** | Work 常驻工具精简为 read、edit、write、bash、git、search_tools；恢复可用时加 recall_folded；目录/文本搜索/文件发现/验证交给 Bash，Web 与子 Agent 按需激活 | owner 在真实测试后批准；替代原表照搬要求。运行时已按此表迁移，详见[工具 SPEC](./work-tools.md) |
 | **PA-012** | 提供能被 Pi Agent 主动发现、正确调用、解决项目问题的 LSP 中间层，采用 Skill + CLI，不用 MCP；pi-lens 不是目标或必要依赖 | 完整保留语义诊断、定义、引用、类型与符号能力，不降级为只做 lint/文本搜索。工程 Interface、按需进程复用和验收见[LSP SPEC](./lsp-middle-layer.md)，Skill/CLI 已实现，部署与性能证据独立记录 |
+| **PA-013** | 每个 Conversation 都有稳定的 User VM Workspace；Chat 集中在 `chats/` 根下按 Conversation 分目录，Work 使用独立 Gitea Checkout | 附件、搜索证据、图片和工具产物必须跟随所属 Conversation，不能回退到跨 Conversation 的全局 Agent 目录。运行模式和 Workspace 类型是两个维度；完整路径、泄露边界与生命周期见[Conversation Workspace SPEC](./conversation-workspaces.md) |
 
 ### 模式边界的验收解释
 
@@ -148,3 +149,5 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 | 2026-09-21 | owner 确认 / 设计落实 | PA-011 精简 Work 常驻集合；PA-012 建立 Skill + CLI 的完整 LSP 中间层目标，pi-lens 降为候选实现。原表照搬与“仅诊断 CLI”建议均被取代 | [工具 SPEC](./work-tools.md)、[LSP SPEC](./lsp-middle-layer.md)；设计已完成，运行时与真实验收待实施；Gitea 连接失败待同步 |
 
 2026-09-22：owner 要求完成两模式迁移；工程落实 PA-Q01/03/04，新旧会话策略、工具表、请求边界与测试同步。
+
+2026-09-22：owner 补充确认 PA-013；Chat 和 Work 均有逐 Conversation 本地目录，Chat 统一置于 `chats/` 父目录，附件、搜索、图片与产物不再使用跨 Conversation 全局落点。该项设计已写入 SPEC，实现与部署验收待后续工单。
