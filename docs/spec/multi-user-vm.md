@@ -142,15 +142,19 @@ WebSocket 建连前必须认证、授权并校验允许的 Origin。退出、用
 
 ## 4. 项目、对话与 Checkout
 
+本节目录与任务合同由 [Conversation Workspace SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/conversation-workspaces.md) CW-01～10 统一维护；一任务对应一 Conversation 和一所属 VM 本地目录，不增加任务包含多个对话的层级。Chat 在集中 `chats/` 下使用独立子目录，无须 Gitea 项目。新增合同为待实现目标，跟踪 [Server #3](http://gitea:3000/awangs/pi-coffee-server/issues/3)。
+
 正式领域词汇由 [Agent CONTEXT](http://gitea:3000/awangs/pi-coffee/src/branch/main/CONTEXT.md) 维护。Repository 是 Gitea 代码权威，Project 是登记；代码 Conversation 拥有独立普通 clone（Checkout）及独占分支。Chat/非代码会话不被强制建仓。完整行为见 [GW-04～06](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/gitea-workspaces.md)。
 
-保留本地发现、URL、空项目和 ZIP 四个项目入口，由 Host 将其导入/登记至 Gitea。Server 只提交请求、展示创建状态，不执行 Git 或保存 VM Git 凭据。空仓库初始化使用真实作者身份，ZIP 导入继续验证路径、符号链接、覆盖、文件数和解压大小。新会话选择远端起始分支，由 Host 记录精确 SHA，分配独立 cwd 和分支。
+保留本地发现、URL、空项目和 ZIP 四个项目入口，由 Host 将其导入/登记至 Gitea。Server 只提交请求、展示创建状态，不执行 Git 或保存 VM Git 凭据。空仓库初始化使用真实作者身份，ZIP 导入继续验证路径、符号链接、覆盖、文件数和解压大小。新建 Work 任务选择 Gitea 项目和远端起始分支（默认展示仓库默认分支），Host 自动 clone 并记录精确 SHA，分配独立 cwd、`.git` 和任务分支；同项目的不同任务也不共享 clone。创建中显示进度并禁用发送/上传，失败显示原因；重复提交同一创建请求不得产生重复任务或覆盖未知目录。
 
 ## 5. 并发、同步与 Gitea PR
 
 行为权威为 [GW-07～10](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/gitea-workspaces.md)。同 Conversation 的写入与 checkpoint 串行，不同 Conversation 并行；不再设计项目级本地合并锁。
 
-网页显示 repo/branch、本地 dirty、ahead/behind/diverged、最后确认 SHA/时间、同步失败及 PR 状态。实施阶段交付时 checkpoint + 正常 push 的预授权由 Host 执行；超时/远端分叉时不能虚报成功或自动强推。网页提供重试/创建或打开真实 Gitea PR；首版合并在 Gitea 完成，不另造 PR 管理器或三方冲突编辑器。
+当前任务上下文区明确显示 VM、Gitea 项目、完整绝对本地路径（可复制）、实际当前分支和同步状态；起始分支/SHA 在创建详情中保留。具体字段合同见 CW-09，不能只显示目录名或用起始分支替代当前分支。Chat Workspace 显示“无项目 / 分支不适用 / 本地文件，不适用 Git 同步”，已有 Project Workspace 切到 Chat 模式仍展示项目状态。
+
+网页显示本地 dirty、ahead/behind/diverged、最后确认 SHA/时间、同步失败及 PR 状态。断网或状态查询失败标陈旧/未知；终端切换分支或 detached HEAD 如实呈现，Host 暂停与登记分支不符的自动 checkpoint/push。实施阶段交付时 checkpoint + 正常 push 的预授权由 Host 执行；超时/远端分叉时不能虚报成功或自动强推。网页提供重试/创建或打开真实 Gitea PR；首版合并在 Gitea 完成，不另造 PR 管理器或三方冲突编辑器。
 
 跨主机接续从确认的远端 SHA 建立新的 Conversation/Checkout/分支；网页明确只恢复版本化代码，Pi 历史、上传及未提交文件仍属于原 VM。不会将用户的固定路由静默切到另一 VM，也不将原 Conversation branch 分配给第二个写入者。
 
@@ -158,7 +162,9 @@ WebSocket 建连前必须认证、授权并校验允许的 Origin。退出、用
 
 行为权威为 [GW-11～12](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/gitea-workspaces.md)。主界面只有归档；归档保留代码、历史、上传与远端 branch/PR，不隐式终止运行。空闲且改动范围明确时尝试 checkpoint，离线/失败可本地归档并显示未同步。
 
-永久删除仅在归档页，逐项列出 Checkout、原生历史、附件/产物、远端 branch/PR 的去留；确认针对具体资源，未推送代码或无备份的未版本化文件不能因“PR 已合并”被自动清理。运行中禁止清理，远端不可达不能自动认定已同步。部分失败与重试状态必须可见，默认保留远端资源。
+任务重命名、页面刷新、重连和模式切换不改变本地路径；目录丢失显示不可用，不能静默重建、换目录或 clone。
+
+只有归档页明确的“永久清理”才可删除本地文件夹，逐项列出 Workspace 完整路径、原生历史、附件/产物、远端 branch/PR 的去留；确认针对具体资源，未推送代码或无备份的未版本化文件不能因“PR 已合并”被自动清理。运行中禁止清理，远端不可达不能自动认定已同步。部分失败与重试状态必须可见，默认保留远端资源。
 
 迁移由 Host 执行，Server 呈现预演/进度/失败/恢复：旧 worktree、dirty/untracked/ignored、未推送 commit、归档及无 cwd 会话均须保留数据，验证后切换映射。旧协议按能力协商兼容，T4 验收通过前保留回滚路径；不能只改页面名就宣称已迁移。
 
