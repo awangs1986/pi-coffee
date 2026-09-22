@@ -51,7 +51,9 @@ untrusted networks.
 ## Lifecycle
 
 - Browser or Web gateway disconnect: accepted Agent work continues.
-- Web/Relay restart: Host sessions continue.
+- Web/Relay restart: Host sessions continue. The current Web login cookie is
+  process-local and is invalid after a Web restart; sign in through Gitea again
+  to reattach to the unchanged Host conversation.
 - Idle Pi process stop: native conversation remains and resumes on next open.
 - Host restart: completed native history remains; an in-flight turn is marked interrupted and is not replayed automatically.
 - VM recovery: owner restores the VM snapshot and then verifies Host token, native credentials and routes.
@@ -78,3 +80,21 @@ The smoke creates and deletes a temporary private repository, checkpoints a
 file, creates a PR and continues the exact SHA through a second workspace root.
 Gitea restores only pushed code; keep VM-native history, unversioned files and
 credentials in the VM recovery plan.
+
+When a User VM is cloned, changing only `PI_COFFEE_GITEA_TOKEN` is not enough.
+The owner's credential helper may still contain the source VM's Git password or
+token. Rotate the API token and the Git credential store independently, then
+verify both identities before starting Host. One non-logging way to replace an
+HTTP credential is:
+
+```bash
+printf 'protocol=http\nhost=gitea:3000\n\n' | git credential reject
+read -rsp 'Gitea runtime token: ' PI_COFFEE_GIT_TOKEN; printf '\n'
+printf 'protocol=http\nhost=gitea:3000\nusername=%s\npassword=%s\n\n' \
+  "$PI_COFFEE_GITEA_OWNER" "$PI_COFFEE_GIT_TOKEN" | git credential approve
+unset PI_COFFEE_GIT_TOKEN
+```
+
+Also replace the clone's hostname, machine ID, SSH host keys, Host transport
+token and stable VM ID, and clear copied workspaces, sessions and task output.
+Do not leave the source credential file on the clone as a backup.
