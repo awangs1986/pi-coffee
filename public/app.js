@@ -716,7 +716,7 @@ async function openSession(id) {
     saveCreation();pendingOpenId='creating';$('#create-task').disabled=true;$('#create-task').textContent='创建中…';
     try {
       const c=await workspaceApi({action:'conversation',id:creationRequest.id,workspaceKind,...(workspaceKind==='project'?{projectId,branch:existing?.startBranch || ui.startBranch.value.trim() || undefined}:{})});
-      id=c.id;activeId=id;creationRequest=null;saveCreation();workspaceSync=null;await loadWorkspace();
+      id=c.id;activeId=id;localStorage.setItem(ACTIVE_KEY,id);creationRequest=null;saveCreation();workspaceSync=null;await loadWorkspace();
     }catch(e){pendingOpenId=null;toast(e.message);await loadWorkspace();return;}
     finally{$('#create-task').disabled=false;$('#create-task').textContent='创建任务 / 重试';}
   }

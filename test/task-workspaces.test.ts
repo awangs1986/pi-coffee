@@ -5,9 +5,9 @@ it('creates Chat and Work through the Host API, displays a full cwd, and preserv
  document.documentElement.innerHTML=readFileSync('public/index.html','utf8');
  Object.defineProperty(window,'matchMedia',{value:()=>({matches:false,addEventListener(){}}),configurable:true});
  Element.prototype.scrollTo=vi.fn();
- const calls:any[]=[];let conversations:any[]=[];let fail=false;
+ const calls:any[]=[];let conversations:any[]=[];let fail=false;let holdOpen=false;
  const projects=[{id:'p',name:'owner/demo',branch:'main',webUrl:'http://gitea/owner/demo'}];
- class Socket {static OPEN=1;readyState=1;onopen:any;onmessage:any;onclose:any;onerror:any;constructor(){queueMicrotask(()=>this.onopen?.());}close(){}send(text:string){const value=JSON.parse(text);if(value.type==='open')queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({type:'opened',sessionId:value.sessionId,state:{}})}));}}
+ class Socket {static OPEN=1;readyState=1;onopen:any;onmessage:any;onclose:any;onerror:any;constructor(){queueMicrotask(()=>this.onopen?.());}close(){}send(text:string){const value=JSON.parse(text);if(value.type==='open' && !holdOpen)queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({type:'opened',sessionId:value.sessionId,state:{}})}));}}
  vi.stubGlobal('WebSocket',Socket);
  vi.stubGlobal('fetch',vi.fn(async(url:any,init:any)=>{
    if(String(url)==='/api/me')return {ok:true,json:async()=>null};
@@ -32,9 +32,10 @@ it('creates Chat and Work through the Host API, displays a full cwd, and preserv
    kind!.value='project';kind!.dispatchEvent(new Event('change'));
    const project=document.querySelector<HTMLSelectElement>('#project-select')!;project.value='p';project.dispatchEvent(new Event('change'));
    (document.querySelector('#start-branch') as HTMLInputElement).value='main';
-   fail=true;document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(10);
+   holdOpen=true;fail=true;document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(10);
    document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(10);
    const creates=calls.filter(c=>c.action==='conversation');expect(creates).toHaveLength(3);expect(creates[1].id).toBe(creates[2].id);expect(creates[2]).toMatchObject({projectId:'p',branch:'main',workspaceKind:'project'});
    expect(document.querySelector('#workspace-context')?.textContent).toContain('/home/awang/work/projects/checkouts/');
+   expect(localStorage.getItem('pi-coffee.active.v2')).toBe(creates[2].id);
  }finally{vi.clearAllTimers();vi.useRealTimers();vi.unstubAllGlobals();}
 });
