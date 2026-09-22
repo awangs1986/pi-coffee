@@ -122,7 +122,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-033` | `DECIDED` | 图片保留原始 bytes。模型支持时发送 image block，否则发送 User VM 中的安全路径/reference。 | 不假设所有模型都支持视觉；需要 capability negotiation 和清晰的 UI 状态。 |
 | `D-034` | `DECIDED` | 不生成额外的缩略图/图片归档。 | 原图只在 User VM 持久化；Control Plane 不建立 thumbnail archive。 |
 | `D-035` | `DECIDED` | 下载/引用链接必须限定 owning user 和 Conversation。 | 不能用可猜测的全局文件 URL；过期、撤销和错误状态要有测试。 |
-| `D-045` | `DECIDED` | 每个 Conversation 在所属 User VM 有唯一 Workspace；Chat 集中于 `chats/<conversation-id>/`，Work 使用独立 Gitea Checkout。 | 附件、搜索证据、图片和工具产物按 Conversation 归档；运行模式切换不移动或静默转换 Workspace。见 [`conversation-workspaces.md`](./docs/spec/conversation-workspaces.md)。 |
+| `D-045` | `DECIDED` | 一个任务 = 一个 Conversation = 一个所属 VM 本地 Workspace；Chat 集中于 `chats/<conversation-id>/`，Work 使用独立 Gitea Checkout。 | 附件、搜索证据、图片和工具产物按 Conversation 归档；运行模式切换不移动或静默转换 Workspace。见 [`conversation-workspaces.md`](./docs/spec/conversation-workspaces.md)。 |
 
 ### 部署、模块化和后续演进
 

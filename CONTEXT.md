@@ -33,7 +33,7 @@ The single browser tab that presents one user's collection of Tasks and Sessions
 _Avoid_: browser session, web worker
 
 **Task**:
-A user-level objective pursued through one or more Conversations; it is not itself a repository or a filesystem directory.
+The user-facing name for one Conversation: one task belongs to one User VM and has one dedicated local Workspace. Task and Conversation are one-to-one, not a parent/child hierarchy.
 _Avoid_: HTTP request, prompt
 
 **Native Transcript**:

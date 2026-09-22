@@ -28,6 +28,7 @@
 - **GW-04**：Project 指向已登记的 Gitea 实例及稳定 repository ID，保存可刷新 URL/默认分支；本地 Project 根目录不再是合并权威。实例必须来自管理员配置，不能让浏览器传任意带凭据后端地址。
 - **GW-05**：保留 URL 导入、发现本地仓库、创建空项目、压缩包导入四个入口。外部 GitHub/本地/ZIP 内容先导入 Gitea 后登记；外部地址可保留为 upstream，后续同步 GitHub 是独立操作，不自动双向镜像。非空目标冲突报错，不覆盖已有远端。新空仓库先建立作者身份真实的初始 commit；不会伪造作者。ZIP 解压限制和忽略敏感文件规则继续生效。
 - **GW-06**：每个代码 Conversation 从 Gitea 指定的远端分支（默认 repository 默认分支）解析到精确 commit，创建完整、独立的普通 clone；首版不共享 `.git`/alternates、不使用 shallow clone。分支名为 `coffee/<stable-owner-or-vm-id>/<conversation-uuid>`；分配后不让第二个活跃 Conversation 复用。碰撞报错/分配新 ID，不接管未知分支。
+- 一个任务对应一个 Conversation 和一个 VM 本地目录；前端完整上下文展示与创建失败/重试行为见 [CW-07～10](./conversation-workspaces.md)。
 - Host 记录 repository ID、owning VM、Conversation ID、cwd、branch、起点 SHA、最后确认远端 SHA/时间、PR 引用；元数据留 VM。clone 完成并校验后才发布可运行工作区，失败目录可诊断，重试不能误删已有文件或重复创建 Conversation。
 - Pi/Bash/Edit/Git/LSP 都使用该 Checkout。同 Conversation 的运行、checkpoint、迁移/删除互斥；不同 Conversation 可并行，不保留项目级 Git/merge 锁。可信用户在终端绕过 Host 的操作不受平台锁强制约束，操作前后需重新核查实际 Git 状态。
 - Chat/非代码会话不需要 Repository，但每个 Conversation 仍有独立的 Chat Workspace。目录、模式切换、附件/搜索/图片/产物归属与删除边界由[Conversation 工作目录 SPEC](./conversation-workspaces.md)定义；旧无工作区会话保持可读，明确选择 Workspace 后再启用写入。
