@@ -11,7 +11,7 @@
 
 ## linux002 snapshot rollback evidence
 
-- 执行人 / 复核人：网络管家（虚拟化执行） / 待应用负责人复核 Conversation UI
+- 执行人 / 复核人：网络管家（虚拟化执行） / 应用负责人侧浏览器复核完成
 - 虚拟化平台 / 宿主节点：Proxmox VE 9.2.2 / 节点 `v`（192.168.100.200）
 - VM 名称 / 不可变 VM ID：`linux-test2` / VMID `105`（Guest hostname `linux002`，smbios uuid `af6ff476-728e-4f80-8786-e62c394a5062`）
 - 维护窗口（UTC）：2026-09-22T11:33:44Z — 2026-09-22T11:35:09Z
@@ -32,10 +32,11 @@
 | VM ID / Gitea owner | linux002 / pi-coffee-t4-user2 | 同左 | PASS |
 | Host route/token match | true | true（hostUrl=ws://linux002:8788/host） | PASS |
 | Git/API identity match | owner path pi-coffee-t4-user2；API login/id=6 | 同左；api_identity_match=true | PASS |
-| Conversation/history restored | session `015745d9-…` 存在；未做可选快照后测试 turn | session_files=1 仍在 | PASS（UI 登录复核待应用负责人） |
+| Conversation/history restored | session `015745d9-…` 存在；未做可选快照后测试 turn | session_files=1 仍在；以 `pi-coffee-t4-user2` 登录后，侧栏显示 39 条，目标页实际渲染 31 个 history entry（1 user / 7 assistant / 23 tool），无截断提示 | PASS |
 | branch / local SHA / fetched remote SHA | coffee/linux002/015745d9-… / c906e721… / c906e721…；dirty=yes | 同 SHA；ahead=0 behind=0；dirty=yes | PASS |
 | linux001 and Transfer isolation | linux001 active；prepare-upload 无有效 scope token 返回 401 | 同左 | PASS |
 
 - 失败项与处置：无。说明：`hostname -f` 返回 `linux002`（非 `linux002.lan`），基线与回滚后一致。Checkout 本地 dirty=yes（仅记有/无）。Transfer 侧 `POST /api/localsend/v2/prepare-upload` 无 scope/token 时 HTTP 401。
-- 快照保留位置和计划删除条件：PVE VM 105 快照 `pi-coffee-t4-l002-20260922T113344Z`；T4 #36 验收确认后再删
+- UI 复核上下文：Conversation short ID `015745d9`；Project `pi-coffee-t4-linux002-151709`；branch `coffee/linux002/015745d9-7857-4477-8c56-1dc1a6863a38`。页面无运行中/思考残留，当前用户侧栏不含 `linux001` Conversation。未记录会话正文。
+- 快照保留位置和计划删除条件：PVE VM 105 快照 `pi-coffee-t4-l002-20260922T113344Z`；虚拟化与应用验收均已完成，可由虚拟化管理员按保留策略删除。`#36` 的普通用户对称仓库隔离门槛不要求继续保留该快照。
 - 声明：本证据不含密码、token、Cookie、会话正文或快照文件。
