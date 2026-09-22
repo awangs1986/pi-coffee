@@ -2,6 +2,8 @@
 
 > 当前协议记录已实现的接口。工作区合同由 [GW-01～12](./spec/gitea-workspaces.md) 定义；Host 和 Server 已切换到独立 Checkout、同步/PR/迁移动作，并退出平台本地 merge 接口。
 
+> **2026-09-22 目标 Workspace 合同，尚待实现**：每个 Chat/Work Conversation 的 cwd、inbox、research、artifact 和 images 归属见 [`conversation-workspaces.md`](./spec/conversation-workspaces.md)。下文 `.pi-coffee/inbox/<sessionId>` 是当前已实现帧，不能覆盖新合同；协议升级时必须返回 Host 解析的 Workspace 相对路径，浏览器不得提交 cwd。
+
 > **2026-09-19 目标拓扑变更，尚待实现**：见 [ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md)。默认只对外提供统一 HTTPS 入口，聊天和文件流由网关转到私网 VM；VM 不再要求浏览器直达。本文中的直连 Transfer 地址、双浏览器侧 TLS 和逐 VM 端口开放说明描述旧实现，不应据此配置新公网部署。当前代码／模板尚未完成文件网关，不能只关闭 VM 文件端口就声称迁移成功。网关与 Host 保持独立生命周期；文件流不在入口落盘。
 
 The Browser and Host use the same versioned JSON frame vocabulary. The Web Server validates the Browser frame and forwards it; it does not reinterpret Pi events and keeps no conversation state.
@@ -99,7 +101,7 @@ not supported.
 
 `list_sessions`, `rename_session` and `delete_session` are sidebar commands and are accepted before `open`. `delete_session` stops a live Pi process for that conversation and removes its file from the User VM's session store. Every other command needs an open Session (`not_open` error).
 
-Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`); the browser downscales before sending. Bulk uploads into the Task inbox are `FILE-001`.
+Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`); the browser downscales before sending. Bulk uploads into the Conversation inbox are `FILE-001`.
 
 ## Server frames
 

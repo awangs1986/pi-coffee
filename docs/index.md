@@ -24,6 +24,7 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 ## Maintained Agent specifications
 
 - [`pi-agent.md`](./spec/pi-agent.md): PA decisions, rationale, open questions, implementation gaps, acceptance matrix and revision history.
+- [`conversation-workspaces.md`](./spec/conversation-workspaces.md): 每个 Chat/Work Conversation 的 VM 本地目录、附件/搜索/图片/产物归属、泄露边界与生命周期。
 - [`harness-prompt.md`](./spec/harness-prompt.md): WP rules, Work prompt source, engineering budget, public extension seam and model behavior evaluation cases.
 - [`context-recovery.md`](./spec/context-recovery.md): context ingress limits, local compaction, conservative request budgeting and failure behavior; new-mode allocation follows the main SPEC.
 - [`web-search-plugin.md`](./spec/web-search-plugin.md): Relay-backed search, bounded history and evidence artifacts; mode allocation follows the main SPEC.
