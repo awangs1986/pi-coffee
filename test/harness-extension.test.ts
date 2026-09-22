@@ -7,7 +7,7 @@ import { Check } from "typebox/value";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import harnessExtension, { createHarnessExtension } from "../src/harness/extension.js";
 import { MemoryCapabilitySettingsStore } from "../src/capabilities/settings.js";
-import { FULL_TOOLS, SIMPLE_TOOLS } from "../src/harness/mode.js";
+import { WORK_TOOLS, CHAT_TOOLS } from "../src/harness/mode.js";
 import { renderHarnessPrompt } from "../src/harness/prompt.js";
 import { createWebExtension } from "../src/extensions/web-access/extension.js";
 
@@ -140,248 +140,110 @@ afterEach(async () => {
   await Promise.all(sessions.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-describe("PI Coffee V5 harness extension", () => {
-  it("keeps recovery available across mode/model changes without enabling sticky unfold", async () => {
+describe("Chat/Work migration", () => {
+  it("defaults to Work and switches to zero-system Chat with exactly five tools", async () => {
     const pi = new FakePi("/workspace");
-    for (const name of ["recall_folded", "unfold"]) pi.registerTool({
+    createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
+    createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
+    await pi.emit("session_start", {});
+    expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash", "git", "search_tools"]);
+    await pi.runCommand("chat", "");
+    expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash", "web_search"]);
+    expect(await pi.emit("before_agent_start", { systemPrompt: "BASE + PROJECT + SKILLS" })).toEqual({ systemPrompt: "" });
+    await pi.runCommand("work", "");
+    expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash", "git", "search_tools"]);
+  });
+});
+
+describe("Chat/Work session and capability boundaries", () => {
+  function setup(entries: unknown[] = [], web = true) {
+    const pi = new FakePi("/workspace", entries);
+    if (web) createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
+    for (const name of ["recall_folded", "unfold", "subagent", "bg_wait"]) pi.registerTool({
       name, label: name, description: name, parameters: {} as never,
       execute: async () => ({ content: [], details: {} }),
     });
-    harnessExtension(pi.asExtensionApi());
-    await pi.emit("session_start", {});
-    expect(pi.getActiveTools()).toContain("recall_folded");
-    expect(pi.getActiveTools()).not.toContain("unfold");
-    await pi.runCommand("harness", "full");
-    expect(pi.getActiveTools()).toContain("recall_folded");
-    await pi.runCommand("harness", "lean");
-    expect(pi.getActiveTools()).toContain("recall_folded");
-    expect(pi.getActiveTools()).not.toContain("git");
+    createHarnessExtension({ settings: new MemoryCapabilitySettingsStore(), conformedCapabilities: new Set(["subagent"]), ownerAuthority: true })(pi.asExtensionApi());
+    return pi;
+  }
+  it("persists both modes, revokes capabilities and excludes recovery from Chat", async () => {
+    const pi = setup(); await pi.emit("session_start", {});
+    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
+    expect(pi.tools.has("verify")).toBe(false);
+    await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
+    expect(pi.getActiveTools()).toContain("subagent");
+    const restoredWork = setup(pi.entries); await restoredWork.emit("session_start", {});
+    expect(restoredWork.getActiveTools()).toContain("subagent");
+    await pi.runCommand("chat", "");
+    expect(pi.getActiveTools()).toEqual([...CHAT_TOOLS]);
     await pi.emit("model_select", {});
-    expect(pi.getActiveTools()).toContain("recall_folded");
+    expect(pi.getActiveTools()).toEqual([...CHAT_TOOLS]);
+    expect((await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" })).details.code).toBe("mode-disabled");
+    const restored = setup(pi.entries); await restored.emit("session_start", {});
+    expect(restored.getActiveTools()).toEqual([...CHAT_TOOLS]);
+    await restored.runCommand("work", "");
+    expect(restored.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
   });
-
-  it("uses the frozen 8/10 tool tables and restores the mode from the session", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const first = new FakePi(cwd);
-    harnessExtension(first.asExtensionApi());
-    await first.emit("session_start", { type: "session_start", reason: "startup" });
-    expect(first.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
-
-    await first.runCommand("harness", "full");
-    expect(first.getActiveTools()).toEqual([...FULL_TOOLS]);
-    expect(first.getActiveTools()).toHaveLength(10);
-
-    const second = new FakePi(cwd, first.entries);
-    harnessExtension(second.asExtensionApi());
-    await second.emit("session_start", { type: "session_start", reason: "resume" });
-    expect(second.getActiveTools()).toEqual([...FULL_TOOLS]);
+  it.each(["simple", "lean", "full", "standard", "tdd"])("migrates stored %s to Work without retaining a command alias", async oldMode => {
+    const oldEntry = { type: "custom", customType: "pi-coffee-harness-state", data: { version: 1, mode: oldMode } };
+    const pi = setup([oldEntry]); await pi.emit("session_start", {});
+    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
+    expect(pi.entries).toContain(oldEntry);
+    expect(pi.entries.at(-1)).toMatchObject({ data: { version: 2, mode: "work", source: "migration" } });
+    expect(pi.notifications.some(n => n.message.includes("migrated to Work"))).toBe(true);
+    await pi.runCommand("harness", oldMode);
+    expect(pi.notifications.at(-1)?.message).toContain("Unknown mode");
+    expect(pi.commands.has(oldMode)).toBe(false);
   });
-
-  it("maps V3 aliases without creating a third tool table", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    harnessExtension(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    await pi.runCommand("harness", "standard");
-    expect(pi.getActiveTools()).toEqual([...FULL_TOOLS]);
-    await pi.runCommand("harness", "tdd");
-    expect(pi.getActiveTools()).toEqual([...FULL_TOOLS]);
-    expect(pi.notifications.at(-1)?.message).toContain("full");
-    await pi.runCommand("harness", "simple");
-    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
-    const verifyState = pi.entries.filter((entry: any) => entry.customType === "pi-coffee-verify-state").at(-1) as any;
-    expect(verifyState?.data.state.profile).toBe("none");
+  it("refuses unavailable modes without silently changing the current mode", async () => {
+    const pi = setup([], false); await pi.emit("session_start", {});
+    await pi.runCommand("chat", "");
+    expect(pi.notifications.at(-1)?.message).toContain("missing tools [web_search]");
+    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
   });
-
-  it("injects Work instructions once through legacy modes without replacing Pi's base", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    harnessExtension(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    const lean = (await pi.emit("before_agent_start", {
-      type: "before_agent_start",
-      prompt: "hello",
-      systemPrompt: "BASE SYSTEM",
-      systemPromptOptions: {},
-    })) as { systemPrompt: string };
-    expect(lean.systemPrompt).toContain("# Software development");
-    expect(lean.systemPrompt.match(/# Software development/g)).toHaveLength(1);
-
-    await pi.runCommand("harness", "full");
-    const full = (await pi.emit("before_agent_start", {
-      type: "before_agent_start",
-      prompt: "hello",
-      systemPrompt: lean.systemPrompt,
-      systemPromptOptions: {},
-    })) as { systemPrompt: string };
-    expect(full.systemPrompt).toContain("# Software development");
-    expect(full.systemPrompt).not.toMatch(/V3|V5/);
-    expect(full.systemPrompt.match(/# Software development/g)).toHaveLength(1);
-    expect(full.systemPrompt.startsWith("BASE SYSTEM\n\n")).toBe(true);
-    expect(full.systemPrompt).toContain(renderHarnessPrompt("work"));
-    expect(full.systemPrompt).toContain("Active harness mode: full.");
-    expect(full.systemPrompt).not.toContain("Active harness mode: simple.");
-    const repeated = (await pi.emit("before_agent_start", {
-      systemPrompt: full.systemPrompt,
-    })) as { systemPrompt: string };
-    expect(repeated.systemPrompt).toBe(full.systemPrompt);
+  it("blocks switching during a turn and restores the selected session branch", async () => {
+    const pi = setup(); await pi.emit("session_start", {});
+    const context = pi.context();
+    context.isIdle = () => false;
+    await pi.commands.get("chat")!.handler("", context);
+    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
+    context.sessionManager.getBranch = () => [{ type: "custom", customType: "pi-coffee-harness-state", data: { version: 2, mode: "chat" } }];
+    for (const handler of pi.handlers.get("session_tree")!) await handler({}, context);
+    expect(pi.getActiveTools()).toEqual([...CHAT_TOOLS]);
   });
-
-  it("keeps git and verify in the Harness table rather than the optional capability catalog", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    harnessExtension(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    expect(pi.tools.has("git")).toBe(true);
-    expect(pi.tools.has("verify")).toBe(true);
-    expect(pi.getActiveTools()).not.toContain("git");
-    const search = await pi.runTool("search_tools", { action: "search", query: "git" });
-    expect(search.content[0].text).toBe("No matching trusted capabilities.");
-    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "git" });
-    expect(activation.content[0].text).toContain("unknown");
-    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
+  it("preserves unknown future state and aborts requests until a mode is explicitly selected", async () => {
+    const saved = { type: "custom", customType: "pi-coffee-harness-state", data: { version: 99, mode: "future" } };
+    const pi = setup([saved]); await pi.emit("session_start", {});
+    expect(pi.getActiveTools()).toEqual([]);
+    expect(pi.entries).toEqual([saved]);
+    let aborted = false;
+    for (const handler of pi.handlers.get("before_provider_request")!) await handler({ payload: {} }, { ...pi.context(), abort: () => { aborted = true; } });
+    expect(aborted).toBe(true);
+    await pi.runCommand("work", "");
+    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
   });
-
-  it("keeps a not-run optional runner out of agent search while exposing honest settings status", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    for (const name of ["subagent", "bg_wait"]) {
-      pi.tools.set(name, {
-        name,
-        label: name,
-        description: `${name} optional extension tool`,
-        parameters: {} as never,
-        execute: async () => ({ content: [{ type: "text", text: "" }], details: {} }),
-      });
-    }
-    createHarnessExtension({
-      settings: new MemoryCapabilitySettingsStore(),
-      conformedCapabilities: new Set(),
-    })(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    const search = await pi.runTool("search_tools", { action: "search", query: "subagent" });
-    expect(search.content[0].text).toBe("No matching trusted capabilities.");
-    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
-    expect(activation.details).toMatchObject({ ok: false, code: "not-ready" });
-    expect(pi.getActiveTools()).toHaveLength(SIMPLE_TOOLS.length);
-
-    await pi.runCommand("capabilities", "");
-    expect(pi.notifications.at(-1)?.message).toContain("subagent");
-    expect(pi.notifications.at(-1)?.message).toContain("not_run");
+  it("keeps Pi Base, project context, Skills and Work body once; clears them all in Chat", async () => {
+    const pi = setup(); await pi.emit("session_start", {});
+    const base = "BASE SYSTEM\n<project_context>PROJECT</project_context>\nSKILLS";
+    const work = await pi.emit("before_agent_start", { systemPrompt: base }) as { systemPrompt: string };
+    expect(work.systemPrompt.startsWith(base)).toBe(true);
+    expect(work.systemPrompt).toContain(renderHarnessPrompt("work"));
+    expect(work.systemPrompt).toContain("passwordless sudo");
+    expect(work.systemPrompt).toContain("normal commit and push to the current Conversation branch are already authorized");
+    expect(work.systemPrompt).toContain("Shared/default branch merge, force-push");
+    expect(await pi.emit("before_agent_start", work)).toEqual(work);
+    await pi.runCommand("chat", "");
+    expect(await pi.emit("before_agent_start", work)).toEqual({ systemPrompt: "" });
   });
-
-  it("activates a conformed Full-only subagent bundle without changing the V5 base counts", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    for (const name of ["subagent", "bg_wait"]) {
-      pi.tools.set(name, {
-        name,
-        label: name,
-        description: `${name} optional extension tool`,
-        parameters: {} as never,
-        execute: async () => ({ content: [{ type: "text", text: "" }], details: {} }),
-      });
-    }
-    createHarnessExtension({
-      settings: new MemoryCapabilitySettingsStore(),
-      conformedCapabilities: new Set(["subagent"]),
-    })(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    expect((await pi.runTool("search_tools", { action: "search", query: "subagent" })).content[0].text)
-      .toBe("No matching trusted capabilities.");
-
-    await pi.runCommand("harness", "full");
-    expect(pi.getActiveTools()).toEqual([...FULL_TOOLS]);
-    expect(pi.getActiveTools()).toHaveLength(FULL_TOOLS.length);
-
-    const search = await pi.runTool("search_tools", { action: "search", query: "delegate child" });
-    expect(search.content[0].text).toContain("subagent");
-    expect(search.details.hits[0]).not.toHaveProperty("tools");
-    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
-    expect(activation.details).toMatchObject({ ok: true, capabilityId: "subagent" });
-    expect(pi.getActiveTools()).toEqual([...FULL_TOOLS, "subagent", "bg_wait"]);
-
-    await pi.runCommand("harness", "simple");
-    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS]);
-  });
-
-  it("reports native VM verification results without V5 gate claims", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    await writeFile(join(cwd, "package.json"), '{"type":"module"}\n');
-    await mkdir(join(cwd, ".picode"), { recursive: true });
-    await writeFile(
-      join(cwd, ".picode", "verify.json"),
-      JSON.stringify({ quick: [{ name: "smoke", command: `'${process.execPath.replace(/'/g, "'\\''")}' -e "console.log('ok')"` }] }),
-    );
-    const pi = new FakePi(cwd);
-    harnessExtension(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-    await pi.runCommand("harness", "full");
-    await pi.runCommand("verify", "profile quick");
-    const result = await pi.runTool("verify", { action: "run" });
-    expect(result.content[0].text).toContain("overall: passed");
-    expect(result.content[0].text).not.toContain("Completion Label");
-  });
-
-  it("executes the discovery example from the Work prompt without activating on search alone", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
-    createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    const examples = [...renderHarnessPrompt("work").matchAll(/search_tools\((\{[^\n]*?\})\)/g)]
-      .map((match) => JSON.parse(match[1]));
-    expect(examples).toEqual([
-      { action: "search", query: "web" },
-      { action: "activate", capability_id: "web" },
-    ]);
-    const registeredNames = [...pi.tools.keys()];
+  it("discovers Web without activating it until requested, then resets on model change", async () => {
+    const pi = setup(); await pi.emit("session_start", {});
+    const examples = [...renderHarnessPrompt("work").matchAll(/search_tools\((\{[^\n]*?\})\)/g)].map(m => JSON.parse(m[1]));
     for (const input of examples) expect(Check(pi.tools.get("search_tools")!.parameters, input)).toBe(true);
+    expect((await pi.runTool("search_tools", examples[0])).details.hits.some((h: any) => h.id === "web")).toBe(true);
     expect(pi.getActiveTools()).not.toContain("web_search");
-    const search = await pi.runTool("search_tools", examples[0]);
-    expect(search.details.hits.some((hit: { id: string }) => hit.id === examples[1].capability_id)).toBe(true);
-    expect(pi.getActiveTools()).not.toContain("web_search");
-    const activation = await pi.runTool("search_tools", examples[1]);
-    expect(activation.details).toMatchObject({ ok: true, effective: "next-model-request" });
-    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "web_search", "research_seal"]);
-    expect([...pi.tools.keys()]).toEqual(registeredNames);
-  });
-
-  it("discovers and activates the local Relay-backed web capability", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-harness-"));
-    sessions.push(cwd);
-    const pi = new FakePi(cwd);
-    createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
-    createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
-    await pi.emit("session_start", { type: "session_start", reason: "startup" });
-
-    const search = await pi.runTool("search_tools", { action: "search", query: "serper research" });
-    expect(search.content[0].text).toContain("web:");
-    const activation = await pi.runTool("search_tools", { action: "activate", capability_id: "web" });
-    expect(activation.details).toMatchObject({ ok: true, capabilityId: "web" });
-    expect(pi.getActiveTools()).toEqual([...SIMPLE_TOOLS, "web_search", "research_seal"]);
-  });
-
-  it("treats owner sudo and normal Conversation branch pushes as an existing scoped authorization", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "pi-coffee-authority-"));sessions.push(cwd);
-    const pi = new FakePi(cwd);createHarnessExtension({ settings:new MemoryCapabilitySettingsStore(), ownerAuthority:true })(pi.asExtensionApi());await pi.emit("session_start",{type:"session_start",reason:"startup"});
-    const result=await pi.emit("before_agent_start",{type:"before_agent_start",systemPrompt:"base"}) as {systemPrompt:string};
-    expect(result.systemPrompt).toContain("passwordless sudo");
-    expect(result.systemPrompt).toContain("normal commit and push to the current Conversation branch are already authorized");
-    expect(result.systemPrompt.toLowerCase()).toContain("shared/default branch merge, force-push, remote deletion, and publication remain scoped to explicit user intent");
+    expect((await pi.runTool("search_tools", examples[1])).details.ok).toBe(true);
+    expect(pi.getActiveTools()).toContain("web_search");
+    await pi.emit("model_select", {});
+    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
   });
 });

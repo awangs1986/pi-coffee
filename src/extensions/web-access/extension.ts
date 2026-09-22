@@ -79,7 +79,7 @@ function installWebExtension(pi: ExtensionAPI, options: WebExtensionOptions): vo
       summary: "Search through the Control Plane's Serper relay, optionally ask a native child Pi researcher, and seal the result as Markdown",
       keywords: ["web", "search", "internet", "serper", "research", "sources", "md", "artifact"],
       tools: [toolSchema(webSearchTool), toolSchema(sealTool)],
-      supportedHarness: ["simple", "full"],
+      supportedHarness: ["chat", "work"],
       permissionSummary: "network reads go through the Control Plane Relay; artifacts stay on the User VM",
       runnerConformance: "passed",
       supportsProxyCall: false,
@@ -133,7 +133,7 @@ function createWebSearchTool(
   return {
     name: "web_search",
     label: "Web Search",
-    description: "Search the web through the Control Plane Serper Relay. The Relay holds the Serper key; this User VM receives bounded results. Results are saved on the User VM before returning a short top-ranked brief and source index. Simple/Lean search directly without children. Full delegates to a native researcher by default; delegate=false explicitly selects direct search.",
+    description: "Search the web through the Control Plane Serper Relay. The Relay holds the Serper key; this User VM receives bounded results. Results are saved on the User VM before returning a short top-ranked brief and source index. Chat search directly without children. Work delegates to a native researcher by default; delegate=false explicitly selects direct search.",
     promptSnippet: "Use for current web facts. Read specific sources to verify important claims; do not load the whole search archive.",
     parameters: Type.Object({
       query: Type.Optional(Type.String({ description: "single search query" })),
@@ -141,7 +141,7 @@ function createWebSearchTool(
       numResults: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, description: "results per query" })),
       recencyFilter: Type.Optional(Type.Union([Type.Literal("day"), Type.Literal("week"), Type.Literal("month"), Type.Literal("year")])),
       domainFilter: Type.Optional(Type.Array(Type.String(), { maxItems: 20 })),
-      delegate: Type.Optional(Type.Boolean({ description: "Full: use a research child by default; false searches directly. Simple/Lean always search directly, even when true." })),
+      delegate: Type.Optional(Type.Boolean({ description: "Work: use a research child by default; false searches directly. Chat always search directly, even when true." })),
     }),
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const input = params as unknown as WebSearchQuery;

@@ -16,8 +16,8 @@ function completion(res: any, model: string, tool?: { name: string; args: unknow
 }
 
 describe.skipIf(process.platform !== 'linux')('real native subagents and delegated search (Linux User VM)', () => {
- it.each(['subagent', 'web', 'batch', 'background', 'background-guard', 'full', 'override', 'simple-web', 'lean-web', 'simple-no-subagent'] as const)('honors harness policy for %s with real native execution and bounded results', async (route) => {
-  const simple = route.startsWith('simple-') || route === 'lean-web';
+ it.each(['subagent', 'web', 'batch', 'background', 'background-guard', 'work', 'override', 'chat-web', 'chat-no-subagent'] as const)('honors harness policy for %s with real native execution and bounded results', async (route) => {
+  const chat = route.startsWith('chat-') || route === 'chat-web';
   const webRoute = route === 'web' || route.endsWith('-web');
   const root = await mkdtemp(join(tmpdir(), 'pi-subagent-rpc-'));
   const agentDir = join(root, 'agent'); await mkdir(agentDir);
@@ -50,7 +50,7 @@ print(n)`], {encoding:'utf8'});
     else completion(res, input.model, { name: 'web_search', args: { query: 'capacity test', delegate: true } }); // nested delegation must become a direct child search
     return;
    }
-   if (route === 'simple-no-subagent') {
+   if (route === 'chat-no-subagent') {
     if (hasResult('search_tools')) completion(res, input.model);
     else completion(res, input.model, { name: 'search_tools', args: { action: 'activate', capability_id: 'subagent' } });
     return;
@@ -64,7 +64,7 @@ print(n)`], {encoding:'utf8'});
    if (!input.tools?.some((t: any) => t.function?.name === finalTool)) {
     completion(res, input.model, { name: 'search_tools', args: { action: 'activate', capability_id: webRoute ? 'web' : 'subagent' } }); return;
    }
-   completion(res, input.model, { name: finalTool, args: webRoute ? { query: 'capacity test', ...(simple ? { delegate: true } : {}) } : route === 'batch' ? { tasks: [1,2].map(i => ({ agent: 'coffee-research', task: `Search capacity test ${i} and cite a primary source` })), async: false } : { agent: 'coffee-research', task: 'Search capacity test and cite a primary source', async: route.startsWith('background'), ...(route === 'override' ? { model: 'localtest/child' } : {}) } });
+   completion(res, input.model, { name: finalTool, args: webRoute ? { query: 'capacity test', ...(chat ? { delegate: true } : {}) } : route === 'batch' ? { tasks: [1,2].map(i => ({ agent: 'coffee-research', task: `Search capacity test ${i} and cite a primary source` })), async: false } : { agent: 'coffee-research', task: 'Search capacity test and cite a primary source', async: route.startsWith('background'), ...(route === 'override' ? { model: 'localtest/child' } : {}) } });
   });
   await new Promise<void>(r => server.listen(0,'127.0.0.1',r));
   const port = (server.address() as {port:number}).port;
@@ -83,8 +83,8 @@ print(n)`], {encoding:'utf8'});
   let events: unknown[] = [];
   try {
    await client.start();
-   if (!simple) await client.prompt('/harness full');
-   else { await client.prompt('/harness full'); await client.prompt(route === 'lean-web' ? '/harness lean' : '/harness simple'); }
+   if (!chat) await client.prompt('/harness work');
+   else { await client.prompt('/harness work'); await client.prompt(route === 'chat-web' ? '/harness chat' : '/harness chat'); }
    let notify!: () => void;
    let timer: ReturnType<typeof setTimeout> | undefined;
    const notified = route.startsWith('background') ? new Promise<void>((resolve, reject) => {
@@ -104,7 +104,7 @@ print(n)`], {encoding:'utf8'});
    }
    try { await notified; } finally { clearTimeout(timer); off(); }
    await writeFile(join(root,'events.json'),JSON.stringify(events));
-   if (route === 'simple-no-subagent') {
+   if (route === 'chat-no-subagent') {
     expect(searches).toBe(0);
     expect(requests.every(r => r.model === 'parent')).toBe(true);
     expect(requests.every(r => !r.tools.some((t:any) => ['subagent','bg_wait'].includes(t.function.name)))).toBe(true);
@@ -113,8 +113,9 @@ print(n)`], {encoding:'utf8'});
    }
    expect(JSON.stringify(events), `events: ${JSON.stringify(events).slice(-4000)}`).not.toContain('Activation failed');
    expect(searches, `events: ${JSON.stringify(events).slice(-5000)}`).toBe(route === 'batch' ? 2 : 1);
-   expect(requests[0].tools.map((t:any)=>t.function.name)).toHaveLength(simple ? 9 : 11);
-   if (simple) {
+   expect(requests[0].tools.map((t:any)=>t.function.name)).toHaveLength(chat ? 5 : 7);
+   if (chat) {
+    expect(requests.every(r => !r.messages.some((m:any) => ['system','developer'].includes(m.role)))).toBe(true);
     expect(heldPermits).toBe(0);
     expect(requests.every(r => r.model === 'parent')).toBe(true);
     expect(JSON.stringify(requests)).not.toContain('RAW_SEARCH_TAIL_NOT_FOR_PARENT');

@@ -23,7 +23,7 @@ function nativePi(events: Events): ExtensionAPI {
   const pi = { events } as unknown as ExtensionAPI;
   registerCapabilityManifest(pi, { conformanceSource: "local", manifest: {
     id: "subagent", kind: "pi-extension", origin: "suite", title: "Native subagents", summary: "Test executor",
-    keywords: [], tools: [], supportedHarness: ["simple", "full"], permissionSummary: "VM", runnerConformance: "passed",
+    keywords: [], tools: [], supportedHarness: ["chat", "work"], permissionSummary: "VM", runnerConformance: "passed",
   } });
   return pi;
 }
