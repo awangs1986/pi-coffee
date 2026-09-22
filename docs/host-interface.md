@@ -25,3 +25,16 @@ can pass through this gateway unchanged. Cross-repository release order is:
 ## Planned workspace transition
 
 [ADR-0012](./adr/0012-owner-privileges-and-gitea-checkouts.md) keeps Checkout/Git/Gitea code API operations in Host. Server displays Host-provided synchronization and PR state; OAuth credentials are not VM Git credentials. The current UI forwards the additive status/checkpoint/PR/migration actions and no longer exposes old local merge actions. Deployment compatibility and migration evidence remain T4 acceptance work.
+
+
+## Conversation directories (2026-09-22)
+
+The UI consumes Host `capabilities.chatWorkspaces`, `workspaceKind`, creation state,
+absolute display cwd, actual branch and last remote check. New Chat needs no Project;
+new Work selects Project/start branch and calls `conversation` with a stable creation ID.
+The `branches` action supplies the remote picker. Failed creation retries reuse the ID.
+All file bytes, including original inline images, go through the scoped streaming gateway
+into the owning VM inbox before a prompt can reference them. No central file persistence.
+Archive retains running work and files; permanent cleanup explicitly covers local files
+and history, retains remote objects and legacy global data, and requires the exact ID.
+The protocol additions and lifecycle guarantees are defined by Agent `docs/protocol.md`.

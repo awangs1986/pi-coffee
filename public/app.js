@@ -9,6 +9,8 @@ import {
 import { compactionNotice, isContextError } from './context-status.js';
 
 const ACTIVE_KEY = 'pi-coffee.active.v2';
+let creationRequest = (()=>{try{return JSON.parse(sessionStorage.getItem('coffee.pending-creation'));}catch{return null;}})();
+function saveCreation(){if(creationRequest)sessionStorage.setItem('coffee.pending-creation',JSON.stringify(creationRequest));else sessionStorage.removeItem('coffee.pending-creation');}
 const THEME_KEY = 'pi-coffee.theme.v1';
 const $ = (selector) => document.querySelector(selector);
 const ui = {
@@ -388,8 +390,8 @@ function renderSessionList() {
   let known = sessions.slice();
   if (activeId && !known.some((s) => s.id === activeId)) known.unshift({ id: activeId, preview: '', running: streaming, messageCount: 0, updatedAt: new Date().toISOString() });
   if(workspaceState) {
-    for(const c of workspaceState.conversations) if(!known.some(s=>s.id===c.id)) known.push({id:c.id,preview:'新对话',updatedAt:c.createdAt,running:false});
-    const selected=$('#project-select').value;
+    for(const c of workspaceState.conversations) if(!known.some(s=>s.id===c.id)) known.push({id:c.id,preview:c.creationState==='failed'?'创建失败 · 点击重试':c.creationState==='creating'?'创建中 · 点击恢复':c.workspaceKind==='chat'?'Chat 任务':'Work 任务',updatedAt:c.createdAt,running:false});
+    const selected=activeId ? '' : $('#project-select').value;
     known=known.filter(s=> {const c=workspaceState.conversations.find(c=>c.id===s.id);return Boolean(c?.archived || workspaceState.legacyArchived?.includes(s.id))===showArchived && (!selected || c?.projectId===selected);});
   }
   if (filter) known = known.filter((s) => sessionTitle(s).toLowerCase().includes(filter) || (s.preview || '').toLowerCase().includes(filter));
@@ -444,9 +446,9 @@ function openSessionMenu(session, anchor) {
   });
   if(archived) {
     const remove=el('button','popitem danger','永久删除…');remove.addEventListener('click',async()=> {
-      closeMenu();const confirmation=await askModal({title:'永久删除归档对话',text:`将删除对话历史和已由远端 SHA 确认且干净的 Checkout；保留远端分支、PR、上传文件及 Repository。未同步或未提交的成果会阻止删除。输入对话 ID 确认：${session.id}`,input:'',okLabel:'永久删除',danger:true});
+      closeMenu();const confirmation=await askModal({title:'永久删除归档对话',text:`将永久删除原生对话历史和本地目录（包括附件、搜索结果、图片及产物）：\n${workspaceState.conversations.find(c=>c.id===session.id)?.cwd || '旧对话历史；旧目录保留'}\nChat 本地文件没有 Git 备份。Work 未提交/未推送代码会阻止删除；远端分支、PR、仓库和旧全局数据保留。运行中的任务须先结束。输入 ID 确认：${session.id}`,input:'',okLabel:'永久删除',danger:true});
       if(confirmation!==session.id)return;
-      try {await workspaceApi({action:'delete',id:session.id,confirmation});await loadWorkspace();send({v:1,type:'list_sessions'});}catch(e){toast(e.message);}
+      try {await workspaceApi({action:'delete',id:session.id,confirmation,includeLocalFiles:true});await loadWorkspace();send({v:1,type:'list_sessions'});}catch(e){toast(e.message);}
     });menuNode.append(remove);
   }
   menuNode.append(rename, del);
@@ -646,7 +648,24 @@ function renderProjectContext() {
   }
   ui.projectSelect.disabled = lockedToConversation;
   ui.startBranch.disabled = lockedToConversation;
-  ui.projectSelect.title = activeProject ? activeProject.path : 'Gitea 仓库';
+  const kind=$('#task-kind');kind.disabled=lockedToConversation;
+  if(conversation)kind.value=conversation.workspaceKind==='chat'?'chat':'project';
+  const projectWorkspace=kind.value==='project';
+  ui.projectSelect.closest('label').classList.toggle('hidden',!projectWorkspace);
+  ui.startBranch.closest('label').classList.toggle('hidden',!projectWorkspace);
+  $('#create-task').classList.toggle('hidden',lockedToConversation);
+  if(!lockedToConversation && activeId)$('#create-task').textContent='为旧任务创建目录';
+  const context=$('#workspace-context');context.replaceChildren();
+  if(conversation){
+    context.append(el('span','',`VM：${conversation.vmId || workspaceState.vmId || '未知'} · ${activeProject?.name || '无项目'} · ${conversation.creationState==='failed'?'创建失败':conversation.creationState==='creating'?'创建中':'就绪'}`));
+    const path=el('code','workspace-path',conversation.cwd);const copy=el('button','btn small','复制路径');copy.type='button';
+    copy.onclick=async()=>{try{await navigator.clipboard.writeText(conversation.cwd);toast('已复制完整路径');}catch{const selection=window.getSelection();const range=document.createRange();range.selectNodeContents(path);selection.removeAllRanges();selection.addRange(range);toast('已选中完整路径，可复制');}};
+    context.append(path,copy);
+    if(activeProject?.webUrl){const link=el('a','','打开项目');link.href=activeProject.webUrl;link.target='_blank';link.rel='noopener noreferrer';context.append(link);}
+    context.append(el('span','workspace-branch',conversation.workspaceKind==='chat'?'本地文件 · 分支/同步不适用':`当前分支：${workspaceSync?.branch ?? '正在核查…'} · ${workspaceSync?.lastRemoteAt ? '最后核查 '+workspaceSync.lastRemoteAt : '尚未核查远端'}`));
+    if(conversation.creationError)context.append(el('span','',conversation.creationError));
+  }
+  ui.projectSelect.title = activeProject ? activeProject.name : 'Gitea 仓库';
   ui.startBranch.title = conversation ? `当前对话固定使用 ${conversation.branch}` : '新对话起始分支';
   ui.projectSelect.classList.toggle('locked', lockedToConversation);
   ui.startBranch.classList.toggle('locked', lockedToConversation);
@@ -676,20 +695,30 @@ function connect() {
     modelPending=null;
     if (socket !== ws) return;
     opened = false;
+    workspaceSync={...workspaceSync,state:'unknown',error:'VM 连接断开；显示上次已知值'};renderSyncState();renderProjectContext();
     setConnection('连接断开，重连中…（Host 上的任务不会被打断）', 'error');
     reconnectTimer = setTimeout(connect, 1200);
   };
   ws.onerror = () => { if (socket === ws) setConnection('连接错误', 'error'); };
 }
 async function openSession(id) {
+  if(!connected){toast('等待 VM 连接就绪');return;}
   if (pendingOpenId) return;            // an open is already in flight on this socket
   if (opened) { connect(); return; }    // one socket owns one Session: start over
-  if(!id && workspaceState) {
-    const projectId=ui.projectSelect.value;
-    if(!projectId) {toast('请先在底部选择 Gitea 仓库，或打开「管理」创建项目');queuedPrompt=null;return;}
-    pendingOpenId='creating';
-    try {const c=await workspaceApi({action:'conversation',projectId,branch:ui.startBranch.value.trim() || undefined});id=c.id;activeId=id;renderProjectContext();await loadWorkspace();}
-    catch(e) {pendingOpenId=null;queuedPrompt=null;toast(e.message);return;}
+  if(!id && !workspaceState){await loadWorkspace();if(!workspaceState){toast('工作区服务尚未就绪');return;}}
+  const existing=workspaceState?.conversations.find(c=>c.id===id);
+  if((!id && workspaceState) || existing?.creationState==='failed' || existing?.creationState==='creating') {
+    const workspaceKind=existing?.workspaceKind || $('#task-kind').value;
+    const projectId=existing?.projectId || ui.projectSelect.value;
+    if(workspaceKind==='project' && !projectId) {toast('请先选择 Gitea 项目');return;}
+    const signature=JSON.stringify([workspaceKind,projectId,existing?.startBranch || ui.startBranch.value.trim()]);
+    if(!creationRequest || creationRequest.signature!==signature)creationRequest={signature,id:existing?.id || [...crypto.getRandomValues(new Uint8Array(16))].map(b=>b.toString(16).padStart(2,'0')).join('')};
+    saveCreation();pendingOpenId='creating';$('#create-task').disabled=true;$('#create-task').textContent='创建中…';
+    try {
+      const c=await workspaceApi({action:'conversation',id:creationRequest.id,workspaceKind,...(workspaceKind==='project'?{projectId,branch:existing?.startBranch || ui.startBranch.value.trim() || undefined}:{})});
+      id=c.id;activeId=id;creationRequest=null;saveCreation();workspaceSync=null;await loadWorkspace();
+    }catch(e){pendingOpenId=null;toast(e.message);await loadWorkspace();return;}
+    finally{$('#create-task').disabled=false;$('#create-task').textContent='创建任务 / 重试';}
   }
   pendingOpenId = id || 'new';
   const frame = { v: 1, type: 'open' };
@@ -711,6 +740,7 @@ function handleFrame(frame, ws) {
       renderHeader();
       return;
     case 'opened':
+      const sameTransfer=transfer?.scope===frame.sessionId;
       opened = true;
       pendingOpenId = null;
       activeId = frame.sessionId;
@@ -718,7 +748,8 @@ function handleFrame(frame, ws) {
       statsCache = null;
       resetThread();
       clearExtensionUi();
-      resetTransfers();
+      if(!sameTransfer)resetTransfers();
+      void loadWorkspace();
       workspaceChanges=null;selectedChangedPath=null;lastChangeCardSignature='';if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();renderProjectContext();
       streaming = false;
       setStreaming(Boolean(frame.state && frame.state.isStreaming));
@@ -1132,6 +1163,7 @@ async function addFiles(files) {
       // Small images go inline with the prompt so the model can see them.
       if (attachments.length >= 8) { toast('最多 8 张内联图片，其余作为文件上传'); toUpload.push(file); continue; }
       try { attachments.push(await encodeImage(file)); } catch { toast('无法读取图片'); }
+      toUpload.push(file); // Persist original bytes before sending the inline representation.
     } else {
       toUpload.push(file);
     }
@@ -1146,7 +1178,7 @@ async function addFiles(files) {
 async function uploadFiles(files) {
   if (!transfer) {
     filesAwaitingTransfer.push(...files);
-    if (!opened && !pendingOpenId && connected) { openSession(null); toast('正在为文件建立对话…'); }
+    if (!opened && !pendingOpenId && connected) { void openSession(activeId); toast('正在为文件建立对话…'); }
     else if (opened) { toast('这个 Host 没有开启文件传输'); filesAwaitingTransfer = []; }
     return;
   }
@@ -1200,7 +1232,7 @@ function sendFile(u) {
     xhr.open('POST', `${transfer.url}/api/localsend/v2/upload?sessionId=${encodeURIComponent(u.sessionId)}&fileId=${encodeURIComponent(u.id)}&token=${encodeURIComponent(u.token)}`);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && u.state === 'uploading') { u.received = Math.max(u.received, e.loaded); renderAttachmentProgress(u); } };
     xhr.onload = () => {
-      if (xhr.status === 200) { if (u.state === 'uploading') { u.received = u.size; u.state = u.path ? 'done' : 'finishing'; } }
+      if (xhr.status === 200) { if (u.state === 'uploading') { try{const result=JSON.parse(xhr.responseText);u.path=result.path;u.sha256=result.sha256;}catch{} u.received = u.size; u.state = u.path ? 'done' : 'finishing'; } }
       else { u.state = 'failed'; u.error = xhr.status === 422 ? '校验失败（SHA-256 不匹配）' : xhr.status === 403 ? '令牌无效' : 'HTTP ' + xhr.status; }
       renderAttachments(); refreshComposer(); resolve();
     };
@@ -1346,7 +1378,7 @@ function resetTransfers() {
   transfer = null;
   renderAttachments();
 }
-function uploadsBusy() { return uploads.some((u) => u.state === 'uploading' || u.state === 'finishing'); }
+function uploadsBusy() { return filesAwaitingTransfer.length>0 || uploads.some((u) => u.state === 'uploading' || u.state === 'finishing'); }
 function completedUploads() { return uploads.filter((u) => u.state === 'done' && u.path); }
 ui.attach.addEventListener('click', () => ui.file.click());
 ui.file.addEventListener('change', () => { addFiles([...ui.file.files]); ui.file.value = ''; });
@@ -1396,7 +1428,7 @@ $('#composer').addEventListener('submit', (event) => {
   const files = completedUploads();
   if ((!text && attachments.length === 0 && files.length === 0) || !socket || socket.readyState !== WebSocket.OPEN) return;
   if(modelPending){toast('等待模型来源切换确认');return;}
-  if (uploadsBusy()) { toast('等待文件传输完成'); return; }
+  if (uploadsBusy() || uploads.some(u=>u.state==='failed')) { toast('请等待原始附件上传成功，或移除失败附件'); return; }
   const images = attachments.slice();
   if (!opened) {
     // First message of a brand-new conversation: (re)use the in-flight open
@@ -1446,6 +1478,7 @@ ui.stop.addEventListener('click', () => { if (opened) { send({ v: 1, type: 'abor
 function switchSession(id) {
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
+  resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;workspaceSync=null;
   activeId = id;
   localStorage.setItem(ACTIVE_KEY, id);
   streaming = false;
@@ -1459,7 +1492,8 @@ function switchSession(id) {
   connect();
 }
 function newSession(focus = true) {
-  prepareNew=focus && !!workspaceState && !!ui.projectSelect.value;
+  prepareNew=false;creationRequest=null;saveCreation();workspaceSync=null;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;
+  $('#task-kind').value='chat';ui.projectSelect.value='';ui.startBranch.value='';
   activeId = null;
   localStorage.removeItem(ACTIVE_KEY);
   streaming = false;
@@ -1534,17 +1568,39 @@ async function loadWorkspace() {
     $('#project-controls').classList.remove('hidden');$('#files-toggle').classList.remove('hidden');
     if (!hadWorkspace && window.matchMedia('(min-width: 1100px)').matches) setWorkspaceOpen(true);
     const select=ui.projectSelect, old=select.value;select.replaceChildren();
-    const all=document.createElement("option");all.value="";all.textContent="全部项目 / 旧对话";select.append(all);
+    const all=document.createElement("option");all.value="";all.textContent="选择项目 / 全部任务";select.append(all);
     for(const p of data.projects){const o=document.createElement('option');o.value=p.id;o.textContent=p.name;select.append(o);}
     if(data.projects.some(p=>p.id===old))select.value=old;
     renderProjectContext();
     renderSessionList();
     const hasActive=activeId && data.conversations.some(c=>c.id===activeId);
-    if(hasActive) {const id=activeId;const conversation=data.conversations.find(c=>c.id===id);$('#migrate-workspace').classList.toggle('hidden',Boolean(conversation?.startSha));$('#checkpoint-workspace').classList.toggle('hidden',!conversation?.startSha);$('#pull-request').classList.toggle('hidden',!conversation?.startSha);const grant=await workspaceApi({action:"files",id});if(activeId===id){transfer=grant;bindWorkspaceArtifacts();void refreshArtifactCards();void refreshWorkspaceStatus();void refreshWorkspaceChanges(false).then(()=>maybeRenderChangesCard()).catch(()=>undefined);}}
+    if(hasActive) {
+      const id=activeId,c=data.conversations.find(c=>c.id===id),chat=c.workspaceKind==='chat';
+      $('#migrate-workspace').classList.toggle('hidden',chat || Boolean(c.startSha));
+      $('#checkpoint-workspace').classList.toggle('hidden',chat || !c.startSha);
+      $('#pull-request').classList.toggle('hidden',chat || !c.startSha);
+      if(c.creationState==='failed' || c.creationState==='creating')return;
+      const grant=await workspaceApi({action:'files',id});
+      if(activeId===id){transfer=grant;bindWorkspaceArtifacts();void refreshArtifactCards();void refreshWorkspaceStatus();void refreshWorkspaceChanges(false).then(()=>maybeRenderChangesCard()).catch(()=>undefined);}
+    }
     else {workspaceChanges=null;workspaceSync=null;renderSyncState();for(const id of ['migrate-workspace','checkpoint-workspace','pull-request'])$('#'+id).classList.add('hidden');selectedChangedPath=null;if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();}
-  } catch(e) {if(workspaceState)toast(e.message);}
+  } catch(e) {if(workspaceState){workspaceSync={...workspaceSync,state:'unknown',error:e.message};renderSyncState();renderProjectContext();}}
 }
-ui.projectSelect.addEventListener('change',()=>{showArchived=false;renderProjectContext();renderSessionList();});
+$('#task-kind').addEventListener('change',()=>{creationRequest=null;saveCreation();renderProjectContext();});
+$('#create-task').addEventListener('click',async()=>{
+  if(activeId && !workspaceState?.conversations.some(c=>c.id===activeId)){
+    const id=activeId,workspaceKind=$('#task-kind').value,projectId=ui.projectSelect.value;
+    if(workspaceKind==='project' && !projectId)return toast('请先选择项目');
+    try{await workspaceApi({action:'conversation',id,workspaceKind,...(workspaceKind==='project'?{projectId,branch:ui.startBranch.value.trim() || undefined}:{})});await loadWorkspace();connect();}catch(e){toast(e.message);}return;
+  }
+  void openSession(null);
+});
+ui.projectSelect.addEventListener('change',async()=>{
+  creationRequest=null;saveCreation();ui.startBranch.value='';showArchived=false;renderProjectContext();renderSessionList();
+  const id=ui.projectSelect.value,list=$('#remote-branches');list.replaceChildren();if(!id || activeId)return;
+  try{const branches=await workspaceApi({action:'branches',projectId:id});if(ui.projectSelect.value!==id || activeId)return;for(const branch of branches){const option=document.createElement('option');option.value=branch;list.append(option);}ui.startBranch.value=workspaceState.projects.find(p=>p.id===id)?.branch || branches[0] || '';}
+  catch(e){toast('分支列表不可用，可填写已知远端分支：'+e.message);}
+});
 $('#show-archive').addEventListener('click',()=>{ui.projectManage.open=false;showArchived=true;renderSessionList();});
 $('#show-active').addEventListener('click',()=>{ui.projectManage.open=false;showArchived=false;renderSessionList();});
 $('#project-discover').addEventListener('click',async()=> {ui.projectManage.open=false;try{await workspaceApi({action:'discover'});await loadWorkspace();}catch(e){toast(e.message);}});
@@ -1560,12 +1616,12 @@ $('#project-add').addEventListener('click',async()=> {
 function renderSyncState() {
   const node=$('#sync-state');if(!node)return;
   if(!workspaceSync){node.textContent='';node.classList.add('hidden');return;}
-  const labels={synced:'已同步',unpublished:'未发布',ahead:'待推送',behind:'远端较新',diverged:'已分叉',unknown:'远端未知'};
+  const labels={synced:'已同步',unpublished:'未发布',ahead:'待推送',behind:'远端较新',diverged:'已分叉',unknown:'未知 / 上次值已陈旧',local:'本地文件 · 不适用 Git 同步',branch_mismatch:'分支已改变 · 暂停推送'};
   node.textContent=`${labels[workspaceSync.state] || workspaceSync.state}${workspaceSync.dirty ? ' · 有本地改动' : ''}`;
   node.title=workspaceSync.error || (workspaceSync.remoteSha ? `远端 ${workspaceSync.remoteSha.slice(0,12)} · ${workspaceSync.lastRemoteAt || ''}` : '远端分支尚未确认');node.classList.remove('hidden');node.dataset.state=workspaceSync.state;
 }
 async function refreshWorkspaceStatus() {
-  if(!activeId)return;workspaceSync=await workspaceApi({action:'status',id:activeId});renderSyncState();
+  if(!activeId)return;const id=activeId;try{const value=await workspaceApi({action:'status',id});if(id!==activeId)return;workspaceSync=value;}catch(e){if(id!==activeId)return;workspaceSync={...workspaceSync,state:'unknown',error:e.message};}renderSyncState();renderProjectContext();
 }
 $('#checkpoint-workspace').addEventListener('click',async()=>{
   if(!activeId)return toast('请先打开代码对话');
@@ -1603,7 +1659,8 @@ function renderWorkspaceSummary(data=workspaceChanges) {
 async function refreshWorkspaceChanges(announce=true) {
   if(!workspaceState || !activeId || !workspaceState.conversations.some(c=>c.id===activeId)){workspaceChanges=null;selectedChangedPath=null;renderWorkspaceSummary();renderWorkspaceList();return null;}
   if(announce)toast('正在读取 Diff 与 Checks…');
-  workspaceChanges=await workspaceApi({action:'changes',id:activeId});
+  if(workspaceState.conversations.find(c=>c.id===activeId)?.workspaceKind==='chat'){workspaceChanges=null;selectedChangedPath=null;renderWorkspaceSummary();renderWorkspaceList();return null;}
+  const id=activeId;const changes=await workspaceApi({action:'changes',id});if(id!==activeId)return null;workspaceChanges=changes;
   if(selectedChangedPath && !workspaceChanges.files.some((file) => file.path === selectedChangedPath)) selectedChangedPath=null;
   renderWorkspaceSummary();
   renderWorkspaceList();

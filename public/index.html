@@ -145,7 +145,8 @@
             </div>
           </form>
           <section id="project-controls" class="project-context hidden" aria-label="Gitea 仓库和分支">
-            <span class="context-icon" aria-hidden="true">▦</span>
+            <label class="context-field"><span class="sr-only">新任务类型</span><select id="task-kind" aria-label="新任务类型"><option value="chat">Chat · 本地目录</option><option value="project">Work · Gitea 项目</option></select></label>
+            <button id="create-task" class="btn small" type="button">创建任务</button>
             <label class="context-field context-repo">
               <span class="sr-only">Gitea 仓库</span>
               <select id="project-select" aria-label="Gitea 仓库"><option value="">选择仓库</option></select>
@@ -153,7 +154,7 @@
             <span class="context-sep" aria-hidden="true">/</span>
             <label class="context-field context-branch">
               <span class="context-branch-mark" aria-hidden="true">⎇</span>
-              <input id="start-branch" placeholder="默认项目分支" aria-label="起始分支" />
+              <input id="start-branch" list="remote-branches" placeholder="默认项目分支" aria-label="起始分支" /><datalist id="remote-branches"></datalist>
             </label>
             <details class="project-manage">
               <summary title="项目与归档管理">管理</summary>
@@ -165,6 +166,7 @@
               </div>
             </details>
           </section>
+          <section id="workspace-context" class="workspace-context" aria-live="polite" aria-label="当前任务目录"></section>
         </div>
       </main>
       <aside id="workspace-panel" class="workspace-panel hidden" aria-label="Checkout 变更审查">

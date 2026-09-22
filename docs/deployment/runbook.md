@@ -77,3 +77,15 @@ is covered by the unified entrypoint.
 2. Check the selected User VM Host independently.
 3. Restarting Web or Relay does not cancel Host work.
 4. Restore a User VM only through its owner-managed snapshot procedure.
+
+
+### Conversation workspace smoke
+
+After Agent #46 and Server #3 deployment, run
+`node scripts/smoke-conversation-workspaces.mjs` with `PI_COFFEE_SMOKE_WEB_URL`,
+`PI_COFFEE_GITEA_TEST_USER`, `PI_COFFEE_GITEA_TEST_PASSWORD` supplied through the
+operator environment. Set `PLAYWRIGHT_EXECUTABLE_PATH` to installed Chromium if needed.
+Optionally select a registered disposable Gitea project with `PI_COFFEE_SMOKE_PROJECT_ID`.
+The probe uses real OAuth, creates Chat and Work, uploads/downloads an original PNG,
+reloads, archives/restores, and verifies cwd/branch/status. It retains archived synthetic
+directories and the remote task branch for inspection. Do not save credentials in evidence.

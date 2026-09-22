@@ -714,3 +714,8 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
   .topbar .btn { white-space: nowrap; }
   .brand-title { max-width: 118px; }
 }
+
+.workspace-context {display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:12px;padding:6px 12px;color:var(--muted);max-height:145px;overflow:auto;}
+.workspace-path {overflow-wrap:anywhere;white-space:normal;flex:1 1 70%;user-select:all;}
+.workspace-branch {flex-basis:100%;overflow-wrap:anywhere;}
+.project-context {flex-wrap:wrap;}
