@@ -41,7 +41,7 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - [`spec/multi-user-vm.md`](./spec/multi-user-vm.md) and [`spec/web-shell-roadmap.md`](./spec/web-shell-roadmap.md): migration pointers to `pi-coffee-server`.
 - [`spec/mvp.md`](./spec/mvp.md) and [`spec/0.1.md`](./spec/0.1.md): release slices and ticket ordering; their old Agent-mode descriptions do not override the current main SPEC.
 - [`architecture/topology.md`](./architecture/topology.md), [`adr/`](./adr/), [`protocol.md`](./protocol.md): Agent-side topology, architectural decisions and canonical Host Interface.
-- [`deployment/runbook.md`](./deployment/runbook.md): deployment and probes; [`development/handoff-import.md`](./development/handoff-import.md): import recovery instructions; [`development/wiki-publish.md`](./development/wiki-publish.md): Wiki mirroring procedure.
+- [`deployment/runbook.md`](./deployment/runbook.md): deployment and probes; [`deployment/vm-snapshot-rollback-task.md`](./deployment/vm-snapshot-rollback-task.md): `linux002` 宿主快照回滚任务书与证据模板；[`development/handoff-import.md`](./development/handoff-import.md): import recovery instructions; [`development/wiki-publish.md`](./development/wiki-publish.md): Wiki mirroring procedure.
 
 ## Dated research and evidence — not alternate current specifications
 
