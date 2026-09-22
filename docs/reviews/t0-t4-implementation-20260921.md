@@ -58,7 +58,8 @@ Key、Host token 与 Gitea token 哈希均不同。
 | LSP 中间层 | 两个真实 Conversation 均由模型调用 `coffee-lsp status`、修复前后 `diagnostics`、`symbols`、`definition` 与 `references`，同时运行 `npm test`（各 1/1）。未观察到 LSP 与基础工具冲突。重复诊断有一次诚实返回 `diagnostics_unconfirmed`；模型未将其误报为 clean，并以已确认的即时诊断及完整 build/test 补证。 |
 | Checkpoint / PR | linux001 Conversation `9384bcf1-f116-4aeb-ba58-b8006736c0d6` 的本地、远端和 checkpoint SHA 均为 `88cab813174ce643aa50bdd5e561692466cfa1fc`，真实 PR `awangs/pi-coffee-t4-linux001-151709#1`。linux002 Conversation `015745d9-7857-4477-8c56-1dc1a6863a38` 的三者均为 `c906e721880c7ab0bdd12224da662c24cb0db7f5`，真实 PR `pi-coffee-t4-user2/pi-coffee-t4-linux002-151709#1`。 |
 | VM 内容隔离 | 两个 OAuth 用户的 workspace 列表都只包含 owning Host 的 Conversation；另一用户 Conversation ID 不可见。各自 Transfer tree token 在 owning VM 返回 200，拿到另一 VM 使用返回 401。Host token、Gitea API token、Cookie 和 Transfer token 均不同且未写入本记录。普通用户读取 `awangs` 私有仓库返回 404。 |
-| 管理员例外 | `awangs` 是 Gitea admin，因此读取普通用户私有仓库返回 200；这是 Gitea 管理员的预期全局权限。需要对称仓库不可见时，User VM owner 必须使用非管理员 Gitea 账号，管理员账号不能作为隔离验收用户。Web/Host Conversation 与 Transfer scope 未出现这一例外。 |
+| 普通用户对称私库探针 | 复用 `pi-coffee-t4-user2` 并创建一个一次性普通用户及私有仓库；两个普通用户读取自己的私有仓库均返回 200，读取对方私有仓库均返回 404。探针用户创建/仓库创建返回 201，测试后 purge 返回 204。该最小探针只验证普通用户私库流程，没有重复模型、LSP、快照或双 VM 全套。 |
+| 管理员例外 | `awangs` 是 Gitea admin，因此读取普通用户私有仓库返回 200；这是 Gitea 管理员的预期全局权限，不代表普通用户隔离失效。普通用户双向 404 已由上行独立探针确认。Web/Host Conversation 与 Transfer scope 未出现这一例外。 |
 | 克隆凭据缺陷与修复 | 首次无效凭据演练发现 `linux002` 的 `~/.pi-coffee/git-credentials` 仍保存源 VM 的 `awangs` token；仅修改 `host.env` 不会替换 Git helper。已将 credential store 改成 user ID 6 的独立 token并确认哈希与 linux001 不同；运行手册增加克隆去重步骤。未撤销源 token，因为 linux001 仍在正式使用。 |
 | 远端故障 | 将 Conversation remote 暂时改为不可达端点后，刷新状态为 `unknown`、保留 dirty 并报告 sync error；恢复 URL 后可继续。把 API token 与 Git credential store 同时替换为无效值后，checkpoint 返回 409；恢复凭据后普通 sync 成功，远端 SHA 精确一致。 |
 | 分叉与 branch 删除 | 独立本地/远端提交得到 `diverged`；普通 fetch + merge + sync 后回到 `synced`，未 force-push。删除远端 Conversation branch 后状态为 `unpublished`；普通 sync 重建 branch 并回到 `synced`。 |
@@ -67,13 +68,11 @@ Key、Host token 与 Gitea token 哈希均不同。
 | 迁移与中断 | linux001 已有真实旧 worktree 保留 dirty/untracked/`.env` 的迁移证据；两台当前 Agent 全套均覆盖迁移中断重试、半成品保护与远端精确确认。 |
 
 真实 VM snapshot rollback 已由虚拟化管理员执行，并由应用侧完成 Conversation
-UI 复核。快照恢复门槛已通过。剩余发布约束是上表的 Gitea admin 例外；如果
-发布标准要求双向仓库不可见，需要把 `linux001` 迁移到普通 Gitea 用户后重跑
-仓库可见性探针。除该项外，双 VM 的执行、LSP、同步、PR、scope 隔离和故障
-恢复路径均已实测。
+UI 复核。快照恢复门槛已通过。Gitea 管理员能够读取普通用户私库是平台权限
+事实；普通用户之间的双向仓库不可见已用一次性普通账号完成最小对称探针。
+双 VM 的执行、LSP、同步、PR、scope 隔离和故障恢复路径均已实测。
 
 ## Issue 状态原则
 
-T0–T3 已具备目标机证据；T4 的 VM snapshot rollback 门槛已完成。`#36` 在
-普通用户对称仓库隔离完成或 owner 明确取消该门槛前保持 open。不能用管理员
-特权或 fresh-clone 检查替代普通用户的双向仓库可见性探针。
+T0–T4 均具备目标机证据。VM snapshot rollback 与普通用户对称仓库隔离门槛
+均已完成，`#36` 可以关闭。管理员特权没有被当成普通用户隔离证据。
