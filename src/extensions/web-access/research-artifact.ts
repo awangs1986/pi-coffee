@@ -100,6 +100,7 @@ export function pointerContext(ref: ResearchArtifactRef, conclusion: string): st
 }
 
 export function resolveResearchRoot(env: NodeJS.ProcessEnv = process.env): string {
+  if(env.PI_COFFEE_DATA_ROOT)return join(env.PI_COFFEE_DATA_ROOT,"research");
   const configured = env.PI_COFFEE_RESEARCH_DIR?.trim();
   if (configured) return configured;
   const agentDir = env.PI_CODING_AGENT_DIR?.trim() || join(homedir(), ".pi", "agent");

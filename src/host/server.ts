@@ -1,3 +1,4 @@
+import { stopLspDaemon } from "../lsp/transport.js";
 import { readJson, json } from "../shared/http.js";
 import type { Workspaces } from "./workspaces.js";
 import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http";
@@ -69,7 +70,7 @@ export class HostServer {
       if(request.url?.startsWith("/api/")) { void this.handleApi(request,response); return; }
       if (request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ ok: true, role: "host", protocolVersion: PROTOCOL_VERSION, capabilities:{giteaCheckouts:Boolean(this.workspaces),ownerEnvironment:this.execution?.ownerEnvironment ?? false,passwordlessRoot:this.execution?.passwordlessRoot ?? false} }));
+        response.end(JSON.stringify({ ok: true, role: "host", protocolVersion: PROTOCOL_VERSION, capabilities:{giteaCheckouts:Boolean(this.workspaces),chatWorkspaces:Boolean(this.workspaces),ownerEnvironment:this.execution?.ownerEnvironment ?? false,passwordlessRoot:this.execution?.passwordlessRoot ?? false} }));
         return;
       }
       response.writeHead(404);
@@ -105,12 +106,12 @@ export class HostServer {
       // Reject mutating lifecycle operations while the parent is streaming. External commands remain trusted VM operations.
       const target=input.id;
       if(target && !["files","changes","status"].includes(input.action)) {
-        if(this.lifecycleLocks.has(target) || this.registry.get(target)?.isBusy)throw new Error("Stop the source conversation before changing its lifecycle");
+        if(this.lifecycleLocks.has(target) || (input.action!=="archive" && this.registry.get(target)?.isBusy))throw new Error("Stop the source conversation before changing its lifecycle");
         this.lifecycleLocks.add(target);locked=target;
       }
-      if(["archive","checkpoint","pull_request","delete"].includes(input.action) && target) {
+      if(target && (["checkpoint","pull_request","delete"].includes(input.action) || input.action==="conversation" && this.registry.get(target))) {
         const c=await ws.lookup(target);
-        if(!(input.action==="delete" && c?.archived && c.quiesced)) {
+        if(this.registry.get(target) || (!c?.creationState || c.creationState==='ready') && !c?.workspaceRemoved && !c?.cleanupStarted) {
           const opened=this.registry.get(target) ?? (await this.registry.open(target)).session;
           if(opened.isBusy)throw new Error("Source conversation is busy");
           const background=await opened.backgroundState();
@@ -125,10 +126,13 @@ export class HostServer {
       switch(input.action) {
         case "files": {
           if(!this.transfer || !await ws.lookup(input.id))throw new Error("Unknown workspace or file service unavailable");
-          result={url:this.transfer.publicUrl(),scope:input.id,token:this.transfer.issueToken(input.id),inbox:this.transfer.inboxFor(input.id),maxFileBytes:this.transfer.limits.maxFileBytes,maxBatchBytes:this.transfer.limits.maxBatchBytes};break;
+          if(this.lifecycleLocks.has(input.id))throw new Error("Workspace lifecycle operation in progress");
+          await ws.dataRoot(input.id);
+          result={url:this.transfer.publicUrl(),scope:input.id,token:this.transfer.issueToken(input.id),inbox:await this.transfer.inbox(input.id),maxFileBytes:this.transfer.limits.maxFileBytes,maxBatchBytes:this.transfer.limits.maxBatchBytes};break;
         }
         case "changes": result=await ws.changes(input.id);break;
         case "status": result=await ws.syncStatus(input.id,input.refresh!==false);break;
+        case "branches": result=await ws.branches(input.projectId);break;
         case "discover": result=await ws.discover();break;
         case "project": result=await ws.createProject(input.name,input.url);break;
         case "bind_project": result=await ws.bindProjectRepository(input.projectId,input.repoUrl,input.repoId,input.webUrl);break;
@@ -136,7 +140,9 @@ export class HostServer {
           if(!this.transfer || typeof input.scope!=="string" || typeof input.file!=="string")throw new Error("Upload a ZIP to a conversation inbox first");
           result=await ws.createProject(input.name,undefined,await this.transfer.importPath(input.scope,input.file));break;
         }
-        case "conversation": result=await ws.createConversation(input.projectId,input.branch);break;
+        case "conversation":
+          if(input.workspaceKind && !['chat','project'].includes(input.workspaceKind))throw new Error('Invalid workspace kind');
+          result=input.workspaceKind==='chat' ? await ws.createChatConversation(input.id) : await ws.createConversation(input.projectId,input.branch,input.id);break;
         case "continue": result=await ws.continueFrom(input.projectId,input.sourceBranch,input.sourceSha,input.id);break;
         case "migration_plan": result=await ws.migrationPlan(input.id);break;
         case "migrate": result=await ws.migrateConversation(input.id);break;
@@ -145,7 +151,7 @@ export class HostServer {
         case "pull_request": result=await ws.openPullRequest(input.id,input.title);break;
         case "archive":
         case "restore": {
-          if(await ws.lookup(input.id)) result=await ws.archive(input.id,input.action==="archive",true);
+          if(await ws.lookup(input.id)) result=await ws.archive(input.id,input.action==="archive",false);
           else {
             if(!(await this.registry.list()).some(s=>s.id===input.id))throw new Error("Unknown conversation");
             result=await ws.archiveLegacy(input.id,input.action==="archive");
@@ -153,7 +159,9 @@ export class HostServer {
           break;
         }
         case "delete": {
-          if(await ws.lookup(input.id)) result=await ws.deleteWorkspace(input.id,input.confirmation,()=>this.registry.delete(input.id));
+          await this.transfer?.quiesce(input.id);
+          await stopLspDaemon(input.id);
+          if(await ws.lookup(input.id)) result=await ws.deleteWorkspace(input.id,input.confirmation,()=>this.registry.delete(input.id),input.includeLocalFiles===true);
           else {
             if(input.id!==input.confirmation || !await ws.isArchived(input.id))throw new Error("Archive and confirm the exact conversation ID first");
             await this.registry.delete(input.id);await ws.archiveLegacy(input.id,false);result={ok:true,retained:["legacy workspace","uploads"]};
@@ -437,7 +445,7 @@ class HostSocket implements SessionSink {
       state,
     });
     this.send(boundedHistoryFrame(result.session.id, result.history.entries, result.history.leafId));
-    if (this.transfer) {
+    if (this.transfer && (!this.workspaces || await this.workspaces.lookup(result.session.id))) {
       this.send({
         v: 1,
         type: "transfer",
@@ -445,7 +453,7 @@ class HostSocket implements SessionSink {
         url: this.transfer.publicUrl(),
         scope: result.session.id,
         token: this.transfer.issueToken(result.session.id),
-        inbox: this.transfer.inboxFor(result.session.id).split("\\").join("/"),
+        inbox: await this.transfer.inbox(result.session.id),
         maxFileBytes: this.transfer.limits.maxFileBytes,
         maxBatchBytes: this.transfer.limits.maxBatchBytes,
       });
@@ -473,6 +481,7 @@ class HostSocket implements SessionSink {
     if(this.workspaces && this.session && await this.workspaces.isArchived(this.session.id)) throw new Error("Restore the archived conversation first");
     if(this.session && this.lifecycleLocks.has(this.session.id))throw new Error("Conversation lifecycle operation in progress");
     if (!this.session || !this.opened) throw new NotOpenError();
+    if(this.workspaces)await this.workspaces.cwd(this.session.id);
     if (frame.mode === "steer" || frame.mode === "follow_up") {
       // Joining a busy run: Pi owns the queue and reports it via queue_update.
       // If nothing is running, treat it as a plain prompt so the message is

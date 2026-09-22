@@ -5,6 +5,20 @@ import { describe, expect, it } from "vitest";
 import { installContextPolicy, protectLocalCompaction } from "../src/context/policy.js";
 
 describe("bounded context and local recovery", () => {
+  it('routes research and large tool/child output to the Conversation data root',async()=>{
+    const root=await mkdtemp(join(tmpdir(),'coffee-owned-artifacts-')),previous=process.env.PI_COFFEE_DATA_ROOT;
+    process.env.PI_COFFEE_DATA_ROOT=root;
+    try{
+      const {ResearchArtifactStore}=await import('../src/extensions/web-access/research-artifact.js');
+      const {boundSubagentResult}=await import('../src/subagents/result-artifact.js');
+      const ref=new ResearchArtifactStore().seal({responseId:'probe',queries:['test'],provider:'fixture',results:[],conclusion:'research evidence'});
+      expect(ref.path).toContain(join(root,'research'));expect(await readFile(ref.path,'utf8')).toContain('research evidence');
+      const child=boundSubagentResult('child evidence'.repeat(2000));expect(child.details.artifactPath).toContain(join(root,'artifacts','subagents'));
+      const handlers=new Map<string,Function>();installContextPolicy({on:(event:string,handler:Function)=>handlers.set(event,handler)} as never);
+      const result=await handlers.get('tool_result')!({toolName:'bash',content:[{type:'text',text:'tool evidence'.repeat(10000)}]},{});
+      expect(result.details.artifactPath).toContain(join(root,'artifacts','tools'));expect(await readFile(result.details.artifactPath,'utf8')).toContain('tool evidence');
+    }finally{if(previous===undefined)delete process.env.PI_COFFEE_DATA_ROOT;else process.env.PI_COFFEE_DATA_ROOT=previous;await rm(root,{recursive:true,force:true});}
+  });
   it("never falls back to model compaction if the local handler fails or declines", async () => {
     const notices: string[] = [];
     const ctx = { ui: { notify: (message: string) => notices.push(message) } };

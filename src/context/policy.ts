@@ -36,7 +36,7 @@ export function installContextPolicy(pi: ExtensionAPI): void {
     try {
       // A separate artifact is evidence, not conversational history. Write before returning a pointer.
       const safe = redactSecrets(serialized);
-      const dir = join(ctx.sessionManager.getSessionDir(), "tool-artifacts");
+      const dir = process.env.PI_COFFEE_DATA_ROOT ? join(process.env.PI_COFFEE_DATA_ROOT,"artifacts","tools") : join(ctx.sessionManager.getSessionDir(), "tool-artifacts");
       await mkdir(dir, { recursive: true, mode: 0o700 });
       const digest = createHash("sha256").update(safe).digest("hex");
       const path = join(dir, `${digest}.json`);

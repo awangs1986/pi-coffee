@@ -3,6 +3,8 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { stopLspDaemon,lspDaemonSocket } from "../src/lsp/transport.js";
+import { existsSync } from "node:fs";
 import { runCoffeeLsp } from "../src/lsp/cli.js";
 import { resolvePiSkills } from "../src/pi-skills.js";
 
@@ -60,7 +62,7 @@ describe("coffee-lsp CLI", () => {
     expect(readFileSync(join(skill, "SKILL.md"), "utf8")).toContain("coffee-lsp status");
   });
 
-  it("reuses one language-server process across default CLI calls", () => {
+  it("reuses one language-server process across default CLI calls and stops it for cleanup", async () => {
     const root = mkdtempSync(join(tmpdir(), "coffee-lsp-daemon-"));
     const source = join(root, "app.ts");
     const starts = join(root, "starts.txt");
@@ -88,6 +90,9 @@ describe("coffee-lsp CLI", () => {
         expect(JSON.parse(output)).toMatchObject({ status: "ok", diagnosticState: "clean" });
       }
       expect(readFileSync(starts, "utf8").trim().split("\n")).toEqual(["start"]);
+      await stopLspDaemon(env.PI_COFFEE_ROOT_SESSION,env);
+      await expect.poll(()=>existsSync(lspDaemonSocket(env))).toBe(false);
+      await stopLspDaemon(env.PI_COFFEE_ROOT_SESSION,env);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

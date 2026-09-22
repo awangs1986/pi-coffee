@@ -146,8 +146,42 @@ export class TransferServer {
 
   revokeAll(): void { this.tokens.clear(); this.tokenExpiry.clear(); this.uploads.clear(); }
 
+  async quiesce(scope:string):Promise<void> {
+    if([...this.uploads.values()].some(s=>s.scope===scope && [...s.files.values()].some(f=>f.state==='uploading')))throw new Error('Wait for active uploads before permanent cleanup');
+    this.tokens.delete(scope);this.tokenExpiry.delete(scope);
+    for(const [id,s] of this.uploads)if(s.scope===scope)this.uploads.delete(id);
+  }
+  private async workspaceFile(scope:string,path:string):Promise<string> {
+    await this.workspaces!.file(scope,'');
+    const legacyPrefix=this.inboxFor(scope).split(sep).join('/')+'/';
+    if(path.startsWith('.pi-coffee/inbox/') && !path.startsWith(legacyPrefix) && path.split('/').length>3) {
+      // The normal Work inbox may contain nested paths, so let its own root resolve first.
+      return this.workspaces!.file(scope,path);
+    }
+    if(path.startsWith(legacyPrefix)) {
+      const base=await realpath(join(this.workdir,this.inboxFor(scope)));
+      const full=await realpath(resolve(this.workdir,path));
+      if(!full.startsWith(base+sep) || base!==resolve(this.workdir,this.inboxFor(scope)))throw new Error('Outside legacy inbox scope');
+      return full;
+    }
+    return this.workspaces!.file(scope,path);
+  }
+  private async baseFor(scope:string):Promise<string> {
+    if(!this.workspaces)return this.workdir;
+    const c=await this.workspaces.lookup(scope);if(!c)throw new Error('Unknown workspace');
+    await this.workspaces.file(scope,'');return c.cwd;
+  }
+  async inbox(scope:string):Promise<string> {
+    if(!this.workspaces)return this.inboxFor(scope);
+    const base=await this.baseFor(scope);
+    return relative(base,join(await this.workspaces.dataRoot(scope),'inbox')).split(sep).join('/');
+  }
+  private async inboxPath(scope:string,writing=false):Promise<string> {
+    if(this.workspaces && writing)await this.workspaces.cwd(scope);
+    return join(await this.baseFor(scope),await this.inbox(scope));
+  }
   async importPath(scope:string,file:string):Promise<string> {
-    const base=await realpath(join(this.workdir,this.inboxFor(scope)));
+    const base=await realpath(await this.inboxPath(scope));
     const full=await realpath(resolve(base,file));
     if(!full.startsWith(base+sep) || !full.toLowerCase().endsWith('.zip'))throw new Error("Only a ZIP in the conversation inbox can be imported");
     return full;
@@ -182,7 +216,7 @@ export class TransferServer {
         const path=url.searchParams.get("path") ?? "";
         if(route==="artifacts") {sendJson(response,200,{artifacts:await this.workspaces.artifacts(scope)} as unknown as JsonValue);return;}
         if(route==="tree") {sendJson(response,200,await this.workspaces.tree(scope,path) as unknown as JsonValue);return;}
-        const full=await this.workspaces.file(scope,path);const info=await stat(full);
+        const full=await this.workspaceFile(scope,path);const info=await stat(full);
         if(!info.isFile())throw new Error("Not a file");
         if(route==="preview" && info.size>10*1024*1024) {sendJson(response,413,{message:"Preview exceeds 10 MiB; download instead"});return;}
         const mime=mimeFor(full);const inline=route==="preview" && /^(image\/|text\/plain|text\/markdown|application\/pdf)/.test(mime);
@@ -256,8 +290,8 @@ export class TransferServer {
     const files = isRecord(body) && isRecord(body.files) ? body.files : null;
     if (!files || Object.keys(files).length === 0) { sendJson(response, 400, { message: "Invalid body: files" }); return; }
 
-    const targetDir = join(this.workdir, this.inboxFor(scope));
-    await mkdir(targetDir, { recursive: true });
+    const targetDir = await this.inboxPath(scope,true);
+    await mkdir(targetDir, { recursive: true,mode:0o700 });
     const session: UploadSession = { id: randomUUID(), scope, files: new Map(), createdAt: Date.now() };
     const usedNames = new Set(await readdir(targetDir).catch(() => [] as string[]));
     let batch = 0;
@@ -284,6 +318,7 @@ export class TransferServer {
         state: "pending",
       });
     }
+    if(this.workspaces && !this.tokens.has(scope)){sendJson(response,403,{message:"File authorization revoked"});return;}
     this.uploads.set(session.id, session);
     const tokens: Record<string, string> = {};
     for (const [id, file] of session.files) tokens[id] = file.token;
@@ -316,7 +351,7 @@ export class TransferServer {
       else response.destroy();
     };
 
-    const out = createWriteStream(file.partPath);
+    const out = createWriteStream(file.partPath,{flags:"wx",mode:0o600});
     try {
       await new Promise<void>((resolvePromise, reject) => {
         request.on("data", (chunk: Buffer) => {
@@ -365,13 +400,12 @@ export class TransferServer {
       sessionId: session.id,
       fileId: file.id,
       fileName: file.fileName,
-      path: relative(this.workdir, file.finalPath).split(sep).join("/"),
+      path: relative(await this.baseFor(scope), file.finalPath).split(sep).join("/"),
       size: file.size,
       sha256: digest,
       fileType: file.fileType,
     });
-    response.writeHead(200);
-    response.end();
+    sendJson(response,200,{path:relative(await this.baseFor(scope),file.finalPath).split(sep).join("/"),sha256:digest,fileName:file.fileName});
     if ([...session.files.values()].every((f) => f.state === "done" || f.state === "failed")) this.uploads.delete(session.id);
   }
 
@@ -416,14 +450,14 @@ export class TransferServer {
   private async prepareDownload(response: ServerResponse, url: URL): Promise<void> {
     const scope = this.scopeOf(url);
     if (scope === null) { sendJson(response, 401, { message: "Invalid scope token" }); return; }
-    const dir = join(this.workdir, this.inboxFor(scope));
+    const dir = await this.inboxPath(scope);
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     const files: Record<string, JsonValue> = {};
     for (const entry of entries) {
       if (!entry.isFile() || entry.name.startsWith(".")) continue;
       const full = join(dir, entry.name);
       const info = await stat(full);
-      const id = relative(this.workdir, full).split(sep).join("/");
+      const id = relative(await this.baseFor(scope), full).split(sep).join("/");
       files[id] = { id, fileName: entry.name, size: info.size, fileType: mimeFor(entry.name), modified: info.mtime.toISOString() };
     }
     sendJson(response, 200, { info: this.info(), sessionId: scope, files });
@@ -437,7 +471,7 @@ export class TransferServer {
     if (!fileId) { sendJson(response, 400, { message: "Missing fileId" }); return; }
     let full: string;
     try {
-      if(this.workspaces && !fileId.startsWith(this.inboxFor(scope)+"/")) full=await this.workspaces.file(scope,fileId);
+      if(this.workspaces) full=await this.workspaceFile(scope,fileId);
       else {
         full=await realpath(resolve(this.workdir,fileId));
         const base=await realpath(this.workspaces ? join(this.workdir,this.inboxFor(scope)) : this.workdir);
