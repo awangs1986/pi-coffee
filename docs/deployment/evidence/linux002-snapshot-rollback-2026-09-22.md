@@ -1,8 +1,8 @@
 # linux002 快照回滚演练证据（交接）
 
-关联任务书：`docs/deployment/vm-snapshot-rollback-task.md`  
-关联门槛 Issue：`awangs/pi-coffee#36`  
-执行日期：2026-09-22（UTC 窗口见正文）  
+关联任务书：`docs/deployment/vm-snapshot-rollback-task.md`
+关联门槛 Issue：`awangs/pi-coffee#36`
+执行日期：2026-09-22（UTC 窗口见正文）
 执行角色：虚拟化 / 网络管理员（网络管家）
 
 本文件已从操作员本机交接至仓库，供他人验收。不含密码、token、Cookie、会话正文或快照文件。
@@ -39,4 +39,3 @@
 - 失败项与处置：无。说明：`hostname -f` 返回 `linux002`（非 `linux002.lan`），基线与回滚后一致。Checkout 本地 dirty=yes（仅记有/无）。Transfer 侧 `POST /api/localsend/v2/prepare-upload` 无 scope/token 时 HTTP 401。
 - 快照保留位置和计划删除条件：PVE VM 105 快照 `pi-coffee-t4-l002-20260922T113344Z`；T4 #36 验收确认后再删
 - 声明：本证据不含密码、token、Cookie、会话正文或快照文件。
-
