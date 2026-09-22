@@ -1,6 +1,6 @@
 # Chat/Work 运行时迁移验收
 
-日期：2026-09-22。基线为 Gitea Agent main `951b6355`，在独立 clone 的 `codex/chat-work-migration` 分支实施；没有修改旧 arena checkout 或冻结 V5。对应 HARNESS-001/002（#14/#15）。
+日期：2026-09-22。基线为 Gitea Agent main `951b6355`，在独立 clone 的 `codex/chat-work-migration` 分支实施；没有修改旧 arena checkout 或冻结 V5。对应 HARNESS-001/002（#14/#15），[PR #37](http://gitea:3000/awangs/pi-coffee/pulls/37)。
 
 ## 交付行为
 
@@ -20,7 +20,7 @@
 3. 真实 Pi 0.84.4 CLI + 默认插件 + LSP Skill + 本地 HTTP provider：Chat 切换、切模型、进程停止后恢复均为精确五工具；无 system/developer 消息、项目标记和 Skill 元数据；切回 Work 恢复精确 6+1 工具及 Pi Base/项目/正文。Completions 路径以固定 SSE 成功结束。
 4. Responses、Anthropic Messages、Google Generative AI：真实 Pi 序列化后捕获 HTTP 请求，验证空系统指令与五工具。fixture 故意返回 400 并禁止重试，只验证请求装配，不声称供应商模型调用成功。
 5. `npm run smoke:toolchain`：pi-lens 关闭/显式加载两组均通过，各 12 步；检查 read/write/edit、Bash 检索/列目录/验证、Git、Web 发现/激活/直接搜索和子 Agent 激活。pi-lens 原生工具已注册但不进入 Work 活动集合；这是约定的暴露边界。LSP 中间层保留既有 CLI 测试。
-6. `npm run check`：30 个测试文件、163 项测试全部通过。`git diff --check` 通过。fresh-clone 结果在完成后补录。
+6. `npm run check`：30 个测试文件、163 项测试全部通过。`git diff --check` 通过。从 Gitea 分支重新 clone 实现提交 `83f7e3d`，`npm ci --ignore-scripts && npm run check` 再次通过同样的 30 文件 / 163 项测试；`smoke:subagents` 与 `smoke:web-access` 加载探针均通过。
 
 ## 证据边界
 
