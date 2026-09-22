@@ -46,7 +46,9 @@ Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作�
 
 搜索子进程把完整有界搜索结果先存 VM 独立证据文件，只向模型提供精选摘要与索引。父对话只收到子结论和 artifact 索引；来源抓取结果也受本地上下文入口限量。
 
-单次/批次/状态/bg_wait 输出及异步完成通知在父端入口限量，超长 content 或 details 先写 `getAgentDir()/pi-coffee/subagent-results/<sha256>.json`（0600），返回短预览、runId 和路径。写盘失败只返回短错误，不把原输出塞回历史。完整上游子会话/执行 artifact 仍在 VM，不能将 UI/history 中的短索引当作原始证据已删除。既有大历史只做上下文投影，不破坏性重写。
+单次/批次/状态/bg_wait 输出及异步完成通知在父端入口限量。目标路径是父 Conversation Workspace 的 `artifacts/subagents/<sha256>.json`（Project Workspace 对应 `.pi-coffee/artifacts/subagents/`，文件 0600），返回短预览、runId 和相对路径；子进程不能用调用参数改写归属。写盘失败只返回短错误，不把原输出塞回历史。完整上游子会话/执行 artifact 仍在 VM，不能将 UI/history 中的短索引当作原始证据已删除。既有大历史只做上下文投影，不破坏性重写。
+
+当前适配器仍默认使用 `getAgentDir()/pi-coffee/subagent-results/`；这是 PA-013 的已知实现差距，只能作为旧 Session 的兼容读取来源，不能作为新 Conversation 的最终合同。
 
 ## 部署与验证
 

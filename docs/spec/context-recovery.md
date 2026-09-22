@@ -6,7 +6,7 @@
 
 ## 实现合同
 
-1. **入口限量**：read/bash/grep/find/ls/git/verify 和内容获取工具返回的 content + details 超过 12000 UTF-8 字节时，先保存 VM 独立 artifact，历史接收至多 4000 字符预览和恢复路径。写盘失败只返回短错误，并警告原操作可能已执行，禁止声称已保存。subagent/bg_wait 和异步子任务通知另在原生适配器入口先归档大正文/details，只返回短摘要与索引。
+1. **入口限量**：read/bash/grep/find/ls/git/verify 和内容获取工具返回的 content + details 超过 12000 UTF-8 字节时，先保存所属 Conversation Workspace 的 `artifacts/`（Project Workspace 对应 `.pi-coffee/artifacts/`），历史接收至多 4000 字符预览和恢复相对路径。写盘失败只返回短错误，并警告原操作可能已执行，禁止声称已保存。subagent/bg_wait 和异步子任务通知另在原生适配器入口先归档大正文/details，只返回短摘要与索引。当前通用入口尚未全部按 Conversation 解析，属于 [PA-013](./pi-agent.md) 的实现差距。
 2. **搜索**：见 `web-search-plugin.md`，完整结果从不作为新搜索的默认工具历史返回。
 3. **折叠**：复用锁定的 context-fold@0.4.0，不改上游源码；Work 在已注册时常驻 recall_folded，unfold 不默认开放。Chat 不增加恢复工具，也不执行自动折叠 context 投影，避免注入恢复指导；本地手动压缩与最终请求预算保护仍保留。
 4. **硬压缩**：通过本地 adapter 调用原 context-fold 的确定性索引算法。未返回有效结果或报错时取消压缩，不能静默 fallback 到模型摘要。CONTEXTFOLD_COMPACT=native 或包级禁用在该 adapter 下会取消硬压缩；不要把它当作成功。

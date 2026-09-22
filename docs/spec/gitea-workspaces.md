@@ -30,7 +30,7 @@
 - **GW-06**：每个代码 Conversation 从 Gitea 指定的远端分支（默认 repository 默认分支）解析到精确 commit，创建完整、独立的普通 clone；首版不共享 `.git`/alternates、不使用 shallow clone。分支名为 `coffee/<stable-owner-or-vm-id>/<conversation-uuid>`；分配后不让第二个活跃 Conversation 复用。碰撞报错/分配新 ID，不接管未知分支。
 - Host 记录 repository ID、owning VM、Conversation ID、cwd、branch、起点 SHA、最后确认远端 SHA/时间、PR 引用；元数据留 VM。clone 完成并校验后才发布可运行工作区，失败目录可诊断，重试不能误删已有文件或重复创建 Conversation。
 - Pi/Bash/Edit/Git/LSP 都使用该 Checkout。同 Conversation 的运行、checkpoint、迁移/删除互斥；不同 Conversation 可并行，不保留项目级 Git/merge 锁。可信用户在终端绕过 Host 的操作不受平台锁强制约束，操作前后需重新核查实际 Git 状态。
-- Chat/非代码会话不因这次改造被迫创建 Repository；旧无工作区会话保持可读，启用代码工作区时再绑定。
+- Chat/非代码会话不需要 Repository，但每个 Conversation 仍有独立的 Chat Workspace。目录、模式切换、附件/搜索/图片/产物归属与删除边界由[Conversation 工作目录 SPEC](./conversation-workspaces.md)定义；旧无工作区会话保持可读，明确选择 Workspace 后再启用写入。
 
 ## 同步、PR 和跨主机接续
 
