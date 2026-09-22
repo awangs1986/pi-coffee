@@ -9,6 +9,7 @@ import {
 import { compactionNotice, isContextError } from './context-status.js';
 
 const ACTIVE_KEY = 'pi-coffee.active.v2';
+let taskSelectionEpoch=0;
 let creationRequest = (()=>{try{return JSON.parse(sessionStorage.getItem('coffee.pending-creation'));}catch{return null;}})();
 function saveCreation(){if(creationRequest)sessionStorage.setItem('coffee.pending-creation',JSON.stringify(creationRequest));else sessionStorage.removeItem('coffee.pending-creation');}
 const THEME_KEY = 'pi-coffee.theme.v1';
@@ -638,6 +639,7 @@ function renderProjectContext() {
   if (!ui.projectSelect || !ui.startBranch) return;
   const conversation = workspaceState?.conversations.find((c) => c.id === activeId);
   const activeProject = workspaceState?.projects.find((p) => p.id === conversation?.projectId);
+  let projectLabel=activeProject?.name;try{if(activeProject?.webUrl)projectLabel=new URL(activeProject.webUrl).pathname.split('/').filter(Boolean).slice(-2).join('/');}catch{}
   const lockedToConversation = Boolean(conversation);
   if (conversation) {
     if ([...ui.projectSelect.options].some((option) => option.value === conversation.projectId)) ui.projectSelect.value = conversation.projectId;
@@ -657,7 +659,7 @@ function renderProjectContext() {
   if(!lockedToConversation && activeId)$('#create-task').textContent='为旧任务创建目录';
   const context=$('#workspace-context');context.replaceChildren();
   if(conversation){
-    context.append(el('span','',`VM：${conversation.vmId || workspaceState.vmId || '未知'} · ${activeProject?.name || '无项目'} · ${conversation.creationState==='failed'?'创建失败':conversation.creationState==='creating'?'创建中':'就绪'}`));
+    context.append(el('span','',`VM：${conversation.vmId || workspaceState.vmId || '未知'} · ${projectLabel || '无项目'} · ${conversation.creationState==='failed'?'创建失败':conversation.creationState==='creating'?'创建中':'就绪'}`));
     const path=el('code','workspace-path',conversation.cwd);const copy=el('button','btn small','复制路径');copy.type='button';
     copy.onclick=async()=>{try{await navigator.clipboard.writeText(conversation.cwd);toast('已复制完整路径');}catch{const selection=window.getSelection();const range=document.createRange();range.selectNodeContents(path);selection.removeAllRanges();selection.addRange(range);toast('已选中完整路径，可复制');}};
     context.append(path,copy);
@@ -1156,13 +1158,14 @@ const INLINE_IMAGE_LIMIT = 4 * 1024 * 1024; // larger images travel as files
 const HASH_LIMIT = 32 * 1024 * 1024;         // sha256 in the browser only for files this small
 
 async function addFiles(files) {
+  const epoch=taskSelectionEpoch;
   const toUpload = [];
   for (const file of files) {
     const isSmallImage = file.type.startsWith('image/') && file.size <= INLINE_IMAGE_LIMIT;
     if (isSmallImage) {
       // Small images go inline with the prompt so the model can see them.
       if (attachments.length >= 8) { toast('最多 8 张内联图片，其余作为文件上传'); toUpload.push(file); continue; }
-      try { attachments.push(await encodeImage(file)); } catch { toast('无法读取图片'); }
+      try { const image=await encodeImage(file);if(epoch!==taskSelectionEpoch)return;attachments.push(image); } catch { toast('无法读取图片'); }
       toUpload.push(file); // Persist original bytes before sending the inline representation.
     } else {
       toUpload.push(file);
@@ -1170,7 +1173,7 @@ async function addFiles(files) {
   }
   renderAttachments();
   refreshComposer();
-  if (toUpload.length) await uploadFiles(toUpload);
+  if (epoch===taskSelectionEpoch && toUpload.length) await uploadFiles(toUpload);
 }
 
 // Files go straight from the browser to the User VM over the LocalSend v2 API
@@ -1182,15 +1185,16 @@ async function uploadFiles(files) {
     else if (opened) { toast('这个 Host 没有开启文件传输'); filesAwaitingTransfer = []; }
     return;
   }
-  const tooBig = files.filter((f) => f.size > transfer.maxFileBytes);
-  if (tooBig.length) toast(`已跳过 ${tooBig.length} 个超过 ${formatBytes(transfer.maxFileBytes)} 的文件`);
-  const batch = files.filter((f) => f.size <= transfer.maxFileBytes);
+  const grant=transfer;
+  const tooBig = files.filter((f) => f.size > grant.maxFileBytes);
+  if (tooBig.length) toast(`已跳过 ${tooBig.length} 个超过 ${formatBytes(grant.maxFileBytes)} 的文件`);
+  const batch = files.filter((f) => f.size <= grant.maxFileBytes);
   if (batch.length === 0) return;
   const pending = uploads.filter((u) => u.state === 'uploading').reduce((s, u) => s + u.size, 0);
-  if (pending + batch.reduce((s, f) => s + f.size, 0) > transfer.maxBatchBytes) { toast(`一次最多传输 ${formatBytes(transfer.maxBatchBytes)}`); return; }
+  if (pending + batch.reduce((s, f) => s + f.size, 0) > grant.maxBatchBytes) { toast(`一次最多传输 ${formatBytes(grant.maxBatchBytes)}`); return; }
 
   const entries = batch.map((file) => ({
-    id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    url:grant.url,scope:grant.scope,id: 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
     file, name: file.name, size: file.size, received: 0, state: 'uploading', path: null, error: null, xhr: null, sessionId: null, token: null,
   }));
   uploads.push(...entries);
@@ -1202,9 +1206,10 @@ async function uploadFiles(files) {
     const sha256 = u.size <= HASH_LIMIT ? await sha256Hex(u.file).catch(() => undefined) : undefined;
     meta[u.id] = { id: u.id, fileName: u.name, size: u.size, fileType: u.file.type || 'application/octet-stream', ...(sha256 ? { sha256 } : {}) };
   }
+  if(activeId!==grant.scope)return;
   let prepared;
   try {
-    const response = await fetch(`${transfer.url}/api/localsend/v2/prepare-upload?scope=${encodeURIComponent(transfer.scope)}&token=${encodeURIComponent(transfer.token)}`, {
+    const response = await fetch(`${grant.url}/api/localsend/v2/prepare-upload?scope=${encodeURIComponent(grant.scope)}&token=${encodeURIComponent(grant.token)}`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ info: { alias: 'PI Coffee Web', version: '2.0', deviceModel: navigator.platform || 'browser', deviceType: 'web', fingerprint: 'web', port: 0, protocol: 'http', download: false }, files: meta }),
     });
@@ -1213,9 +1218,10 @@ async function uploadFiles(files) {
   } catch (error) {
     for (const u of entries) { u.state = 'failed'; u.error = '无法连接 User VM 的传输端点：' + (error.message || error); }
     renderAttachments(); refreshComposer();
-    toast('文件传输失败：浏览器无法直连 User VM（' + transfer.url + '）');
+    toast('文件传输失败：浏览器无法直连 User VM（' + grant.url + '）');
     return;
   }
+  if(activeId!==grant.scope)return;
   for (const u of entries) {
     u.sessionId = prepared.sessionId;
     u.token = prepared.files[u.id];
@@ -1229,7 +1235,7 @@ function sendFile(u) {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     u.xhr = xhr;
-    xhr.open('POST', `${transfer.url}/api/localsend/v2/upload?sessionId=${encodeURIComponent(u.sessionId)}&fileId=${encodeURIComponent(u.id)}&token=${encodeURIComponent(u.token)}`);
+    xhr.open('POST', `${u.url}/api/localsend/v2/upload?sessionId=${encodeURIComponent(u.sessionId)}&fileId=${encodeURIComponent(u.id)}&token=${encodeURIComponent(u.token)}`);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable && u.state === 'uploading') { u.received = Math.max(u.received, e.loaded); renderAttachmentProgress(u); } };
     xhr.onload = () => {
       if (xhr.status === 200) { if (u.state === 'uploading') { try{const result=JSON.parse(xhr.responseText);u.path=result.path;u.sha256=result.sha256;}catch{} u.received = u.size; u.state = u.path ? 'done' : 'finishing'; } }
@@ -1478,7 +1484,7 @@ ui.stop.addEventListener('click', () => { if (opened) { send({ v: 1, type: 'abor
 function switchSession(id) {
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
-  resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;workspaceSync=null;
+  taskSelectionEpoch++;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;workspaceSync=null;
   activeId = id;
   localStorage.setItem(ACTIVE_KEY, id);
   streaming = false;
@@ -1492,7 +1498,7 @@ function switchSession(id) {
   connect();
 }
 function newSession(focus = true) {
-  prepareNew=false;creationRequest=null;saveCreation();workspaceSync=null;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;
+  taskSelectionEpoch++;prepareNew=false;creationRequest=null;saveCreation();workspaceSync=null;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;
   $('#task-kind').value='chat';ui.projectSelect.value='';ui.startBranch.value='';
   activeId = null;
   localStorage.removeItem(ACTIVE_KEY);
@@ -1624,25 +1630,31 @@ async function refreshWorkspaceStatus() {
   if(!activeId)return;const id=activeId;try{const value=await workspaceApi({action:'status',id});if(id!==activeId)return;workspaceSync=value;}catch(e){if(id!==activeId)return;workspaceSync={...workspaceSync,state:'unknown',error:e.message};}renderSyncState();renderProjectContext();
 }
 $('#checkpoint-workspace').addEventListener('click',async()=>{
-  if(!activeId)return toast('请先打开代码对话');
+  const id=activeId;if(!id)return toast('请先打开代码对话');
   try {
-    const changes=workspaceChanges || await refreshWorkspaceChanges(false);const paths=changes?.checkpointPaths || [];
-    if(!paths.length){workspaceSync=await workspaceApi({action:'sync',id:activeId});renderSyncState();return toast('没有待提交代码；远端 SHA 已确认');}
-    const message=await askModal({title:'创建并推送 Checkpoint',text:`将提交当前审查中 ${paths.length} 个文件到 Conversation 分支。私密路径不会包含。`,input:'checkpoint: work in progress',okLabel:'提交并推送'});if(!message)return;
-    workspaceSync=await workspaceApi({action:'checkpoint',id:activeId,paths,message});renderSyncState();await refreshWorkspaceChanges(false);toast('Checkpoint 已由远端 SHA 确认');
-  }catch(e){await refreshWorkspaceStatus().catch(()=>undefined);toast(e.message);}
+    const changes=await workspaceApi({action:'changes',id}),paths=changes?.checkpointPaths || [];
+    if(id!==activeId)return;
+    let result;
+    if(!paths.length)result=await workspaceApi({action:'sync',id});
+    else{
+      const message=await askModal({title:'创建并推送 Checkpoint',text:`将提交当前任务 ${id} 的 ${paths.length} 个文件；私密路径不会包含。`,input:'checkpoint: work in progress',okLabel:'提交并推送'});
+      if(!message || id!==activeId)return;
+      result=await workspaceApi({action:'checkpoint',id,paths,message});
+    }
+    if(id!==activeId)return;workspaceSync=result;renderSyncState();await refreshWorkspaceChanges(false);toast('Checkpoint 已由远端 SHA 确认');
+  }catch(e){if(id===activeId){await refreshWorkspaceStatus();toast(e.message);}}
 });
 $('#pull-request').addEventListener('click',async()=>{
-  if(!activeId)return toast('请先打开代码对话');
-  try {const title=await askModal({title:'创建 Gitea PR',text:'PR 合并在 Gitea 中完成。',input:'PI Coffee Conversation changes',okLabel:'创建 / 打开'});if(!title)return;const pr=await workspaceApi({action:'pull_request',id:activeId,title});window.open(pr.url,'_blank','noopener,noreferrer');toast(`PR #${pr.number} · ${pr.state}`);}catch(e){toast(e.message);}
+  const id=activeId;if(!id)return toast('请先打开代码对话');
+  try {const title=await askModal({title:'创建 Gitea PR',text:'PR 合并在 Gitea 中完成。',input:'PI Coffee Conversation changes',okLabel:'创建 / 打开'});if(!title || id!==activeId)return;const pr=await workspaceApi({action:'pull_request',id,title});window.open(pr.url,'_blank','noopener,noreferrer');toast(`PR #${pr.number} · ${pr.state}`);}catch(e){toast(e.message);}
 });
 $('#migrate-workspace').addEventListener('click',async()=>{
-  if(!activeId)return;
+  const id=activeId;if(!id)return;
   try {
-    const conversation=workspaceState.conversations.find(c=>c.id===activeId),project=workspaceState.projects.find(p=>p.id===conversation?.projectId);if(!conversation || !project)return;
+    const conversation=workspaceState.conversations.find(c=>c.id===id),project=workspaceState.projects.find(p=>p.id===conversation?.projectId);if(!conversation || !project)return;
     if(!project.repoUrl){const repoUrl=await askModal({title:'绑定 Gitea Repository',text:'填写无凭据的 clone URL。旧目录会保留用于回滚。',input:'',okLabel:'验证并绑定'});if(!repoUrl)return;await workspaceApi({action:'bind_project',projectId:project.id,repoUrl});}
-    const plan=await workspaceApi({action:'migration_plan',id:activeId});const ok=await askModal({title:'迁移为独立 Checkout',text:`旧目录：${plan.legacyCwd}\n本地改动：${plan.dirty?'有，将复制':'无'}\n迁移完成前不会删除旧目录。`,okLabel:'开始迁移'});if(!ok)return;
-    await workspaceApi({action:'migrate',id:activeId});await loadWorkspace();toast('Checkout 已迁移；旧目录仍保留');
+    const plan=await workspaceApi({action:'migration_plan',id});const ok=await askModal({title:'迁移为独立 Checkout',text:`旧目录：${plan.legacyCwd}\n本地改动：${plan.dirty?'有，将复制':'无'}\n迁移完成前不会删除旧目录。`,okLabel:'开始迁移'});if(!ok || id!==activeId)return;
+    await workspaceApi({action:'migrate',id});await loadWorkspace();toast('Checkout 已迁移；旧目录仍保留');
   }catch(e){toast(e.message);}
 });
 function fileEndpoint(route,path) {

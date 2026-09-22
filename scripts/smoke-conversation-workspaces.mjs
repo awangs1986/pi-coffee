@@ -47,6 +47,9 @@ try{
  await page.locator('#workspace-context').getByText(work.cwd,{exact:true}).waitFor();
  const sync=await api({action:'status',id:work.id});assert.equal(sync.state,'synced');assert.equal(sync.branch,work.branch);
  await page.reload();await page.locator('#workspace-context').getByText(work.cwd,{exact:true}).waitFor();
+ await page.locator('.workspace-branch').filter({hasText:work.branch}).waitFor();
+ await page.locator('#sync-state[data-state="synced"]').waitFor({state:'visible'});
+ await page.locator('#workspace-context button').click();
  if(process.env.PI_COFFEE_SMOKE_SCREENSHOT)await page.screenshot({path:process.env.PI_COFFEE_SMOKE_SCREENSHOT,fullPage:true});
  await api({action:'archive',id:chat.id});await api({action:'archive',id:work.id});
  assert.deepEqual(errors,[]);
