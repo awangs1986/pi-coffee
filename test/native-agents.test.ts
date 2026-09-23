@@ -53,3 +53,33 @@ it('restores this tab selection even when another tab last selected another Task
  sessionStorage.setItem('pi-coffee.active.v2','this-tab');localStorage.setItem('pi-coffee.active.v2','other-tab');
  const app=await setup();expect(app.frames.find(f=>f.type==='open')).toMatchObject({sessionId:'this-tab'});
 });
+it('opens seven-category context usage on click without cumulative data and closes explicitly',async()=>{
+ const app=await setup();document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
+ const id=app.requests.find(r=>r.action==='conversation').id,ws=app.sockets[0];
+ ws.receive({type:'opened',sessionId:id,engine:'pi',state:{}});
+ ws.receive({type:'stats',sessionId:id,stats:{contextUsage:{percent:25,tokens:10000,contextWindow:40000},contextBreakdown:{version:1,contextWindow:40000,totalTokens:10000,method:'o200k_base_estimate',basis:'last_request',categories:[{id:'system',tokens:1000},{id:'tools',tokens:2000},{id:'rules',tokens:500},{id:'skills',tokens:500},{id:'dynamic',tokens:0},{id:'subagents',tokens:0},{id:'conversation',tokens:6000}]},tokens:{input:90000,output:10000,total:100000},cost:0.1}});
+ const trigger=document.querySelector<HTMLButtonElement>('#stats')!;
+ const panel=document.querySelector<HTMLDialogElement>('#stats-pop')!;
+ // JSDOM lacks the native modal API; actual top-layer painting is verified in Chromium.
+ panel.showModal=()=>panel.setAttribute('open','');panel.close=()=>{panel.removeAttribute('open');panel.dispatchEvent(new Event('close'));};
+ trigger.dispatchEvent(new Event('mouseenter'));trigger.focus();await vi.advanceTimersByTimeAsync(1);
+ expect(trigger.getAttribute('aria-expanded')).toBe('false');
+ trigger.click();expect(panel.open).toBe(true);expect(trigger.getAttribute('aria-expanded')).toBe('true');
+ expect(document.querySelector('#sp-capacity')?.textContent).toBe('~10.0K / 40K Tokens');
+ expect([...document.querySelectorAll('#sp-context-legend .legend-label')].map(e=>e.textContent)).toEqual(['System prompt','Tool definitions','Rules','Skills','MCP & dynamic tools','Subagent definitions','Conversation']);
+ expect(document.querySelector('#sp-context-legend')?.textContent).toContain('6.0K');
+ expect(document.querySelector('#sp-context-legend')?.textContent).not.toContain('90.0K');
+ expect(panel.textContent).not.toContain('累计输入');
+ document.querySelector<HTMLButtonElement>('#stats-close')!.click();expect(panel.open).toBe(false);expect(document.activeElement).toBe(trigger);
+ trigger.click();panel.dispatchEvent(new Event('cancel',{cancelable:true}));expect(panel.open).toBe(false);
+ ws.receive({type:'stats',sessionId:id,stats:{contextUsage:{percent:null,tokens:null,contextWindow:40000},tokens:{total:100000},cost:0.1}});
+ expect(document.querySelector('#sp-pct')?.textContent).toBe('Usage unavailable');
+ expect(document.querySelector('#sp-capacity')?.textContent).toBe('— / 40K Tokens');
+ expect(document.querySelector('#sp-context-legend')?.textContent).not.toContain('30.0K');
+});
+
+it('collapses task details when starting another Task',async()=>{
+ await setup();const disclosure=document.querySelector<HTMLDetailsElement>('.project-manage')!;disclosure.open=true;
+ document.querySelector<HTMLButtonElement>('#new-task')!.click();
+ expect(disclosure.open).toBe(false);
+});

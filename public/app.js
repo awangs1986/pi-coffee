@@ -32,8 +32,8 @@ const ui = {
   modalOk: $('#modal-ok'), modalCancel: $('#modal-cancel'), toast: $('#toast'),
   extStatus: $('#ext-status'), widgets: $('#widgets'),
   pluginsBtn: $('#plugins-btn'), pluginsModal: $('#plugins-modal'), pluginsBody: $('#plugins-body'), pluginsSub: $('#plugins-sub'), pluginsClose: $('#plugins-close'),
-  statsWrap: $('#stats-wrap'), statsPop: $('#stats-pop'), spPct: $('#sp-pct'), spFill: $('#sp-fill'), spWindow: $('#sp-window'),
-  spBar: $('#sp-bar'), spLegend: $('#sp-legend'), spCost: $('#sp-cost'), spCompact: $('#sp-compact'),
+  statsWrap: $('#stats-wrap'), statsPop: $('#stats-pop'), spPct: $('#sp-pct'), spCapacity: $('#sp-capacity'), spContextLegend: $('#sp-context-legend'),
+  spBar: $('#sp-bar'), spCompact: $('#sp-compact'),
   uiModal: $('#ui-modal'), uiTitle: $('#ui-title'), uiText: $('#ui-text'), uiOptions: $('#ui-options'), uiInput: $('#ui-input'),
   uiEditor: $('#ui-editor'), uiMeta: $('#ui-meta'), uiOk: $('#ui-ok'), uiNo: $('#ui-no'), uiCancel: $('#ui-cancel'),
 };
@@ -515,74 +515,62 @@ function renderHeader() {
 function fmtTokens(n) {
   if (typeof n !== 'number' || !Number.isFinite(n)) return '—';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(n >= 100_000 ? 0 : 1) + 'K';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
   return String(n);
 }
+const CONTEXT_CATEGORIES = [
+  ['system','System prompt'], ['tools','Tool definitions'], ['rules','Rules'],
+  ['skills','Skills'], ['dynamic','MCP & dynamic tools'], ['subagents','Subagent definitions'], ['conversation','Conversation'],
+];
 function renderStats() {
   if (!statsCache || !activeId) { ui.stats.classList.add('hidden'); hideStatsPop(); return; }
-  const usage = statsCache.contextUsage;
-  const pct = usage && typeof usage.percent === 'number' ? usage.percent : null;
-  const cost = statsCache.cost ? '$' + statsCache.cost.toFixed(3) : null;
-  const parts = [pct !== null ? '上下文 ' + Math.round(pct) + '%' : null, cost].filter(Boolean);
-  if (parts.length === 0) { ui.stats.classList.add('hidden'); hideStatsPop(); return; }
-  ui.stats.textContent = parts.join(' · ');
-  ui.stats.classList.remove('hidden');
-  ui.stats.classList.toggle('warn', pct !== null && pct >= 75);
-
-  // Popover: what Pi actually reports. Context = what the model sees now;
-  // cumulative usage = everything this conversation has spent so far.
-  const t = statsCache.tokens || {};
-  ui.spPct.textContent = pct !== null ? Math.round(pct) + '% 已用' : '暂无估计';
-  ui.spFill.textContent = usage && typeof usage.tokens === 'number' ? '约 ' + fmtTokens(usage.tokens) + ' tokens' : '（压缩后等待下一次回复）';
-  ui.spWindow.textContent = usage ? '窗口 ' + fmtTokens(usage.contextWindow) : '';
-  const seg = ui.spBar.querySelector('.seg.used');
-  seg.style.width = Math.max(0, Math.min(100, pct ?? 0)) + '%';
-  seg.classList.toggle('warn', pct !== null && pct >= 75);
-  seg.classList.toggle('danger', pct !== null && pct >= 90);
-  const rows = [
-    ['累计输入', t.input, 'c-in'], ['累计输出', t.output, 'c-out'],
-    ['缓存读取', t.cacheRead, 'c-cr'], ['缓存写入', t.cacheWrite, 'c-cw'],
-  ];
-  const total = Math.max(1, t.total || rows.reduce((s, r) => s + (r[1] || 0), 0));
-  ui.spLegend.innerHTML = '';
-  const usageBar = el('div', 'stats-bar usage');
-  for (const [, value, cls] of rows) {
-    const s = el('span', 'seg ' + cls);
-    s.style.width = ((value || 0) / total * 100) + '%';
-    usageBar.appendChild(s);
+  const snapshot=statsCache.contextBreakdown;
+  const valid=snapshot?.version===1 && snapshot.categories?.length===7 && CONTEXT_CATEGORIES.every(([id])=>snapshot.categories.some(c=>c.id===id && Number.isSafeInteger(c.tokens) && c.tokens>=0));
+  const capacity=valid?snapshot.contextWindow:statsCache.contextUsage?.contextWindow;
+  const used=valid?snapshot.categories.reduce((n,c)=>n+c.tokens,0):null;
+  const pct=used!==null && capacity>0?100*used/capacity:null;
+  ui.stats.textContent=pct!==null?'上下文 '+Math.floor(pct)+'%':'上下文';
+  ui.stats.classList.remove('hidden');ui.stats.classList.toggle('warn',pct!==null && pct>=75);
+  ui.spPct.textContent=pct!==null?Math.floor(pct)+'% Full':'Usage unavailable';
+  ui.spCapacity.textContent=`${used!==null?'~'+fmtTokens(used):'—'} / ${fmtTokens(capacity).replace(/\.0([KM])$/,'$1')} Tokens`;
+  ui.spCapacity.title=valid?`本地 o200k_base 估算 · ${snapshot.basis==='last_request'?'最近一次实际请求':'当前已加载上下文预览'} · ${snapshot.capturedAt}`:'等待引擎分类统计';
+  ui.spBar.replaceChildren();ui.spContextLegend.replaceChildren();
+  for(const [id,label] of CONTEXT_CATEGORIES){
+    const value=valid?snapshot.categories.find(c=>c.id===id).tokens:null;
+    const row=el('div','legend-row');row.append(el('span','dot-sq c-'+id),el('span','legend-label',label),el('span','legend-val',fmtTokens(value)));ui.spContextLegend.append(row);
+    if(value>0 && capacity>0){const seg=el('span','seg c-'+id);seg.style.width=(value/Math.max(capacity,used)*100)+'%';seg.style.flexShrink='0';ui.spBar.append(seg);}
   }
-  ui.spLegend.appendChild(el('div', 'stats-sub2', '本次对话累计用量 · ' + fmtTokens(t.total) + ' tokens'));
-  ui.spLegend.appendChild(usageBar);
-  for (const [label, value, cls] of rows) {
-    const row = el('div', 'legend-row');
-    row.innerHTML = '<span class="dot-sq ' + cls + '"></span><span class="legend-label"></span><span class="legend-val"></span>';
-    row.querySelector('.legend-label').textContent = label;
-    row.querySelector('.legend-val').textContent = fmtTokens(value);
-    ui.spLegend.appendChild(row);
-  }
-  const msgs = el('div', 'legend-row muted');
-  msgs.textContent = `消息 ${statsCache.userMessages ?? 0} 用户 · ${statsCache.assistantMessages ?? 0} 助手 · ${statsCache.toolCalls ?? 0} 次工具调用`;
-  ui.spLegend.appendChild(msgs);
-  ui.spCost.textContent = cost ? '累计成本 ' + cost : '';
-  ui.spCompact.disabled = !opened || streaming || pct === null;
+  const status=$('#sp-status');
+  status.textContent=!valid?'分类统计暂不可用，请检查所属 VM 的 Agent 版本。':snapshot.mediaOmitted?'~ 本地文本估算；图片、音频等媒体占用未计入。':'';
+  status.classList.toggle('hidden',!status.textContent);
+  ui.spBar.setAttribute('aria-valuetext',pct!==null?Math.floor(pct)+'% Full':'Usage unavailable');
+  if(pct!==null)ui.spBar.setAttribute('aria-valuenow',String(Math.min(100,pct)));else ui.spBar.removeAttribute('aria-valuenow');
+  ui.spCompact.disabled=!opened || streaming || !supports('compact');
+  ui.spCompact.classList.toggle('hidden',!supports('compact'));
 }
-let statsHideTimer;
 function showStatsPop() {
-  if (ui.stats.classList.contains('hidden')) return;
-  clearTimeout(statsHideTimer);
-  ui.statsPop.classList.remove('hidden');
+  if (ui.stats.classList.contains('hidden') || ui.statsWrap.classList.contains('hidden')) return;
+  if (!ui.statsPop.open) ui.statsPop.showModal();
   ui.stats.setAttribute('aria-expanded', 'true');
   send({ v: 1, type: 'get_stats' });
 }
-function hideStatsPop(delay = 0) {
-  clearTimeout(statsHideTimer);
-  statsHideTimer = setTimeout(() => { ui.statsPop.classList.add('hidden'); ui.stats.setAttribute('aria-expanded', 'false'); }, delay);
+function hideStatsPop() {
+  if (ui.statsPop.open) ui.statsPop.close();
+  ui.stats.setAttribute('aria-expanded', 'false');
 }
-ui.statsWrap.addEventListener('mouseenter', () => showStatsPop());
-ui.statsWrap.addEventListener('mouseleave', () => hideStatsPop(180));
-ui.stats.addEventListener('focus', () => showStatsPop());
-ui.stats.addEventListener('click', () => (ui.statsPop.classList.contains('hidden') ? showStatsPop() : hideStatsPop()));
-ui.statsWrap.addEventListener('focusout', (e) => { if (!ui.statsWrap.contains(e.relatedTarget)) hideStatsPop(120); });
+ui.stats.addEventListener('click', showStatsPop);
+$('#stats-close').addEventListener('click', hideStatsPop);
+ui.statsPop.addEventListener('cancel', event => { event.preventDefault(); hideStatsPop(); });
+ui.statsPop.addEventListener('close', () => {
+  ui.stats.setAttribute('aria-expanded', 'false');
+  if (!ui.stats.classList.contains('hidden') && !ui.statsWrap.classList.contains('hidden')) ui.stats.focus();
+});
+ui.statsPop.addEventListener('click', event => {
+  if(event.target !== ui.statsPop)return;
+  const box=ui.statsPop.getBoundingClientRect();
+  if(event.clientX<box.left || event.clientX>box.right || event.clientY<box.top || event.clientY>box.bottom)hideStatsPop();
+});
+ui.statsPop.addEventListener('keydown', event => { event.stopPropagation(); });
 async function requestLocalCompaction() {
   if (!opened) return;
   if (streaming) { toast('请先停止当前任务，再执行本地压缩。'); return; }
@@ -1551,6 +1539,7 @@ ui.stop.addEventListener('click', () => { if (opened) { send({ v: 1, type: 'abor
 function switchSession(id) {
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
+  ui.projectManage.open = false;
   clearExtensionUi();
   taskSelectionEpoch++;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;workspaceSync=null;
   activeId = id;
@@ -1566,6 +1555,7 @@ function switchSession(id) {
   connect();
 }
 function newSession(focus = true) {
+  ui.projectManage.open = false;
   clearExtensionUi();
   taskSelectionEpoch++;prepareNew=false;creationRequest=null;saveCreation();workspaceSync=null;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;
   engine='pi';capabilities=null;models=null;commands=[];$('#task-engine').value='pi';

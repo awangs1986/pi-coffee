@@ -66,17 +66,7 @@
           <div class="topbar-state" id="topbar-state"></div>
           <div class="stats-wrap" id="stats-wrap">
             <button class="chip-btn hidden" id="stats" type="button" aria-haspopup="dialog" aria-expanded="false" title="上下文用量"></button>
-            <div class="stats-pop hidden" id="stats-pop" role="dialog" aria-label="上下文用量">
-              <div class="stats-head"><span>上下文用量</span><span class="stats-num" id="sp-pct"></span></div>
-              <div class="stats-sub"><span id="sp-fill"></span><span id="sp-window"></span></div>
-              <div class="stats-bar" id="sp-bar"><span class="seg used"></span></div>
-              <div class="stats-legend" id="sp-legend"></div>
-              <div class="stats-foot">
-                <span id="sp-cost"></span>
-                <button type="button" class="btn small" id="sp-compact">本地压缩上下文</button>
-              </div>
-              <div class="stats-note">占用与用量由 User VM 中的 Pi 统计；Pi 不区分系统提示 / 工具定义 / 对话三段。</div>
-            </div>
+
           </div>
           </div>
           <div class="topbar-actions">
@@ -163,8 +153,10 @@
             </label>
             <a id="task-project" class="task-project hidden" target="_blank" rel="noopener noreferrer"></a>
             <details class="project-manage">
-              <summary title="项目与归档管理">管理</summary>
-              <div class="project-manage-menu" role="menu">
+              <summary title="展开任务信息" aria-label="展开任务信息"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></summary>
+              <div class="project-manage-menu">
+                <section id="workspace-context" class="workspace-context" aria-live="polite" aria-label="当前任务目录"></section>
+                <button type="button" id="sp-compact">本地压缩上下文</button>
                 <button id="project-add" type="button" role="menuitem">＋ 项目</button>
                 <button id="project-discover" type="button" role="menuitem">发现已有项目</button>
                 <button id="show-active" type="button" role="menuitem">活动对话</button>
@@ -172,7 +164,6 @@
               </div>
             </details>
           </section>
-          <section id="workspace-context" class="workspace-context" aria-live="polite" aria-label="当前任务目录"></section>
         </div>
       </main>
       <aside id="workspace-panel" class="workspace-panel hidden" aria-label="Checkout 变更审查">
@@ -193,6 +184,18 @@
         </footer>
       </aside>
     </div>
+
+    <dialog class="stats-pop" id="stats-pop" aria-labelledby="stats-title">
+      <header class="stats-head">
+        <h2 id="stats-title">Context Usage</h2>
+        <button type="button" class="icon-btn" id="stats-close" aria-label="关闭上下文用量" autofocus>×</button>
+      </header>
+      <div class="stats-sub"><span class="stats-num" id="sp-pct"></span><span id="sp-capacity"></span></div>
+      <div class="stats-bar" id="sp-bar" role="progressbar" aria-label="当前上下文占用" aria-valuemin="0" aria-valuemax="100"><span class="seg used"></span></div>
+      <div id="sp-context-legend" class="stats-legend"></div>
+      <p class="stats-note hidden" id="sp-status" role="status"></p>
+
+    </dialog>
 
     <div class="modal-backdrop hidden" id="modal">
       <div class="modal" role="dialog" aria-modal="true">
