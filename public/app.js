@@ -3,9 +3,10 @@
 // local value is which conversation this browser last displayed.
 import {
   renderMarkdown, activityGroup, assistantNode, el, fillToolCard, formatBytes, installCopyHandlers,
-  noteNode, relativeTime, renderPatchText, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
+  noteNode, relativeTime, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
 } from './render.js';
 
+import { renderReviewFile } from './review.js';
 import { compactionNotice, isContextError } from './context-status.js';
 
 const ACTIVE_KEY = 'pi-coffee.active.v2';
@@ -47,12 +48,12 @@ let pendingOpenId = null, queuedPrompt = null, prepareNew = false;
 let sessions = [], commands = [], models = null, statsCache = null;
 let entries = [];
 const nativeItems=new Map();let nativeCursor=0;let pendingDelivery=null;let uncertainTask=null;
-let engine="pi", capabilities=null;
+let engine="pi", capabilities=null, engineAvailability=[];
 const engineName=(value=engine)=>({pi:"Pi",codex:"Codex",claude:"Claude Code"})[value] || value;
 const supports=(name)=>capabilities ? capabilities[name]===true : engine==="pi";
 async function loadEngines(){
   let available=[];try{const response=await fetch("/api/engines");if(response.ok)available=(await response.json()).engines??[];}catch{}
-  for(const option of $("#task-engine").options){const found=available.find(e=>e.id===option.value);option.disabled=found ? !found.available : option.value!=="pi";option.textContent=({pi:"Pi",codex:"Codex",claude:"Claude Code"})[option.value]+(option.disabled?" · "+(found?.reason || "Host 未启用"):"");}
+  engineAvailability=available;renderProjectContext();
 }
 void loadEngines();
 let requestNumber = 0;
@@ -67,7 +68,8 @@ let workspaceState = null, showArchived = false, workspaceRequestSeq = 0;
 let transfer = null;           // { url, scope, token, inbox, maxFileBytes, maxBatchBytes } from the Host
 let workspaceChanges = null;   // aggregate Checkout status from `/api/workspace` action `changes`
 let workspaceSync = null;
-let selectedChangedPath = null, diffWrapped = true;
+let selectedChangedPath = null;
+let reviewLayout='unified', diffTaskId=null, diffEpoch=0;
 let workspaceDetailOpen = false; // true while a Diff/Checks document replaces the change list
 let lastChangeCardSignature = '';
 let filesAwaitingTransfer = []; // picked before the Session/transfer endpoint was known
@@ -658,6 +660,15 @@ function renderProjectContext() {
   ui.startBranch.disabled = lockedToConversation;
   const kind=$('#task-kind');kind.disabled=lockedToConversation;
   if(conversation)kind.value=conversation.workspaceKind==='chat'?'chat':'project';
+  if(!conversation && kind.value==='chat')agentSelect.value='pi';
+  agentSelect.disabled=lockedToConversation || !!pendingOpenId || kind.value==='chat';
+  for(const option of agentSelect.options){
+    const found=engineAvailability.find(e=>e.id===option.value);
+    const unavailable=found ? !found.available : option.value!=='pi';
+    const workOnly=!lockedToConversation && kind.value==='chat' && option.value!=='pi';
+    option.disabled=unavailable || workOnly;
+    option.textContent=engineName(option.value)+(workOnly?' · 仅 Work':unavailable?' · '+(found?.reason || 'Host 未启用'):'');
+  }
   for(const option of kind.options)option.textContent=option.value==='chat'?(lockedToConversation?'Chat':'Chat · 本地目录'):(lockedToConversation?'Work':'Work · Gitea 项目');
   const projectWorkspace=kind.value==='project';
   ui.projectSelect.closest('label').classList.toggle('hidden',!projectWorkspace || lockedToConversation);
@@ -1540,6 +1551,7 @@ function switchSession(id) {
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
   ui.projectManage.open = false;
+  setWorkspaceOpen(false);closeDiffDialog();
   clearExtensionUi();
   taskSelectionEpoch++;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;workspaceSync=null;
   activeId = id;
@@ -1556,6 +1568,7 @@ function switchSession(id) {
 }
 function newSession(focus = true) {
   ui.projectManage.open = false;
+  setWorkspaceOpen(false);closeDiffDialog();
   clearExtensionUi();
   taskSelectionEpoch++;prepareNew=false;creationRequest=null;saveCreation();workspaceSync=null;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;
   engine='pi';capabilities=null;models=null;commands=[];$('#task-engine').value='pi';
@@ -1606,7 +1619,7 @@ installCopyHandlers(ui.thread);
 
 // ---------- boot ----------
 applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
-if (window.matchMedia('(min-width: 1100px)').matches) setWorkspaceOpen(true);
+setWorkspaceOpen(false);
 resetThread();
 renderHero();
 renderHeader();
@@ -1624,15 +1637,14 @@ async function workspaceApi(value) {
 }
 function setWorkspaceOpen(open) {
   ui.app.classList.toggle('files-open', open);
+  $('#files-toggle').setAttribute('aria-expanded',String(open));
   $('#workspace-panel').classList.toggle('hidden', !open);
 }
 async function loadWorkspace() {
   const seq=++workspaceRequestSeq;
   try {
-    const hadWorkspace = Boolean(workspaceState);
     const data=await workspaceApi();if(seq!==workspaceRequestSeq)return;workspaceState=data;
     $('#project-controls').classList.remove('hidden');$('#files-toggle').classList.remove('hidden');
-    if (!hadWorkspace && window.matchMedia('(min-width: 1100px)').matches) setWorkspaceOpen(true);
     const select=ui.projectSelect, old=select.value;select.replaceChildren();
     const all=document.createElement("option");all.value="";all.textContent="选择项目 / 全部任务";select.append(all);
     for(const p of data.projects){const o=document.createElement('option');o.value=p.id;o.textContent=p.name;select.append(o);}
@@ -1652,6 +1664,7 @@ async function loadWorkspace() {
     else {workspaceChanges=null;workspaceSync=null;renderSyncState();for(const id of ['migrate-workspace','checkpoint-workspace','pull-request'])$('#'+id).classList.add('hidden');selectedChangedPath=null;if(workspaceDetailOpen)closeWorkspaceDetail();renderWorkspaceSummary();renderWorkspaceList();}
   } catch(e) {if(workspaceState){workspaceSync={...workspaceSync,state:'unknown',error:e.message};renderSyncState();renderProjectContext();}}
 }
+$('#task-engine').addEventListener('change',()=>{creationRequest=null;saveCreation();renderProjectContext();});
 $('#task-kind').addEventListener('change',()=>{creationRequest=null;saveCreation();renderProjectContext();});
 $('#create-task').addEventListener('click',async()=>{
   if(activeId && !workspaceState?.conversations.some(c=>c.id===activeId)){
@@ -1667,11 +1680,11 @@ ui.projectSelect.addEventListener('change',async()=>{
   try{const branches=await workspaceApi({action:'branches',projectId:id});if(ui.projectSelect.value!==id || activeId)return;for(const branch of branches){const option=document.createElement('option');option.value=branch;list.append(option);}ui.startBranch.value=workspaceState.projects.find(p=>p.id===id)?.branch || branches[0] || '';}
   catch(e){toast('分支列表不可用，可填写已知远端分支：'+e.message);}
 });
-$('#show-archive').addEventListener('click',()=>{ui.projectManage.open=false;showArchived=true;renderSessionList();});
-$('#show-active').addEventListener('click',()=>{ui.projectManage.open=false;showArchived=false;renderSessionList();});
-$('#project-discover').addEventListener('click',async()=> {ui.projectManage.open=false;try{await workspaceApi({action:'discover'});await loadWorkspace();}catch(e){toast(e.message);}});
+$('#show-archive').addEventListener('click',()=>{closeBrandMenu();showArchived=true;renderSessionList();});
+$('#show-active').addEventListener('click',()=>{closeBrandMenu();showArchived=false;renderSessionList();});
+$('#project-discover').addEventListener('click',async()=> {closeBrandMenu();try{await workspaceApi({action:'discover'});await loadWorkspace();}catch(e){toast(e.message);}});
 $('#project-add').addEventListener('click',async()=> {
-  ui.projectManage.open=false;
+  closeBrandMenu();
   const name=await askModal({title:'新建项目',text:'使用英文字母、数字、短横线或下划线。已存在的目录不会被覆盖。',input:'',okLabel:'下一步'});if(!name)return;
   const source=await askModal({title:'项目来源',text:'留空创建空 Git 项目；填写 HTTP(S)/SSH Git URL 克隆。导入 ZIP 请填写 zip:文件名（先在现有对话上传）。',input:'',okLabel:'创建'});if(source===null)return;
   try {
@@ -1813,6 +1826,7 @@ function renderWorkspaceList(data=workspaceChanges) {
   const node=$('#workspace-list');if(!node)return;
   node.replaceChildren();
   if(!workspaceState || !activeId || !workspaceState.conversations.some(c=>c.id===activeId)){node.append(el('p','workspace-empty','打开项目对话以查看变更。'));return;}
+  if(workspaceState.conversations.find(c=>c.id===activeId)?.workspaceKind==='chat'){node.append(el('p','workspace-empty','Chat 没有项目变更。'));return;}
   if(!data){node.append(el('p','workspace-empty','正在读取变更…'));return;}
   if(!data.files.length){node.append(el('p','workspace-empty','没有变更。'));return;}
   for(const file of data.files) {
@@ -1843,33 +1857,31 @@ function closeWorkspaceDetail() {
   setReviewTab('diff');
   renderWorkspaceList();
 }
-function reviewHead(label,{wrapToggle=true}={}) {
+function reviewHead(label) {
   const head=el('div','wt-detail-head');
   const back=el('button','btn small','‹ 返回');back.type='button';back.title='返回变更文件列表';
   back.addEventListener('click',closeWorkspaceDetail);
   head.append(back,el('span','wt-detail-title',label));
-  if(wrapToggle) {
-    const wrap=el('button','btn small',diffWrapped ? '折行' : '换行关');
-    wrap.type='button';wrap.title='切换 Diff 换行';wrap.setAttribute('aria-pressed',String(diffWrapped));
-    wrap.addEventListener('click',()=>{diffWrapped=!diffWrapped;renderWorkspaceDiff(workspaceChanges);});
-    head.append(wrap);
-  }
   return head;
 }
 function renderWorkspaceDiff(data, path=selectedChangedPath) {
-  selectedChangedPath=path && data.files.some((file) => file.path===path) ? path : null;
-  const detail=$('#workspace-detail');detail.replaceChildren();
-  detail.append(reviewHead(selectedChangedPath || '全部变更'));
-  const meta=el('div','workspace-diff-meta');
-  meta.append(el('span','','branch '+data.branch),el('span','','base '+data.base.slice(0,12)),el('span','','target '+data.target.slice(0,12)),el('span',data.stale?'workspace-warning':'',data.stale?'远端刷新失败 · 基线可能陈旧':'刷新 '+data.refreshedAt));
-  detail.append(meta);
-  const file=data.files.find((item) => item.path===selectedChangedPath);
-  detail.append(el('pre','workspace-stat',selectedChangedPath ? file ? `${file.path}\n${changeFileStats(file)}` : selectedChangedPath : data.stat));
-  const patch=selectedChangedPath ? patchForFile(data.patch,selectedChangedPath) : data.patch;
-  const body=el('div','workspace-patch' + (diffWrapped ? ' wrapped' : ' unwrapped'));
-  body.innerHTML=patch ? renderPatchText(patch) : selectedChangedPath ? '<div class="workspace-empty">该文件没有可直接显示的文本 Diff；可能是二进制、超大小或被安全边界排除。</div>' : '<div class="workspace-empty">没有已跟踪或未跟踪的文本变更。</div>';
-  detail.append(body);
-  if(data.truncated)detail.append(el('p','workspace-warning','Diff 过大，仅显示前 150 KB；请在 VM 使用 git diff 查看完整内容。'));
+  selectedChangedPath=path && data.files.some(file=>file.path===path) ? path : null;
+  const content=$('#diff-content');content.replaceChildren();
+  $('#diff-scope-info').textContent=`${data.branch}\nbase ${data.base}\ntarget ${data.target}\n${data.stale?'远端刷新失败 · 基线可能陈旧':'刷新 '+data.refreshedAt}`;
+  for(const mode of ['unified','split'])$('#diff-'+mode).setAttribute('aria-pressed',String(mode===reviewLayout));
+  const files=selectedChangedPath?data.files.filter(f=>f.path===selectedChangedPath):data.files;
+  for(const file of files)content.append(renderReviewFile(file,patchForFile(data.patch,file.path),reviewLayout));
+  if(!files.length)content.append(el('p','workspace-empty','没有文本变更。'));
+  if(data.truncated)content.append(el('p','workspace-warning','Diff 过大，仅显示前 150 KB；请在 VM 使用 git diff 查看完整内容。'));
+  $('#diff-collapse').setAttribute('aria-label','收起全部文件');$('#diff-collapse').title='收起全部文件';
+}
+async function showDiffDialog(path) {
+  if(workspaceState?.conversations.find(c=>c.id===activeId)?.workspaceKind==='chat')return toast('Chat 没有项目 Diff');
+  const id=activeId,epoch=++diffEpoch;diffTaskId=id;selectedChangedPath=path;
+  $('#diff-content').replaceChildren(el('p','workspace-empty','正在读取 Diff…'));
+  const dialog=$('#diff-dialog');if(!dialog.open)dialog.showModal();
+  try{const data=await refreshWorkspaceChanges(false);if(data && id===activeId && epoch===diffEpoch && dialog.open)renderWorkspaceDiff(data,path);}
+  catch(e){if(id===activeId && epoch===diffEpoch && dialog.open)$('#diff-content').replaceChildren(el('p','workspace-warning',e.message));}
 }
 function renderWorkspaceChecks(data) {
   const detail=$('#workspace-detail');detail.replaceChildren();
@@ -1919,7 +1931,8 @@ async function showWorkspacePreview(path) {
 }
 async function showWorkspaceReview(tab,path=null) {
   if(!workspaceState || !activeId){toast('请先打开项目对话');return;}
-  if(tab==='diff')selectedChangedPath=path;else selectedChangedPath=null;
+  if(tab==='diff')return showDiffDialog(path);
+  selectedChangedPath=null;
   workspaceDetailOpen=true;
   setWorkspaceOpen(true);
   setReviewTab(tab);
@@ -1929,8 +1942,7 @@ async function showWorkspaceReview(tab,path=null) {
   try {
     const data=await refreshWorkspaceChanges(false);
     if(!data)return;
-    if(tab==='checks')renderWorkspaceChecks(data);
-    else renderWorkspaceDiff(data,path);
+    renderWorkspaceChecks(data);
   }
   catch(e){detail.replaceChildren(el('p','workspace-empty',e.message));toast(e.message);}
 }
@@ -1992,3 +2004,15 @@ async function refreshArtifactCards() {
   ui.thread.append(section);
  }catch { /* Browsing failure must not fail the running chat. Refresh/reconnect can retry. */ }
 }
+
+function closeDiffDialog() {
+  const dialog=$('#diff-dialog');
+  ++diffEpoch;diffTaskId=null;
+  if(dialog.open)dialog.close();
+}
+
+$('#diff-close').addEventListener('click',closeDiffDialog);
+$('#diff-dialog').addEventListener('cancel',event=>{event.preventDefault();closeDiffDialog();});
+$('#diff-dialog').addEventListener('keydown',event=>event.stopPropagation());
+for(const mode of ['unified','split'])$('#diff-'+mode).addEventListener('click',()=>{reviewLayout=mode;if(workspaceChanges && diffTaskId===activeId)renderWorkspaceDiff(workspaceChanges);});
+$('#diff-collapse').addEventListener('click',()=>{const files=[...$('#diff-content').querySelectorAll('.review-file')];const open=!files.some(file=>file.open);for(const file of files)file.open=open;$('#diff-collapse').setAttribute('aria-label',open?'收起全部文件':'展开全部文件');$('#diff-collapse').title=open?'收起全部文件':'展开全部文件';});

@@ -8,6 +8,8 @@ try {
  await page.goto('http://127.0.0.1:'+(process.env.PI_COFFEE_LAYOUT_PORT || '4175'));
  await page.getByRole('button',{name:/^布局验收 0/}).click();
  await page.getByRole('button',{name:'Checkpoint',exact:true}).waitFor();
+ assert.equal(await page.locator('#workspace-panel').isVisible(),false);
+ await page.getByRole('button',{name:'打开变更面板',exact:true}).click();
  await page.locator('.wt-file').first().waitFor();
  for(const collapsed of [false,true]) {
   await page.setViewportSize({width:1280,height:796});
@@ -29,6 +31,18 @@ try {
   assert.equal(await page.evaluate(()=>document.activeElement.id),'stats');
   await page.locator('#stats').click();await page.locator('#stats-close').click();
  }
+ await page.getByRole('button',{name:'打开变更面板',exact:true}).click();
+ await page.locator('.wt-file').first().click();
+ for(const [width,height] of [[1280,796],[390,844],[820,480]]) {
+  await page.setViewportSize({width,height});
+  const bounds=await page.locator('#diff-dialog').evaluate(p=>{const r=p.getBoundingClientRect();return {modal:p.matches(':modal'),fits:r.x>=0&&r.y>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,overflow:p.scrollWidth>p.clientWidth};});
+  assert.deepEqual(bounds,{modal:true,fits:true,overflow:false});
+ }
+ await page.getByRole('button',{name:'Split',exact:true}).click();
+ assert.match(await page.locator('.review-code').innerText(),/old[\s\S]*new/);
+ await page.getByRole('button',{name:'关闭 Diff',exact:true}).press('Escape');
+ assert.equal(await page.locator('#diff-dialog').isVisible(),false);
+ await page.getByRole('button',{name:'关闭 Checkout 面板',exact:true}).click();
  await page.getByRole('textbox',{name:'输入',exact:true}).fill('Synthetic draft\n'.repeat(35));
  assert.deepEqual((await page.evaluate(measureLayout)).failures,[]);
  await page.getByLabel('展开任务信息',{exact:true}).click();
