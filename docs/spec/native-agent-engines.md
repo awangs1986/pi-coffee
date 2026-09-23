@@ -29,7 +29,7 @@ This maintained contract is implemented for the pinned native CLI versions. [M5 
 6. As a Browser User, I want the existing three-pane layout to remain, so that adding engines does not change how I navigate.
 7. As a Browser User, I want to choose a Gitea Project and starting branch, so that each engine starts from the intended code.
 8. As a Browser User, I want every code Task to receive an independent clone and Conversation Branch, so that simultaneous Tasks do not share local Git state.
-9. As a Browser User, I want a local Chat Workspace without a Repository, so that conversations and their attachments still have a dedicated directory.
+9. As a Browser User, I want a Pi-only local Chat Workspace without a Repository, so that conversations and their attachments still have a dedicated directory.
 10. As a Browser User, I want Workspace type and native engine mode to remain distinct, so that choosing a directory does not silently alter agent behavior.
 11. As a Browser User, I want VM identity, Project, complete local path, actual branch and synchronization status to remain available, so that I know where work happens.
 12. As a Browser User, I want rename, refresh and reconnect to retain the same Workspace, so that my local work remains stable.
@@ -142,3 +142,16 @@ Run the documented repository checks from a fresh clone before implementation ac
 - The testing seam was presented to the owner during synthesis. The default is public-interface regression plus a small real-engine smoke, consistent with the owner's preference for proving the workflow without excessive testing; broader execution remains an implementation choice only if a demonstrated failure warrants it.
 - Sources inspected on 2026-09-23: [Codex App Server](https://developers.openai.com/codex/app-server), [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), and [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview). The distinction between an end user's official login to hosted unmodified Claude Code and third-party SDK authentication must remain explicit. Applicable terms should be rechecked before release; this SPEC is not a provider's written approval.
 - [ClaudeCodeUI runtime at revision 6c51fcaa76c250af70561fad7312c5a7f841a733](https://github.com/siteboon/claudecodeui/blob/6c51fcaa76c250af70561fad7312c5a7f841a733/server/modules/providers/list/claude/claude-runtime.provider.js) demonstrates streaming, native ID mapping and interruption through the Agent SDK. It is technical prior art only; this SPEC neither adopts its authentication path nor copies its implementation. The selected native CLI transport and pinned-version verification are recorded in the implementation evidence and deployment runbook.
+
+## Pi-only Chat creation — owner correction, 2026-09-23
+
+Agent #60 / Server #4 supersedes engine-independent Chat creation. New Chat
+Tasks default to Pi and reject Codex/Claude at the Host HTTP creation boundary
+before persisting a workspace. Work supports all three engines with a Gitea
+Project and independent Checkout. Engine bindings remain immutable. Native local
+tasks created before this correction remain accessible; their identity, files
+and history are not migrated or relabeled by this change.
+
+Pi account import into Web Server is a possible future direction only. No
+credentials move in this change; native Codex/Claude authentication and VM data
+ownership remain unchanged.
