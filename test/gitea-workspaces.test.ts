@@ -139,10 +139,9 @@ describe("Gitea-backed Conversation Checkouts", () => {
   it("creates one real pull request record and continues code on a new branch", async () => {
     const root = await mkdtemp(join(tmpdir(), "coffee-continuation-"));
     class FakeForge implements CodeForge {
-      calls = 0;
+      number = 7;
       async createPullRequest(_project: Project, source: string, target: string) {
-        this.calls += 1;
-        return { number: 7, url: "http://gitea/pr/7", state: "open", source, target };
+        return { number: this.number, url: `http://gitea/pr/${this.number}`, state: "open", source, target };
       }
     }
     try {
@@ -156,8 +155,8 @@ describe("Gitea-backed Conversation Checkouts", () => {
       await writeFile(join(source.cwd, "feature.txt"), "ready\n");
       const checkpoint = await workspaces.checkpoint(source.id, ["feature.txt"], "checkpoint: ready");
       expect(await workspaces.openPullRequest(source.id, "Ready")).toMatchObject({ number: 7, source: source.branch, target: "main" });
-      expect(await workspaces.openPullRequest(source.id, "Retry")).toMatchObject({ number: 7 });
-      expect(forge.calls).toBe(1);
+      forge.number = 8; // The forge has replaced the old PR; local metadata is not authoritative.
+      expect(await workspaces.openPullRequest(source.id, "Retry")).toMatchObject({ number: 8, url: "http://gitea/pr/8" });
 
       const next = await workspaces.continueFrom(project.id, source.branch, checkpoint.remoteSha!, "conversation-b");
       expect(next.branch).toBe("coffee/vm-a/conversation-b");
