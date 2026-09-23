@@ -134,6 +134,8 @@ Run the documented repository checks from a fresh clone before implementation ac
 
 ## Further Notes
 
+- Implementation is divided into [M0–M5](../development/native-agents-m0-m5.md), with one delivery Issue per milestone. Native transport feasibility precedes Adapter acceptance; source research does not count as a completed real-engine probe.
+
 - [ADR-0013](../adr/0013-native-agent-engines.md) records the engine boundary and the scope refinements to earlier Pi-specific decisions. The [Pi Agent contract](./pi-agent.md), [Gitea Workspace contract](./gitea-workspaces.md) and [Conversation Workspace contract](./conversation-workspaces.md) remain authoritative within their respective scopes.
 - The main implementation Issue is [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48); the separate Server Issue is [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). The Agent public contract is a prerequisite for Server activation. Existing frontend fixes remain a separate review; this feature does not merge or deploy them implicitly.
 - Read implementation state from code and acceptance evidence. At publication, the Host factory, native-history handling, lifecycle guards and Browser Shell Events still contain Pi-specific assumptions. This document records the required migration, not an already generic runtime.
