@@ -1,6 +1,6 @@
 # Native Codex and Claude Code integration
 
-Status: **accepted product direction; ready for implementation; not implemented or deployed**.
+Status: **M0–M4 implemented on the delivery branch; production deployment remains M5**. See [evidence](../reviews/native-agents-m0-m4-20260923.md) and [supported capabilities](../deployment/native-agents.md).
 Date: 2026-09-23. Owner decisions were synthesized from the current discussion.
 Tracking: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48). Browser delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
 Parent: [Agent map](http://gitea:3000/awangs/pi-coffee/issues/1).

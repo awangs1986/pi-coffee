@@ -198,3 +198,45 @@ and `PI_SUBAGENTS_TEMP_ROOT` under their data root. Restored mode overrides the 
 default. Native sessions remain in their existing VM store. Proven old
 `.pi-coffee/inbox/<id>/...` references retain scoped **read-only** download/preview access;
 new uploads go to the task directory. Unattributed global evidence is not reassigned.
+
+## Native engine extension (nativeProtocol 1)
+
+The envelope remains `v: 1`; the additive native contract is negotiated by
+`open.nativeProtocol: 1`. Pi clients remain compatible. Opening a native Task
+without that opt-in fails before creating a process. Unknown Task IDs do not
+select Pi implicitly.
+
+Authenticated `GET /api/engines` returns exactly three installation/version
+entries: `pi`, `codex`, `claude`, each with `name`, `available` and optional
+`reason`/`version` and native `authentication` (configured/required/unknown). Native authentication remains in the CLI; availability is not
+provider authorization. The Web gateway forwards this endpoint as read-only to
+the user's fixed Host.
+
+Workspace `conversation` and `continue` accept `engine` (legacy default `pi`).
+Engine identity is fixed at creation and preserved through retry/archive/restore.
+Native IDs are Host-owned binding metadata, never an `open` or `prompt` input.
+`opened` adds `engine` and boolean `capabilities`: models, images, stop, questions,
+tools, thinking, steer, followUp, stats, commands, extensions, compact, rename,
+cleanup. Missing capabilities on legacy Pi Hosts retain the established Pi UI.
+Missing native capabilities do not imply support.
+
+Native `event` payloads use the existing ordered cursor and Task scope:
+
+- `run_started {runId}` and `run_completed {status, message?}`. Stop acknowledgement
+  accepts the request; only native terminal evidence completes the run.
+- `message_delta {id, delta}` and `message_completed {id, text}`. Completion
+  replaces the accumulated text for that ID.
+- `tool_update {id, name?, args?, status, result?, isError?}`. Updates share one
+  stable item ID; history/replay must not append duplicates.
+- `native_request {id, method, title, message?, options?, secret?}` uses the
+  existing `ui_response` envelope. Requests remain pending across disconnects;
+  invalid or stale answers cannot grant a different request. Question groups
+  are presented sequentially and answered as one native response.
+- `background_state {known, active}` is independent of foreground completion.
+  Unknown writer state is not permission for a Git or cleanup operation.
+
+A failed or uncertain native delivery is visible and is not replayed. Completed
+history comes from the native engine and its binding. Secrets, raw native stderr
+and native login material are not exposed by discovery or lifecycle errors.
+See [activation and recovery](deployment/native-agents.md) for the version-pinned
+capability matrix and retained-data cleanup policy.
