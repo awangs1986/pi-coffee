@@ -1,13 +1,13 @@
 # Native Codex and Claude Code integration
 
-Status: **M0–M4 implemented on the delivery branch; production deployment remains M5**. See [evidence](../reviews/native-agents-m0-m4-20260923.md) and [supported capabilities](../deployment/native-agents.md).
+Status: **M0–M5 implemented, merged and deployed**. See [M5 deployment evidence](../reviews/native-agents-m5-20260923.md) and [supported capabilities](../deployment/native-agents.md).
 Date: 2026-09-23. Owner decisions were synthesized from the current discussion.
 Tracking: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48). Browser delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
 Parent: [Agent map](http://gitea:3000/awangs/pi-coffee/issues/1).
 
 ## Problem Statement
 
-Browser Users want to use their own authenticated Codex and Claude Code installations through the existing PI Coffee Browser Shell, while retaining each engine's native behavior. Today the Host owns Pi Sessions, the Browser Shell understands Pi-specific Events, and runtime setup injects Pi-specific configuration. Replacing a launch command would not correctly handle native history, identity, lifecycle, or capabilities.
+Browser Users want to use their own authenticated Codex and Claude Code installations through the existing PI Coffee Browser Shell, while retaining each engine's native behavior. Before this integration the Host owned Pi Sessions, the Browser Shell understood Pi-specific Events, and runtime setup injected Pi-specific configuration. Replacing a launch command would not correctly handle native history, identity, lifecycle, or capabilities.
 
 Users also need the same Gitea workflow regardless of engine: choose a Project and starting branch, receive an independent Checkout, edit code, inspect changes, create a Checkpoint, and open a pull request. They should not need a second workspace manager, shared writable clone, or redesigned interface.
 
@@ -17,7 +17,7 @@ Extend the User VM Host with engine-specific Adapters for Pi, Codex, and Claude 
 
 Pi retains the existing PI Coffee customizations. Codex and Claude Code retain their native prompts, tools, Skills, context management, configuration, authentication and permission behavior. The platform translates supported interactions and displays capabilities; it does not rebuild their agent loops or inject the Pi Harness. Users authenticate through each installed engine's own supported flow in their User VM.
 
-This is a future integration contract, not evidence that these engines already work in PI Coffee. The current production implementation remains Pi-only.
+This maintained contract is implemented for the pinned native CLI versions. [M5 deployment evidence](../reviews/native-agents-m5-20260923.md) distinguishes production Browser/API acceptance from deterministic fixtures and records the remaining optional capability limits.
 
 ## User Stories
 
@@ -122,7 +122,7 @@ Run the documented repository checks from a fresh clone before implementation ac
 
 ## Out of Scope
 
-- Implementing or deploying native-engine support as part of this documentation delivery.
+- Unverified native CLI versions and provider/model combinations outside the recorded release.
 - Sharing one native Session between engines, changing a Task's engine in place, converting native transcript formats or transferring live model context across VMs.
 - Rebuilding Codex or Claude Code prompts, tools, Skills, context management, permission behavior or internal agent loops with Pi components.
 - Modifying the Claude Code binary, scraping its UI/private provider endpoints, provider credential pooling, subscription-token relays, quota resale, or offering provider login forms owned by PI Coffee.
@@ -138,7 +138,7 @@ Run the documented repository checks from a fresh clone before implementation ac
 
 - [ADR-0013](../adr/0013-native-agent-engines.md) records the engine boundary and the scope refinements to earlier Pi-specific decisions. The [Pi Agent contract](./pi-agent.md), [Gitea Workspace contract](./gitea-workspaces.md) and [Conversation Workspace contract](./conversation-workspaces.md) remain authoritative within their respective scopes.
 - The main implementation Issue is [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48); the separate Server Issue is [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). The Agent public contract is a prerequisite for Server activation. Existing frontend fixes remain a separate review; this feature does not merge or deploy them implicitly.
-- Read implementation state from code and acceptance evidence. At publication, the Host factory, native-history handling, lifecycle guards and Browser Shell Events still contain Pi-specific assumptions. This document records the required migration, not an already generic runtime.
+- Read implementation state from code and acceptance evidence. The implemented Host factory, lifecycle guards and Browser Shell now consume the additive engine contract. The dated evidence identifies tested behavior and remaining capability limits.
 - The testing seam was presented to the owner during synthesis. The default is public-interface regression plus a small real-engine smoke, consistent with the owner's preference for proving the workflow without excessive testing; broader execution remains an implementation choice only if a demonstrated failure warrants it.
 - Sources inspected on 2026-09-23: [Codex App Server](https://developers.openai.com/codex/app-server), [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), and [Claude Agent SDK overview](https://code.claude.com/docs/en/agent-sdk/overview). The distinction between an end user's official login to hosted unmodified Claude Code and third-party SDK authentication must remain explicit. Applicable terms should be rechecked before release; this SPEC is not a provider's written approval.
-- [ClaudeCodeUI runtime at revision 6c51fcaa76c250af70561fad7312c5a7f841a733](https://github.com/siteboon/claudecodeui/blob/6c51fcaa76c250af70561fad7312c5a7f841a733/server/modules/providers/list/claude/claude-runtime.provider.js) demonstrates streaming, native ID mapping and interruption through the Agent SDK. It is technical prior art only; this SPEC neither adopts its authentication path nor copies its implementation. The concrete supported native Claude CLI transport still requires version-specific verification during implementation.
+- [ClaudeCodeUI runtime at revision 6c51fcaa76c250af70561fad7312c5a7f841a733](https://github.com/siteboon/claudecodeui/blob/6c51fcaa76c250af70561fad7312c5a7f841a733/server/modules/providers/list/claude/claude-runtime.provider.js) demonstrates streaming, native ID mapping and interruption through the Agent SDK. It is technical prior art only; this SPEC neither adopts its authentication path nor copies its implementation. The selected native CLI transport and pinned-version verification are recorded in the implementation evidence and deployment runbook.

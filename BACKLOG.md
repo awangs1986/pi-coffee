@@ -62,9 +62,9 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 ## Native Codex and Claude Code integration (2026-09-23)
 
 - **D-046 / DECIDED**: support the user's own native Codex and Claude Code through Host Adapters; preserve their native design and official user authentication. Pi prompts, Chat/Work behavior, tools, LSP, plugins and context policies remain Pi-only.
-- **Implementation sequence**: [M0–M5](./docs/development/native-agents-m0-m5.md) defines six delivery Issues under Agent #48 and Server #6. M0 validates native interfaces; M1 establishes the shared contract; M2/M3 deliver Adapters; M4 adds Browser support; M5 proves and releases the integrated workflow. M0–M4 are implemented on the delivery branch; M5 remains pending. See [evidence](./docs/reviews/native-agents-m0-m4-20260923.md).
+- **Implementation sequence**: [M0–M5](./docs/development/native-agents-m0-m5.md) defines six delivery Issues under Agent #48 and Server #6. M0 validates native interfaces; M1 establishes the shared contract; M2/M3 deliver Adapters; M4 adds Browser support; M5 proves and releases the integrated workflow. M0–M5 are merged and deployed on both User VMs and the separate Web host. See [M5 evidence](./docs/reviews/native-agents-m5-20260923.md) and the bounded [M0–M4 checks](./docs/reviews/native-agents-m0-m4-20260923.md).
 - **Owner-confirmed selection rule**: new Tasks choose Pi, Codex or Claude Code once at creation. The engine is immutable; model selection stays within that engine. Another engine requires a new Task.
-- **M0–M4 implemented; M5 pending**: [maintained SPEC](./docs/spec/native-agent-engines.md), [ADR-0013](./docs/adr/0013-native-agent-engines.md), Agent delivery [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and Server companion [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). Existing Pi behavior remains supported.
+- **M0–M5 implemented and deployed**: [maintained SPEC](./docs/spec/native-agent-engines.md), [ADR-0013](./docs/adr/0013-native-agent-engines.md), Agent delivery [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and Server companion [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). Existing Pi behavior remains supported.
 - Reuse fixed User VM routing, one Conversation/Workspace, independent clones and Gitea Checkpoint/PR management. No platform worktree, new provider account system, subscription relay or wholesale UI redesign.
 - Primary acceptance remains the existing public Host HTTP/WebSocket seam plus a small real-engine workflow. Issues own implementation status; this entry records design and scope only.
 
@@ -351,3 +351,5 @@ MVP-001..005 (已完成)
 2026-09-22：D-045 / PA-013 Conversation Workspace 已完成 Agent #46 / Server #3 联合实现与部署；[证据](./docs/reviews/conversation-workspaces-20260922.md)。Chat/Work 每任务独立目录，完整路径/分支/同步状态、原图及产物归属、归档保留与显式清理均进入公共 seam 验收。
 
 2026-09-23: D-046 records native Codex/Claude Code integration as an accepted design and ready implementation scope; no runtime changes or deployment are included.
+
+2026-09-23: M0–M5 native-engine integration is merged and deployed. The [M5 evidence](./docs/reviews/native-agents-m5-20260923.md) records real Browser/Gitea/file flows, the collaborator PR corrections, recovery, fixed routes and explicit native capability limits.
