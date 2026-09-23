@@ -62,6 +62,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 ## Native Codex and Claude Code integration (2026-09-23)
 
 - **D-046 / DECIDED**: support the user's own native Codex and Claude Code through Host Adapters; preserve their native design and official user authentication. Pi prompts, Chat/Work behavior, tools, LSP, plugins and context policies remain Pi-only.
+- **Owner-confirmed selection rule**: new Tasks choose Pi, Codex or Claude Code once at creation. The engine is immutable; model selection stays within that engine. Another engine requires a new Task.
 - **READY, not implemented**: [maintained SPEC](./docs/spec/native-agent-engines.md), [ADR-0013](./docs/adr/0013-native-agent-engines.md), Agent delivery [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and Server companion [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). Existing Pi behavior remains supported.
 - Reuse fixed User VM routing, one Conversation/Workspace, independent clones and Gitea Checkpoint/PR management. No platform worktree, new provider account system, subscription relay or wholesale UI redesign.
 - Primary acceptance remains the existing public Host HTTP/WebSocket seam plus a small real-engine workflow. Issues own implementation status; this entry records design and scope only.
