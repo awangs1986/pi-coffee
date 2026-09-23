@@ -65,3 +65,11 @@ acknowledgement is not terminal evidence. Unsupported Pi controls are hidden.
 Read the [canonical Host protocol](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/protocol.md)
 and [native runbook](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/deployment/native-agents.md)
 for field definitions, recovery and the version-pinned capability matrix.
+
+## Web-managed Skills
+
+`POST /api/skills` uses the fixed authenticated Host route and origin checks.
+See [Browser contract](spec/skill-management.md) and the linked canonical Host
+contract for scoped `list`, `detail`, `install`, `update`, `enable`, `disable`
+and idle `reload` actions. Gateway stores no Skill files, repository credentials
+or enabled-state registry. A legacy Host's 404 is shown as unavailable.

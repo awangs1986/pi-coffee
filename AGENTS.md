@@ -3,6 +3,8 @@
 This repository owns the browser shell and Control Plane side of PI Coffee.
 The Agent Host, Pi extensions, tools, Skills, LSP layer, workspaces and durable
 user data belong to `awangs/pi-coffee` and must not be implemented here.
+Web Skill management UI belongs here; Skill storage, installation, native loading
+and execution remain on the User VM through the Host interface.
 
 ## First read
 

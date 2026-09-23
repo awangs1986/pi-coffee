@@ -1,3 +1,4 @@
+import { initSkills } from "./skills.js";
 // PI Coffee browser shell — controller. The browser is a view: conversations,
 // history, models and running state live on the Host in the User VM. The only
 // local value is which conversation this browser last displayed.
@@ -1546,8 +1547,15 @@ function submitPrompt(text, images) {
 }
 ui.stop.addEventListener('click', () => { if (opened) { send({ v: 1, type: 'abort' }); pushNote('已请求停止当前任务。'); } });
 
+const skillPanel=initSkills({
+  context:()=>{const task=workspaceState?.conversations.find(c=>c.id===activeId);return {id:activeId,engine:task?.engine??engine,kind:task?.archived?null:task?.workspaceKind};},
+  onOpen:()=>{setSearchOpen(false);setWorkspaceOpen(false);closeDiffDialog();closeBrandMenu();closeSidebarOnMobile();ui.projectManage.open=false;},
+  notify:toast,
+});
+
 // ---------- session actions ----------
 function switchSession(id) {
+  skillPanel.close();
   setSearchOpen(false);
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
@@ -1568,6 +1576,7 @@ function switchSession(id) {
   connect();
 }
 function newSession(focus = true) {
+  skillPanel.close();
   setSearchOpen(false);
   ui.projectManage.open = false;
   setWorkspaceOpen(false);closeDiffDialog();
@@ -1596,6 +1605,7 @@ $('#open-side').addEventListener('click', openSidebar);
 $('#close-side').addEventListener('click', collapseSidebar);
 function closeSidebarOnMobile() { ui.app.classList.remove('side-open'); }
 function setSearchOpen(open) {
+  if(open)skillPanel.close();
   searchOpen=open;ui.app.classList.toggle('search-open',open);
   $('#search-page').classList.toggle('hidden',!open);
   $('#search-open').setAttribute('aria-expanded',String(open));
@@ -1640,6 +1650,7 @@ document.addEventListener('keydown', (event) => {
     if (ui.projectManage?.open) { ui.projectManage.open = false; return; }
     if (!ui.slash.classList.contains('hidden')) { ui.slash.classList.add('hidden'); return; }
     if (workspaceDetailOpen) { closeWorkspaceDetail(); return; }
+    if(skillPanel.isOpen()){skillPanel.close();return;}
     if(searchOpen){setSearchOpen(false);$('#search-open').focus();return;}
     closeSidebarOnMobile();
     if (streaming && opened && document.activeElement !== ui.prompt) { send({ v: 1, type: 'abort' }); pushNote('已请求停止当前任务。'); }

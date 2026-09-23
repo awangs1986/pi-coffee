@@ -138,7 +138,7 @@ export class WebServer {
       return;
     }
     if (this.identity && await this.identity.handle(request, response)) return;
-    if(path === "/api/workspace" || path === "/api/engines") {
+    if(path === "/api/workspace" || path === "/api/engines" || path === "/api/skills") {
       try {
         const session=await this.identity?.authorize(request);
         if(this.identity && !session) {json(response,401,{error:"Login required"});return;}
