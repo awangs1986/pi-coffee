@@ -19,3 +19,5 @@
 Gitea 只保存已推送的版本化代码，不保存未提交文件、Pi transcript、凭据、上传和产物缓存。跨主机接续从已验证的远端 checkpoint 创建新的 Conversation/分支，不自动迁移原生会话，不允许平台把同一分支分配给两个活跃写入者。已有本地工作区与旧协议按迁移计划保留和退出，不因文档决策直接删除。
 
 行为合同见 [工作区 SPEC](../spec/gitea-workspaces.md)，交付和退出旧实现的证据见 [T0–T4](../development/t0-t4-gitea-workspaces.md)。当前代码已退出平台 worktree/本地 merge 路径；这不等于任一现有 VM 已执行 sudoers 安装或存量目录迁移。
+
+Native-engine scope update (2026-09-23): [ADR-0013](./0013-native-agent-engines.md) extends the Host to Codex and Claude Code while preserving Pi behavior. Its explicit authentication, native-permission, history and repository boundaries govern that planned extension; this earlier Pi-specific decision does not imply native-engine support is already implemented.

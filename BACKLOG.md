@@ -59,6 +59,13 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 ---
 
+## Native Codex and Claude Code integration (2026-09-23)
+
+- **D-046 / DECIDED**: support the user's own native Codex and Claude Code through Host Adapters; preserve their native design and official user authentication. Pi prompts, Chat/Work behavior, tools, LSP, plugins and context policies remain Pi-only.
+- **READY, not implemented**: [maintained SPEC](./docs/spec/native-agent-engines.md), [ADR-0013](./docs/adr/0013-native-agent-engines.md), Agent delivery [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and Server companion [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). Existing Pi behavior remains supported.
+- Reuse fixed User VM routing, one Conversation/Workspace, independent clones and Gitea Checkpoint/PR management. No platform worktree, new provider account system, subscription relay or wholesale UI redesign.
+- Primary acceptance remains the existing public Host HTTP/WebSocket seam plus a small real-engine workflow. Issues own implementation status; this entry records design and scope only.
+
 ## 1. 讨论结论登记（Decision Register）
 
 下面的登记表覆盖今天讨论中形成的产品、运行和工程约束。详细定义放在链接文档中；这里保留决策、影响和交付位置，方便追溯。
@@ -340,3 +347,5 @@ MVP-001..005 (已完成)
 2026-09-22：HARNESS-001/002 完成 Chat/Work 运行时迁移、旧状态升级及请求边界验证；[证据](./docs/reviews/chat-work-migration-20260922.md)。T4 双用户门槛仍单独验收。
 
 2026-09-22：D-045 / PA-013 Conversation Workspace 已完成 Agent #46 / Server #3 联合实现与部署；[证据](./docs/reviews/conversation-workspaces-20260922.md)。Chat/Work 每任务独立目录，完整路径/分支/同步状态、原图及产物归属、归档保留与显式清理均进入公共 seam 验收。
+
+2026-09-23: D-046 records native Codex/Claude Code integration as an accepted design and ready implementation scope; no runtime changes or deployment are included.

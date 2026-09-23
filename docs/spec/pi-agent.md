@@ -4,6 +4,10 @@
 
 本文是 Pi Agent 部分的固定设计入口，记录已确认决定、理由、实现差距、未决项和验收依据。后续在此迭代，不另建一份按日期命名的“最新主规格”。评审记录可以按日期归档，但不能替代本文。
 
+## Native-engine scope clarification (2026-09-23)
+
+The PA/WP decisions in this document apply to **Pi only**, including zero-system-prompt Chat, Work prompting, tool inventory, LSP, plugin loading and context recovery. The accepted [native-engine integration](./native-agent-engines.md) preserves Codex and Claude Code's own design and official authentication. Shared Conversation Workspace/Gitea rules apply independently of engine. Native-engine support is planned, not implemented.
+
 ## 1. 范围和阅读规则
 
 - 范围：原版 Pi 的插件扩展、Chat / Work、Work 提示词、工具可用性、上下文节制和恢复。Web 工作台、身份、文件网关和 VM 拓扑继续使用各自 SPEC，不借本次讨论扩大范围。

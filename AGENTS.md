@@ -9,7 +9,8 @@ The frozen Picode V5 repository remains reference-only.
 1. Read [`docs/index.md`](./docs/index.md).
 2. Read [`BACKLOG.md`](./BACKLOG.md) for scope and status.
 3. Read the linked Gitea Issue before changing scope.
-4. For Agent changes, read [`docs/spec/pi-agent.md`](./docs/spec/pi-agent.md) and the relevant specialist SPEC.
+4. For native Codex/Claude Code integration, read [`docs/spec/native-agent-engines.md`](./docs/spec/native-agent-engines.md) and ADR-0013; this is planned support and Pi customizations must stay Pi-only.
+5. For Agent changes, read [`docs/spec/pi-agent.md`](./docs/spec/pi-agent.md) and the relevant specialist SPEC.
 
 ## Working rules
 

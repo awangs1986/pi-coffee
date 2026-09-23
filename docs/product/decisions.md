@@ -11,6 +11,12 @@ This document records the resolved decisions from the design conversation. It di
 | The existing Picode repository is called **V5** and remains frozen. | accepted |
 | PI Coffee starts from the unmodified original Pi agent and adds adapters around it. | accepted |
 
+## Native engines (2026-09-23)
+
+Accepted design: add native Codex and Claude Code behind Host Adapters while retaining the existing Browser Shell and shared Conversation Workspace/Gitea services. Each engine keeps its own native behavior and official user authentication. Pi's Harness, Chat/Work prompts, LSP, tools, plugins and context policy remain Pi-only; the trusted VM model does not disable another engine's native permissions.
+
+[ADR-0013](../adr/0013-native-agent-engines.md) refines earlier Pi-only decisions. The [native-engine SPEC](../spec/native-agent-engines.md) is ready for implementation under [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). No runtime or deployment completion is claimed.
+
 ## Runtime topology
 
 - The **Control Plane/Web VM** runs Debian and hosts the Web Server, browser-facing session routing, the central LLM Relay, and minimal usage/routing metadata.
@@ -29,7 +35,7 @@ This document records the resolved decisions from the design conversation. It di
 - Gitea is the sole human identity source for 0.1. The user signs in through Gitea OAuth; the Control Plane maps that identity to a fixed User VM.
 - Gitea is an internal collaboration/relay repository, not the final code archive and not internet-facing. Account permissions are managed by the owner.
 - No repository branch-protection policy is required; the owner protects privileged actions through account access.
-- The unique upstream LLM credential belongs on the Control Plane. The User VM must not receive it once the central Relay is enabled.
+- For the existing Pi Relay route, the central upstream LLM credential belongs on the Control Plane and is not passed to the User VM. Native Codex and Claude Code use their own official user authentication in the User VM, as defined by ADR-0013; they do not inherit that Relay credential policy.
 
 ## LLM Relay
 
@@ -73,7 +79,7 @@ The future Deployment Skill is idempotent: install the pinned Pi package, PI Cof
 
 The owner-confirmed Agent decisions live in the [Pi Agent main SPEC](../spec/pi-agent.md), with stable PA requirement IDs, rationale, open questions, implementation status and acceptance criteria. The [Work prompt SPEC](../spec/harness-prompt.md) owns the WP behavior rules and prompt maintenance process; dated reviews provide evidence, not a second contract.
 
-The 2026-09-20 decisions are the sole Agent product-mode design. The target has only Chat and Work. Chat has no system prompt, including Pi's native default; Work has a complete development prompt. Exact tool inventories and migration details remain explicitly unresolved in the main SPEC. Agent extensions must remain plugins around the unmodified Pi, with an upgradeable upstream and a restrained tool surface.
+The 2026-09-20 decisions define the Pi-specific product-mode design. The target has only Chat and Work. Chat has no system prompt, including Pi's native default; Work has a complete development prompt. Exact tool inventories and migration details remain explicitly unresolved in the main SPEC. Agent extensions must remain plugins around the unmodified Pi, with an upgradeable upstream and a restrained tool surface.
 
 The checkout still uses legacy mode routing and appends the Work body to Pi Base. This is implementation status, not a decision to preserve that behavior in Chat. Gitea synchronization for the new decisions is pending connectivity; no external ticket acceptance is asserted.
 
