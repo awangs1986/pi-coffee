@@ -164,9 +164,14 @@ VM owner/home as the native process.
    Workspace/session directories and protected service configuration. Capture
    registered Task IDs/bindings privately for before/after comparison.
 3. In `/etc/systemd/system/pi-coffee-host.service.d/30-native-agents-release.conf`,
-   set `WorkingDirectory` to the staged Agent release, load the protected
-   `EnvironmentFile`, and set the two absolute native executable paths. Retain
-   the existing service user, token, workspace roots and Pi configuration.
+   set only the immutable release `WorkingDirectory`. Keep the existing native
+   `EnvironmentFile` and absolute executable `Environment` entries in a separate
+   `40-native-agent-environment.conf` drop-in. Do not rewrite environment settings
+   when switching release directories. Retain the original root-only configuration
+   and environment files for rollback; never copy their credential contents into
+   the repository or an Issue. Confirm `/api/engines` still reports the configured
+   engines after **every** Host release, even a frontend-only companion change.
+
 4. Run `sudo systemctl daemon-reload` and
    `sudo systemctl restart pi-coffee-host` on linux002 first, then linux001.
    Verify `/healthz`, authenticated `/api/engines`, retained Task identities and
