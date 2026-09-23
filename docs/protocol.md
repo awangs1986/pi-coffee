@@ -240,3 +240,12 @@ history comes from the native engine and its binding. Secrets, raw native stderr
 and native login material are not exposed by discovery or lifecycle errors.
 See [activation and recovery](deployment/native-agents.md) for the version-pinned
 capability matrix and retained-data cleanup policy.
+
+## Categorized context usage
+
+`stats.contextBreakdown` is additive and defined in [CU-01–03](spec/context-usage.md).
+It carries `version: 1`, `method: o200k_base_estimate`, `basis: last_request | session_preview`,
+`model`, `capturedAt`, `contextWindow`, `totalTokens`, `mediaOmitted`, and seven
+`{id,tokens}` categories. The Browser must use this total for the segmented chart,
+not cumulative `stats.tokens`. Missing breakdown is unavailable. Raw content
+never crosses this metadata interface.

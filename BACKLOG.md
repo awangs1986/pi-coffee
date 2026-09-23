@@ -353,3 +353,10 @@ MVP-001..005 (已完成)
 2026-09-23: D-046 records native Codex/Claude Code integration as an accepted design and ready implementation scope; no runtime changes or deployment are included.
 
 2026-09-23: M0–M5 native-engine integration is merged and deployed. The [M5 evidence](./docs/reviews/native-agents-m5-20260923.md) records real Browser/Gitea/file flows, the collaborator PR corrections, recovery, fixed routes and explicit native capability limits.
+
+## Context Usage attribution correction (2026-09-23)
+
+[Agent #58](http://gitea:3000/awangs/pi-coffee/issues/58) implements the
+[seven-category context contract](docs/spec/context-usage.md), consumed by Server #4.
+Local numeric estimates stay distinct from provider billing; native-engine contexts
+remain isolated. Delivery and clean-clone evidence are recorded in the Issue.

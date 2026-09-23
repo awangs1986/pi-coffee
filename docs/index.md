@@ -74,3 +74,5 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - Code/tests in the checkout define implemented behavior. Evidence states the revision, commands, environment and unverified boundaries; a requirement or document being written does not mean it has shipped.
 - Change the canonical requirement and linked implementation/evidence status together. Keep unresolved proposals explicit, mark superseded rules, and update links instead of duplicating complete contracts.
 - Wiki is a mirror, not a competing source. Frozen Picode V5 is not a work queue or implementation dependency.
+
+- [Context Usage attribution](spec/context-usage.md): seven source categories, actual-request observation, estimate/preview accuracy and bounded Host metadata; Agent #58 / Server #4.

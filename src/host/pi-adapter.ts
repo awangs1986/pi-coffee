@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { RpcClient, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
   CommandInfo,
+  ContextBreakdown,
   ExtensionInfo,
   HistoryEntry,
   ImageInput,
@@ -337,10 +338,28 @@ class RpcPiSession implements PiSession {
 
   async getStats(): Promise<SessionStats> {
     const stats = await this.client.getSessionStats() as unknown as Record<string, unknown>;
+    let contextBreakdown:ContextBreakdown | undefined;
+    const commands=await this.client.getCommands();
+    if(commands.some(command=>command.name==='coffee-context-usage')){
+      const before=await this.client.getEntries();const since=before.entries.at(-1)?.id;
+      const nonce=randomUUID();await this.client.prompt(`/coffee-context-usage ${nonce}`);
+      const result=await this.client.getEntries(since);
+      const value=result.entries.find(entry=>entry.type==='custom' && entry.customType==='coffee-context-usage' && (entry.data as any)?.nonce===nonce);
+      const data=value?.type==='custom'?(value.data as any)?.breakdown:undefined;
+      const ids=['system','tools','rules','skills','dynamic','subagents','conversation'] as const;
+      if(data?.version===1 && data.method==='o200k_base_estimate' && ['last_request','session_preview'].includes(data.basis)
+        && typeof data.model==='string' && data.model.length<=256 && typeof data.capturedAt==='string' && Number.isFinite(Date.parse(data.capturedAt))
+        && Number.isSafeInteger(data.contextWindow) && data.contextWindow>0 && data.categories?.length===7
+        && ids.every(id=>data.categories.some((c:any)=>c.id===id && Number.isSafeInteger(c.tokens) && c.tokens>=0))){
+        const categories=ids.map(id=>({id,tokens:data.categories.find((c:any)=>c.id===id).tokens as number}));
+        contextBreakdown={version:1,method:'o200k_base_estimate',basis:data.basis,model:data.model,capturedAt:data.capturedAt,contextWindow:data.contextWindow,totalTokens:categories.reduce((n,c)=>n+c.tokens,0),categories,mediaOmitted:data.mediaOmitted===true};
+      }
+    }
     const tokens = (stats.tokens ?? {}) as Record<string, unknown>;
     const usage = stats.contextUsage as Record<string, unknown> | undefined;
     const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
     return {
+      ...(contextBreakdown ? {contextBreakdown} : {}),
       userMessages: num(stats.userMessages),
       assistantMessages: num(stats.assistantMessages),
       toolCalls: num(stats.toolCalls),
