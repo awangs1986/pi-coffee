@@ -35,7 +35,7 @@ painting over the panel. Preserve the surrounding three-pane layout.
 
 An existing task shows one row: immutable Agent, Chat/Work, linked Gitea project
 path and an up-arrow disclosure. VM, complete local path, branch, sync status,
-Details/Copy and management actions move into the upward overlay. The overlay
+Details/Copy and compaction move into the upward overlay. The overlay
 scrolls within short viewports and never changes composer/footer geometry.
 Switching tasks restores the collapsed state. No visible “Manage” text button.
 Creation-only project/branch selectors stay in the new-task flow. Compaction is
@@ -52,3 +52,6 @@ checks native modal/top-layer state, seven labels, viewport bounds, Escape/focus
 and the one-row footer using the synthetic fixture. It requires no credentials,
 user transcript or model call. Browser screenshots additionally verify painting;
 DOM hit testing alone did not reveal the original compositing defect.
+
+Global project/archive commands are in the upper-left PI Coffee menu; see
+[Arena navigation and review](arena-navigation.md).

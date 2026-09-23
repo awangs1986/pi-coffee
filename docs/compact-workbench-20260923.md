@@ -12,7 +12,7 @@ column, using a second row when necessary. Buttons keep single-line labels.
 For an existing task, the area below the composer occupies exactly one compact row:
 immutable Agent, Chat/Work type, linked Gitea project path, and an up-arrow disclosure.
 The disclosure opens an overlay above the row containing VM, local path, branch,
-readiness, Details, Copy path, compaction and management actions. It must not
+readiness, Details, Copy path, compaction. It must not
 increase the footer height or push the composer upward. New or switched tasks
 start collapsed. Long content scrolls within the overlay on short viewports.
 
@@ -69,3 +69,6 @@ Deployment and clean-clone results are recorded in the linked Issue/PR. Broader
 frontend continuity issues remain tracked in #4; this patch does not close them.
 
 The Context Usage correction is specified in [Context Usage](spec/context-usage.md).
+
+Global project/archive commands are in the upper-left PI Coffee menu; see
+[Arena navigation and review](spec/arena-navigation.md).

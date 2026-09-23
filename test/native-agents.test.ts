@@ -2,17 +2,18 @@
 import {readFileSync} from 'node:fs';
 import {afterEach,it,expect,vi} from 'vitest';
 afterEach(()=>{vi.clearAllTimers();vi.useRealTimers();vi.unstubAllGlobals();localStorage.clear();sessionStorage.clear();vi.resetModules();});
-async function setup(legacy=false){
+async function setup(legacy=false,wide=false){
  document.documentElement.innerHTML=readFileSync('public/index.html','utf8');
- Object.defineProperty(window,'matchMedia',{value:()=>({matches:false,addEventListener(){}}),configurable:true});Element.prototype.scrollTo=vi.fn();
+ Object.defineProperty(window,'matchMedia',{value:(query:string)=>({matches:wide && query.includes('min-width'),addEventListener(){}}),configurable:true});Element.prototype.scrollTo=vi.fn();
  const requests:any[]=[],frames:any[]=[],conversations:any[]=[],sockets:any[]=[];
  class Socket{static OPEN=1;readyState=1;onopen:any;onmessage:any;onclose:any;onerror:any;constructor(){sockets.push(this);queueMicrotask(()=>this.onopen?.());}close(){}send(text:string){frames.push(JSON.parse(text));}receive(frame:any){this.onmessage?.({data:JSON.stringify(frame)});}}
  vi.stubGlobal('WebSocket',Socket);
  vi.stubGlobal('fetch',vi.fn(async(url:any,init:any)=>{
   if(url==='/api/me')return {ok:true,json:async()=>null};
   if(url==='/api/engines')return {ok:!legacy,json:async()=>({engines:[{id:'pi',name:'Pi',available:true},{id:'codex',name:'Codex',available:true},{id:'claude',name:'Claude Code',available:false,reason:'CLI unavailable'}]})};
-  const body=init?.body?JSON.parse(init.body):null;if(!body)return {ok:true,json:async()=>({projects:[],conversations,vmId:'linux001',capabilities:{chatWorkspaces:true}})};
+  const body=init?.body?JSON.parse(init.body):null;if(!body)return {ok:true,json:async()=>({projects:[{id:"p",name:"demo",branch:"main"}],conversations,vmId:'linux001',capabilities:{chatWorkspaces:true}})};
   requests.push(body);if(body.action==='conversation'){const c={...body,cwd:'/home/test/chats/'+body.id,creationState:'ready'};conversations.push(c);return {ok:true,json:async()=>c};}
+  if(body.action==='changes')return {ok:true,json:async()=>({branch:'coffee/demo',base:'abc123',target:'def456',refreshedAt:'2026-09-23',files:[{path:'src/a.ts',status:'M',additions:1,deletions:1}],patch:'diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -9,2 +9,2 @@\n-before\n+after\n unchanged',checks:[]})};
   return {ok:true,json:async()=>({state:'local',files:[]})};
  }));vi.useFakeTimers();await import('../public/app.js');await vi.advanceTimersByTimeAsync(20);
  return {requests,frames,sockets};
@@ -20,7 +21,7 @@ async function setup(legacy=false){
 it('fixes Agent at Task creation, scopes Model controls and ignores obsolete socket frames',async()=>{
  const app=await setup();const select=document.querySelector<HTMLSelectElement>('#task-engine')!;
  expect([...select.options].map(o=>o.value)).toEqual(['pi','codex','claude']);expect(select.options[2].disabled).toBe(true);
- select.value='codex';select.dispatchEvent(new Event('change'));document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
+ chooseWork();select.value='codex';select.dispatchEvent(new Event('change'));document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
  const created=app.requests.find(r=>r.action==='conversation');expect(created.engine).toBe('codex');expect(select.disabled).toBe(true);
  expect(app.frames.find(f=>f.type==='open')).toMatchObject({sessionId:created.id,nativeProtocol:1});
  app.sockets[0].receive({type:'opened',engine:'codex',sessionId:created.id,state:{},capabilities:{models:true,tools:true,questions:true,stop:true,images:true}});
@@ -34,7 +35,7 @@ it('keeps Pi available and disables native choices on a legacy Host',async()=>{
  await setup(true);const options=[...document.querySelector<HTMLSelectElement>('#task-engine')!.options];expect(options.map(o=>o.disabled)).toEqual([false,true,true]);
 });
 it('renders replayed native items once, answers a native question and never resends an uncertain prompt',async()=>{
- const app=await setup();document.querySelector<HTMLSelectElement>('#task-engine')!.value='codex';document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
+ const app=await setup();chooseWork();document.querySelector<HTMLSelectElement>('#task-engine')!.value='codex';document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
  const id=app.requests.find(r=>r.action==='conversation').id,ws=app.sockets[0];
  const opened={type:'opened',sessionId:id,engine:'codex',state:{},capabilities:{models:true,stop:true,questions:true,tools:true}};
  ws.receive(opened);ws.receive({type:'history',sessionId:id,entries:[]});
@@ -82,4 +83,37 @@ it('collapses task details when starting another Task',async()=>{
  await setup();const disclosure=document.querySelector<HTMLDetailsElement>('.project-manage')!;disclosure.open=true;
  document.querySelector<HTMLButtonElement>('#new-task')!.click();
  expect(disclosure.open).toBe(false);
+});
+
+function chooseWork(){const kind=document.querySelector<HTMLSelectElement>('#task-kind')!;kind.value='project';kind.dispatchEvent(new Event('change'));document.querySelector<HTMLSelectElement>('#project-select')!.value='p';}
+it('defaults new conversations to Pi Chat and only offers native engines for Work',async()=>{
+ const app=await setup();const kind=document.querySelector<HTMLSelectElement>('#task-kind')!,engine=document.querySelector<HTMLSelectElement>('#task-engine')!;
+ expect(kind.value).toBe('chat');expect(engine.value).toBe('pi');expect(engine.disabled).toBe(true);expect(engine.options[1].disabled).toBe(true);
+ chooseWork();expect(engine.disabled).toBe(false);expect(engine.options[1].disabled).toBe(false);expect(engine.options[2].disabled).toBe(true);
+ engine.value='codex';kind.value='chat';kind.dispatchEvent(new Event('change'));expect(engine.value).toBe('pi');
+ document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
+ expect(app.requests.find(r=>r.action==='conversation')).toMatchObject({engine:'pi',workspaceKind:'chat'});
+});
+it('keeps global project/archive commands in the brand menu and review closed until requested',async()=>{
+ await setup(false,true);
+ for(const id of ['project-add','project-discover','show-active','show-archive'])expect(document.querySelector('#'+id)!.closest('#brand-menu')).not.toBeNull();
+ expect(document.querySelector('#workspace-panel')!.classList.contains('hidden')).toBe(true);
+ document.querySelector<HTMLButtonElement>('#files-toggle')!.click();expect(document.querySelector('#workspace-panel')!.classList.contains('hidden')).toBe(false);
+ document.querySelector<HTMLButtonElement>('#new-task')!.click();expect(document.querySelector('#workspace-panel')!.classList.contains('hidden')).toBe(true);
+ document.querySelector<HTMLButtonElement>('#brand-menu-btn')!.click();expect(document.querySelector('#brand-menu')!.classList.contains('hidden')).toBe(false);
+ document.querySelector<HTMLButtonElement>('#show-archive')!.click();expect(document.querySelector('#brand-menu')!.classList.contains('hidden')).toBe(true);
+});
+
+it('opens a separate numbered Diff with functional Unified/Split and file folding',async()=>{
+ const app=await setup();chooseWork();document.querySelector<HTMLButtonElement>('#create-task')!.click();await vi.advanceTimersByTimeAsync(20);
+ const id=app.requests.find(r=>r.action==='conversation').id;app.sockets[0].receive({type:'opened',sessionId:id,engine:'pi',state:{}});await vi.advanceTimersByTimeAsync(20);
+ const dialog=document.querySelector<HTMLDialogElement>('#diff-dialog')!;dialog.showModal=()=>dialog.setAttribute('open','');dialog.close=()=>dialog.removeAttribute('open');
+ document.querySelector<HTMLButtonElement>('#files-toggle')!.click();document.querySelector<HTMLButtonElement>('#view-all-changes')!.click();await vi.advanceTimersByTimeAsync(20);
+ expect(dialog.open).toBe(true);expect(dialog.textContent).toContain('src/a.ts');expect(dialog.textContent).toContain('before');expect(dialog.textContent).toContain('after');
+ expect([...dialog.querySelectorAll('.review-line-number')].map(n=>n.textContent)).toContain('9');
+ document.querySelector<HTMLButtonElement>('#diff-split')!.click();expect(dialog.querySelector('table')?.getAttribute('data-layout')).toBe('split');expect(document.querySelector('#diff-split')?.getAttribute('aria-pressed')).toBe('true');
+ expect([...dialog.querySelectorAll('tbody tr')].some(r=>r.textContent?.includes('before')&&r.textContent?.includes('after'))).toBe(true);
+ document.querySelector<HTMLButtonElement>('#diff-collapse')!.click();expect(dialog.querySelector<HTMLDetailsElement>('.review-file')!.open).toBe(false);
+ document.querySelector<HTMLButtonElement>('#diff-unified')!.click();expect(dialog.querySelector('table')?.getAttribute('data-layout')).toBe('unified');
+ document.querySelector<HTMLButtonElement>('#diff-close')!.click();expect(dialog.open).toBe(false);expect(document.querySelector('#workspace-panel')!.classList.contains('hidden')).toBe(false);
 });
