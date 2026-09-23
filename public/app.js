@@ -41,10 +41,20 @@ const ui = {
 // ---------- state ----------
 let socket, reconnectTimer;
 let connected = false, opened = false, streaming = false, modelPending = null;
-let activeId = localStorage.getItem(ACTIVE_KEY) || null;
+let activeId = sessionStorage.getItem(ACTIVE_KEY) || localStorage.getItem(ACTIVE_KEY) || null;
+function rememberTask(id){if(id){sessionStorage.setItem(ACTIVE_KEY,id);localStorage.setItem(ACTIVE_KEY,id);}else{sessionStorage.removeItem(ACTIVE_KEY);localStorage.removeItem(ACTIVE_KEY);}}
 let pendingOpenId = null, queuedPrompt = null, prepareNew = false;
 let sessions = [], commands = [], models = null, statsCache = null;
 let entries = [];
+const nativeItems=new Map();let nativeCursor=0;let pendingDelivery=null;let uncertainTask=null;
+let engine="pi", capabilities=null;
+const engineName=()=>({pi:"Pi",codex:"Codex",claude:"Claude Code"})[engine] || engine;
+const supports=(name)=>capabilities ? capabilities[name]===true : engine==="pi";
+async function loadEngines(){
+  let available=[];try{const response=await fetch("/api/engines");if(response.ok)available=(await response.json()).engines??[];}catch{}
+  for(const option of $("#task-engine").options){const found=available.find(e=>e.id===option.value);option.disabled=found ? !found.available : option.value!=="pi";option.textContent=({pi:"Pi",codex:"Codex",claude:"Claude Code"})[option.value]+(option.disabled?" · "+(found?.reason || "Host 未启用"):"");}
+}
+void loadEngines();
 let requestNumber = 0;
 let currentAssistant, currentActivity, activityCount = 0;
 const openTools = new Map();
@@ -251,6 +261,7 @@ function askModal({ title, text, input, okLabel = '确定', danger = false }) {
 // ---------- thread rendering ----------
 function resetThread() {
   ui.thread.innerHTML = '';
+  nativeItems.clear();nativeCursor=0;
   entries = [];
   currentAssistant = undefined;
   currentActivity = undefined;
@@ -265,7 +276,7 @@ const CHIPS = ['列出当前目录的文件', '解释这个仓库的结构', '�
 function renderHero() {
   const hero = el('div', 'hero');
   hero.id = 'hero';
-  hero.innerHTML = '<h1>有什么可以帮你？</h1><p>Pi 会在你的 User VM 中直接执行任务。</p><div class="chips"></div>';
+  hero.innerHTML = '<h1>有什么可以帮你？</h1><p>Agent 会在你的 User VM 中直接执行任务。</p><div class="chips"></div>';
   const chips = hero.querySelector('.chips');
   for (const text of CHIPS) {
     const chip = el('button', 'chip', text);
@@ -339,7 +350,7 @@ function scheduleAssistantRender() {
 function showThinking(show) {
   if (show && !thinkingNode) {
     thinkingNode = el('div', 'thinking');
-    thinkingNode.innerHTML = '<span class="dots"><span></span><span></span><span></span></span><span>Pi 正在思考…</span>';
+    thinkingNode.innerHTML = '<span class="dots"><span></span><span></span><span></span></span><span>Agent 正在思考…</span>';
     appendNode(thinkingNode);
   } else if (!show && thinkingNode) {
     thinkingNode.remove();
@@ -352,8 +363,8 @@ function renderHistory(frame) {
   if (frame.truncated) pushNote('更早的记录仍保存在 User VM 中，这里只显示最近的部分。');
   for (const item of frame.entries || []) {
     if (item.kind === 'user') { pushUser(item.text || '', undefined, item.imageCount); lastUserText = item.text || lastUserText; }
-    else if (item.kind === 'assistant') pushAssistant(item.text || '');
-    else if (item.kind === 'tool') pushTool({ name: item.name, args: item.args, result: item.result || '', done: true, error: Boolean(item.isError), details: item.diff ? { patch: item.diff } : undefined });
+    else if (item.kind === 'assistant') nativeItems.set(item.id,pushAssistant(item.text || ''));
+    else if (item.kind === 'tool') nativeItems.set(item.id,pushTool({ name: item.name, args: item.args, result: item.result || '', done: true, error: Boolean(item.isError), details: item.diff ? { patch: item.diff } : undefined }));
     else if (item.kind === 'note') pushNote(item.text || '');
   }
   // History groups are finished work: collapse them.
@@ -435,6 +446,8 @@ function openSessionMenu(session, anchor) {
   const rename = el('button', 'popitem', '重命名');
   rename.type = 'button';
   rename.addEventListener('click', async () => { closeMenu(); await renameSession(session); });
+  const taskEngine=workspaceState?.conversations.find(c=>c.id===session.id)?.engine || 'pi';
+  rename.disabled=taskEngine!=='pi';if(rename.disabled)rename.title='此 Agent 不支持在 Web 重命名原生会话';
   const archived=workspaceState?.conversations.find(c=>c.id===session.id)?.archived || workspaceState?.legacyArchived?.includes(session.id);
   const del = el('button', 'popitem', workspaceState ? (archived ? '恢复对话' : '归档') : '删除');
   del.type = 'button';
@@ -445,7 +458,7 @@ function openSessionMenu(session, anchor) {
     }
     await deleteSession(session);
   });
-  if(archived) {
+  if(archived && taskEngine==='pi') {
     const remove=el('button','popitem danger','永久删除…');remove.addEventListener('click',async()=> {
       closeMenu();const confirmation=await askModal({title:'永久删除归档对话',text:`将永久删除原生对话历史和本地目录（包括附件、搜索结果、图片及产物）：\n${workspaceState.conversations.find(c=>c.id===session.id)?.cwd || '旧对话历史；旧目录保留'}\nChat 本地文件没有 Git 备份。Work 未提交/未推送代码会阻止删除；远端分支、PR、仓库和旧全局数据保留。运行中的任务须先结束。输入 ID 确认：${session.id}`,input:'',okLabel:'永久删除',danger:true});
       if(confirmation!==session.id)return;
@@ -475,6 +488,7 @@ document.addEventListener('click', (event) => {
 });
 
 async function renameSession(session) {
+  if((workspaceState?.conversations.find(c=>c.id===session.id)?.engine || 'pi')!=='pi'){toast('此 Agent 不支持在 Web 重命名');return;}
   const name = await askModal({ title: '重命名对话', input: session.name || session.preview || '', okLabel: '保存' });
   if (name === null || name === '') return;
   send({ v: 1, type: 'rename_session', requestId: requestId('rename'), sessionId: session.id, name });
@@ -495,7 +509,7 @@ function renderHeader() {
   ui.title.disabled = !activeId;
   ui.sessionMeta.textContent = activeId ? activeId.slice(0, 8) : '';
   document.title = (activeId && title !== '新对话' ? title + ' · ' : '') + 'PI Coffee';
-  ui.topbarState.innerHTML = streaming ? '<span class="dot busy"></span>Pi 正在工作…' : '';
+  ui.topbarState.replaceChildren();if(streaming)ui.topbarState.append(el('span','dot busy'),document.createTextNode(engineName()+' 正在工作…'));
   renderStats();
 }
 function fmtTokens(n) {
@@ -621,16 +635,18 @@ function setStreaming(active) {
 }
 function refreshComposer() {
   const hasText = ui.prompt.value.trim().length > 0 || attachments.length > 0 || completedUploads().length > 0;
-  ui.send.disabled = !connected || !hasText || uploadsBusy() || !!modelPending;
+  ui.send.disabled = !connected || !hasText || uploadsBusy() || !!modelPending || (streaming && !supports("steer") && !supports("followUp"));
   ui.model.disabled = ui.modelSource.disabled = ui.thinking.disabled = modelControlsLocked();
   if (ui.agentBtn) ui.agentBtn.disabled = modelControlsLocked() || !models;
   renderProjectContext();
   ui.stop.classList.toggle('hidden', !(connected && streaming));
-  ui.modeWrap.classList.toggle('hidden', !(connected && streaming));
-  ui.send.title = uploadsBusy() ? '等待文件传输完成' : streaming ? (ui.mode.value === 'steer' ? '插话：在当前工具调用后打断' : '排队：等这轮结束后发送') : '发送';
-  ui.hint.textContent = streaming ? '运行中 · Enter ' + (ui.mode.value === 'steer' ? '插话' : '排队') : 'Enter 发送 · Shift+Enter 换行';
+  ui.modeWrap.classList.toggle('hidden', !(connected && streaming && (supports("steer") || supports("followUp"))));
+  ui.pluginsBtn.classList.toggle("hidden",!supports("extensions"));ui.statsWrap.classList.toggle("hidden",!supports("stats"));
+  ui.agentRows.source.classList.toggle("hidden",engine!=="pi");
+  ui.send.title = uploadsBusy() ? '等待文件传输完成' : streaming && !supports('steer') && !supports('followUp') ? '等待当前轮次结束，或先停止' : streaming ? (ui.mode.value === 'steer' ? '插话：在当前工具调用后打断' : '排队：等这轮结束后发送') : '发送';
+  ui.hint.textContent = streaming && !supports('steer') && !supports('followUp') ? '运行中 · 可停止当前轮次' : streaming ? '运行中 · Enter ' + (ui.mode.value === 'steer' ? '插话' : '排队') : 'Enter 发送 · Shift+Enter 换行';
   if (connected) {
-    ui.status.textContent = streaming ? 'Pi 正在工作…' : '已连接';
+    ui.status.textContent = streaming ? engineName()+' 正在工作…' : '已连接';
     ui.dot.className = 'dot ' + (streaming ? 'busy' : 'ready');
   }
 }
@@ -648,6 +664,8 @@ function renderProjectContext() {
     const project = workspaceState?.projects.find((p) => p.id === ui.projectSelect.value);
     if (project?.branch) ui.startBranch.placeholder = project.branch;
   }
+  const agentSelect=$("#task-engine");agentSelect.disabled=lockedToConversation || !!pendingOpenId;
+  if(conversation)agentSelect.value=conversation.engine || "pi";
   ui.projectSelect.disabled = lockedToConversation;
   ui.startBranch.disabled = lockedToConversation;
   const kind=$('#task-kind');kind.disabled=lockedToConversation;
@@ -689,13 +707,15 @@ function connect() {
     else if(prepareNew){prepareNew=false;openSession(null).catch(e=>toast(e.message));}
   };
   ws.onmessage = (event) => {
+    if(socket!==ws)return;
     let frame;
     try { frame = JSON.parse(event.data); } catch { return; }
     handleFrame(frame, ws);
   };
   ws.onclose = () => {
-    modelPending=null;
     if (socket !== ws) return;
+    if(pendingDelivery){uncertainTask=activeId;pendingDelivery=null;}
+    modelPending=null;
     opened = false;
     workspaceSync={...workspaceSync,state:'unknown',error:'VM 连接断开；显示上次已知值'};renderSyncState();renderProjectContext();
     setConnection('连接断开，重连中…（Host 上的任务不会被打断）', 'error');
@@ -713,25 +733,27 @@ async function openSession(id) {
     const workspaceKind=existing?.workspaceKind || $('#task-kind').value;
     const projectId=existing?.projectId || ui.projectSelect.value;
     if(workspaceKind==='project' && !projectId) {toast('请先选择 Gitea 项目');return;}
-    const signature=JSON.stringify([workspaceKind,projectId,existing?.startBranch || ui.startBranch.value.trim()]);
+    const selectedEngine=existing?.engine || $("#task-engine").value;
+    const signature=JSON.stringify([selectedEngine,workspaceKind,projectId,existing?.startBranch || ui.startBranch.value.trim()]);
     if(!creationRequest || creationRequest.signature!==signature)creationRequest={signature,id:existing?.id || [...crypto.getRandomValues(new Uint8Array(16))].map(b=>b.toString(16).padStart(2,'0')).join('')};
     saveCreation();pendingOpenId='creating';$('#create-task').disabled=true;$('#create-task').textContent='创建中…';
     try {
-      const c=await workspaceApi({action:'conversation',id:creationRequest.id,workspaceKind,...(workspaceKind==='project'?{projectId,branch:existing?.startBranch || ui.startBranch.value.trim() || undefined}:{})});
-      id=c.id;activeId=id;localStorage.setItem(ACTIVE_KEY,id);creationRequest=null;saveCreation();workspaceSync=null;await loadWorkspace();
+      const c=await workspaceApi({action:'conversation',id:creationRequest.id,workspaceKind,engine:selectedEngine,...(workspaceKind==='project'?{projectId,branch:existing?.startBranch || ui.startBranch.value.trim() || undefined}:{})});
+      id=c.id;activeId=id;rememberTask(id);creationRequest=null;saveCreation();workspaceSync=null;await loadWorkspace();
     }catch(e){pendingOpenId=null;toast(e.message);await loadWorkspace();return;}
     finally{$('#create-task').disabled=false;$('#create-task').textContent='创建任务 / 重试';}
   }
   pendingOpenId = id || 'new';
-  const frame = { v: 1, type: 'open' };
+  const frame = { v: 1, type: 'open', nativeProtocol:1 };
   if (id) frame.sessionId = id;
   send(frame);
 }
 function afterOpened() {
-  send({ v: 1, type: 'get_models' });
-  send({ v: 1, type: 'get_commands' });
-  send({ v: 1, type: 'get_stats' });
-  if (pluginsWaiting) send({ v: 1, type: 'get_extensions' });
+  refreshComposer();
+  if(supports('models'))send({ v: 1, type: 'get_models' });
+  if(supports('commands'))send({ v: 1, type: 'get_commands' });
+  if(supports('stats'))send({ v: 1, type: 'get_stats' });
+  if (pluginsWaiting && supports('extensions')) send({ v: 1, type: 'get_extensions' });
 }
 
 function handleFrame(frame, ws) {
@@ -742,11 +764,13 @@ function handleFrame(frame, ws) {
       renderHeader();
       return;
     case 'opened':
+      if(pendingOpenId && pendingOpenId!=="new" && frame.sessionId!==pendingOpenId)return;
+      engine=frame.engine || workspaceState?.conversations.find(c=>c.id===frame.sessionId)?.engine || "pi";capabilities=frame.capabilities || null;models=null;commands=[];
       const sameTransfer=transfer?.scope===frame.sessionId;
       opened = true;
       pendingOpenId = null;
       activeId = frame.sessionId;
-      localStorage.setItem(ACTIVE_KEY, activeId);
+      rememberTask(activeId);
       statsCache = null;
       resetThread();
       clearExtensionUi();
@@ -762,9 +786,11 @@ function handleFrame(frame, ws) {
     case 'history':
       if (frame.sessionId !== activeId) return;
       renderHistory(frame);
+      if(uncertainTask===activeId)pushNote("上一条请求的交付状态尚不确定，不会自动重发。请先核查历史和运行状态，再决定是否重试。",true);
       if (queuedPrompt !== null) { const q = queuedPrompt; queuedPrompt = null; submitPrompt(q.text, q.images); }
       return;
     case 'models':
+      if(frame.sessionId && frame.sessionId!==activeId)return;
       models = frame;modelPending=null;refreshComposer();
       renderModels();
       return;
@@ -796,13 +822,15 @@ function handleFrame(frame, ws) {
       pushNote('正在运行的这一段输出有部分未能补放；已完成的消息以上方历史为准。');
       return;
     case 'event':
+      if(frame.sessionId!==activeId)return;
+      if(engine!=="pi" && frame.cursor){if(frame.cursor<=nativeCursor && frame.event?.type!=="native_request")return;nativeCursor=Math.max(nativeCursor,frame.cursor);}
       handleEvent(frame.event || {});
       return;
     case 'error':
       if(modelPending && frame.requestId===modelPending){modelPending=null;renderModels();refreshComposer();}
       pushNote('错误（' + frame.code + '）：' + frame.message, true);
       setStreaming(frame.code === 'busy');
-      if (frame.code === 'not_open' || frame.code === 'already_open') pendingOpenId = null;
+      if (!opened || frame.code === 'not_open' || frame.code === 'already_open') pendingOpenId = null;
       if (queuedPrompt !== null && frame.code !== 'busy') { ui.prompt.value = queuedPrompt.text; attachments = queuedPrompt.images || []; renderAttachments(); queuedPrompt = null; autoGrow(); refreshComposer(); }
       if (frame.fatal) ws.close();
       return;
@@ -813,6 +841,26 @@ function handleFrame(frame, ws) {
 
 function handleEvent(event) {
   const type = event.type;
+  if(type==='run_started'){setStreaming(true);showThinking(true);return;}
+  if(type==='message_delta' || type==='message_completed'){
+    showThinking(false);let entry=nativeItems.get(event.id);
+    if(!entry){entry=pushAssistant('');nativeItems.set(event.id,entry);}
+    entry.text=type==='message_completed'?event.text:entry.text+(event.delta||'');updateAssistant(entry.node,entry.text);return;
+  }
+  if(type==='tool_update'){
+    showThinking(false);let entry=nativeItems.get(event.id);
+    if(!entry){entry=pushTool({name:event.name||'Tool',args:event.args||{},result:'',done:false});nativeItems.set(event.id,entry);}
+    if(event.name)entry.name=event.name;if(event.args)entry.args=event.args;if(event.result!==undefined)entry.result=event.result;
+    entry.done=event.status!=='inProgress';entry.error=Boolean(event.isError);fillToolCard(entry.node,entry);return;
+  }
+  if(type==='native_request'){handleExtensionUi(event);return;}
+  if(type==='background_state'){ui.status.textContent=event.known?(event.active?`后台任务：${event.active}`:'后台任务已结束'):'后台任务状态未知';return;}
+  if(type==='run_completed'){
+    pendingDelivery=null;uncertainTask=null;setStreaming(false);clearExtensionUi();if(supports('models'))send({v:1,type:'get_models'});
+    if(event.status!=='completed')pushNote(event.message || (event.status==='interrupted'?'当前轮次已停止':'本轮运行失败，请检查保存的结果'),event.status!=='interrupted');
+    void refreshWorkspaceChanges(false).catch(()=>undefined);return;
+  }
+
   if (type === 'agent_start') { setStreaming(true); showThinking(true); currentAssistant = undefined; return; }
   const delta = event.assistantMessageEvent;
   if (delta && delta.type === 'thinking_delta') { showThinking(true); return; }
@@ -911,7 +959,7 @@ function handleExtensionUi(event) {
       if (!event.id || uiSeen.has(event.id)) return;
       uiSeen.add(event.id);
       uiQueue.push(event);
-      pushNote('扩展请求你的输入：' + (event.title || event.method));
+      pushNote((event.type==='native_request'?'Agent 请求你的输入：':'扩展请求你的输入：') + (event.title || event.method));
       showNextUiDialog();
       return;
     default:
@@ -972,7 +1020,7 @@ function showNextUiDialog() {
       ui.uiOptions.appendChild(button);
     });
   }
-  if (req.method === 'input') { ui.uiInput.value = ''; ui.uiInput.placeholder = req.placeholder || ''; setTimeout(() => ui.uiInput.focus(), 0); }
+  if (req.method === 'input') { ui.uiInput.type=req.secret?'password':'text'; ui.uiInput.value = ''; ui.uiInput.placeholder = req.placeholder || ''; setTimeout(() => ui.uiInput.focus(), 0); }
   if (req.method === 'editor') { ui.uiEditor.value = req.prefill || ''; setTimeout(() => ui.uiEditor.focus(), 0); }
   if (req.method === 'confirm') setTimeout(() => ui.uiOk.focus(), 0);
   ui.uiModal.classList.remove('hidden');
@@ -981,7 +1029,7 @@ function answerUi(answer) {
   if (!uiCurrent) return;
   const id = uiCurrent.id;
   send({ v: 1, type: 'ui_response', requestId: requestId('ui'), id, ...answer });
-  const summary = answer.cancelled ? '已取消' : answer.confirmed !== undefined ? (answer.confirmed ? '已确认' : '已拒绝') : '已回答：' + String(answer.value).slice(0, 80);
+  const summary = uiCurrent.secret ? '已回答' : answer.cancelled ? '已取消' : answer.confirmed !== undefined ? (answer.confirmed ? '已确认' : '已拒绝') : '已回答：' + String(answer.value).slice(0, 80);
   pushNote(summary + '（' + (uiCurrent.title || uiCurrent.method) + '）');
   closeUiDialog();
   showNextUiDialog();
@@ -1452,6 +1500,7 @@ $('#composer').addEventListener('submit', (event) => {
   submitPrompt(text || (files.length ? '（附件）' : '（图片）'), images);
 });
 function submitPrompt(text, images) {
+  if(streaming && !supports('steer') && !supports('followUp')){toast('请等待当前轮次结束，或先停止');return;}
   const mode = streaming ? ui.mode.value : 'prompt';
   const files = completedUploads().map((u) => ({ name: u.name, size: u.size, path: u.path, href: downloadUrl(u.path) }));
   // Files are already on the User VM's disk; the model gets their paths, not their bytes.
@@ -1459,7 +1508,7 @@ function submitPrompt(text, images) {
     ? text + '\n\n[已上传到工作目录的文件]\n' + files.map((f) => `- ${f.path} (${formatBytes(f.size)})`).join('\n')
     : text;
   const frame = { v: 1, type: 'prompt', requestId: requestId('web'), text: wireText };
-  if (images && images.length) frame.images = images;
+  if (images && images.length && supports("images")) frame.images = images;
   if (mode !== 'prompt') frame.mode = mode;
   if (mode === 'prompt') {
     pushUser(text, images, undefined, files);
@@ -1467,7 +1516,8 @@ function submitPrompt(text, images) {
     setStreaming(true);
     showThinking(true);
   }
-  send(frame);
+  pendingDelivery=frame.requestId;
+  if(!send(frame)){uncertainTask=activeId;pushNote("请求未确认，不会自动重发。",true);}
   attachments = [];
   uploads = uploads.filter((u) => u.state === 'uploading' || u.state === 'finishing');
   renderAttachments();
@@ -1484,9 +1534,10 @@ ui.stop.addEventListener('click', () => { if (opened) { send({ v: 1, type: 'abor
 function switchSession(id) {
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
+  clearExtensionUi();
   taskSelectionEpoch++;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;workspaceSync=null;
   activeId = id;
-  localStorage.setItem(ACTIVE_KEY, id);
+  rememberTask(id);
   streaming = false;
   statsCache = null;
   selectedChangedPath = null;
@@ -1498,10 +1549,12 @@ function switchSession(id) {
   connect();
 }
 function newSession(focus = true) {
+  clearExtensionUi();
   taskSelectionEpoch++;prepareNew=false;creationRequest=null;saveCreation();workspaceSync=null;resetTransfers();filesAwaitingTransfer=[];attachments=[];queuedPrompt=null;
+  engine='pi';capabilities=null;models=null;commands=[];$('#task-engine').value='pi';
   $('#task-kind').value='chat';ui.projectSelect.value='';ui.startBranch.value='';
   activeId = null;
-  localStorage.removeItem(ACTIVE_KEY);
+  rememberTask(null);
   streaming = false;
   statsCache = null;
   selectedChangedPath = null;

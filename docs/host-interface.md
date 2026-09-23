@@ -44,3 +44,24 @@ The protocol additions and lifecycle guarantees are defined by Agent `docs/proto
 The [Agent native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the planned additive contract for engine selection, native Session bindings, capabilities and common presentation Events. The Agent Host remains responsible for native transport, configuration and lifecycle; the gateway continues to forward the existing public HTTP/WebSocket traffic without interpreting engine protocols or handling provider authentication. Legacy Pi compatibility must be verified before activation.
 
 The [Browser Shell companion](./spec/native-agent-browser.md) preserves the existing layout and scopes all Pi-specific controls to Pi. Agent delivery: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48). Server delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). These are implementation requirements, not a claim that the currently deployed Host or Server supports Codex or Claude Code.
+
+## Native Agent capability extension
+
+The Host owns the additive `nativeProtocol: 1` contract on the existing `v: 1`
+envelope. The Browser sends this flag in `open`; legacy Hosts remain Pi-compatible.
+Task creation passes `engine` (`pi`, `codex`, `claude`) and preserves it on retries.
+Only the Host binds native IDs. `opened.engine` and `opened.capabilities` determine
+which controls appear. A missing native capability means unavailable.
+
+`GET /api/engines` is authenticated and forwarded read-only to the same fixed
+User VM route as `/api/workspace`. No CLI, credential inspection, native protocol
+parser or provider call belongs in the gateway. The Host returns safe local
+readiness states and reasons; upstream authorization may still fail on a turn.
+
+Native run, message, tool, pending-input and background-state events use the same
+Task-scoped event envelope. Stable item IDs update existing cards; repeated cursors
+are ignored, while pending native request IDs are deduplicated separately. Stop
+acknowledgement is not terminal evidence. Unsupported Pi controls are hidden.
+Read the [canonical Host protocol](http://gitea:3000/awangs/pi-coffee/src/branch/codex/native-agents-m0-m4/docs/protocol.md)
+and [native runbook](http://gitea:3000/awangs/pi-coffee/src/branch/codex/native-agents-m0-m4/docs/deployment/native-agents.md)
+for field definitions, recovery and the version-pinned capability matrix.
