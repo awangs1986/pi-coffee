@@ -6,7 +6,7 @@
 
 ## Native-engine scope clarification (2026-09-23)
 
-The PA/WP decisions in this document apply to **Pi only**, including zero-system-prompt Chat, Work prompting, tool inventory, LSP, plugin loading and context recovery. The accepted [native-engine integration](./native-agent-engines.md) preserves Codex and Claude Code's own design and official authentication. Shared Conversation Workspace/Gitea rules apply independently of engine. Native-engine support is planned, not implemented.
+The PA/WP decisions in this document apply to **Pi only**, including zero-system-prompt Chat, Work prompting, tool inventory, LSP, plugin loading and context recovery. The accepted [native-engine integration](./native-agent-engines.md) preserves Codex and Claude Code's own design and official authentication. Shared Conversation Workspace/Gitea rules apply independently of engine. Native-engine support is deployed; current capabilities are recorded in the native-engine delivery evidence.
 
 ## 1. 范围和阅读规则
 
@@ -160,3 +160,7 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 
 The owner-corrected [Context Usage contract](context-usage.md) specializes PA-006
 with seven source-attributed categories and explicit local-estimate semantics.
+
+## Web Skill management
+
+The accepted [Skill management contract](skill-management.md) adds a Web management surface while retaining native VM storage/loading. Pi Chat remains zero-system-prompt; its Skills are explicitly invocable. Pi LSP stays a Pi-only bundled Skill unless independently adapted and installed for another engine.

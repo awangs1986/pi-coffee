@@ -732,3 +732,19 @@ describe("Host WebSocket seam", () => {
   },10_000);
 
 });
+
+it("Skill reload retains running/background sessions and restarts only a verified idle Agent",async()=>{
+ const root=mkdtempSync(join(tmpdir(),"coffee-skill-reload-"));const factory=new FakeFactory();const ws=new Workspaces(join(root,'projects'),{chatRoot:join(root,'chats')});const task=await ws.createChatConversation();
+ const pi=await factory.create({sessionId:task.id}) as FakePiSession;
+ server=new HostServer({port:0,token:'skills',factory,workspaces:ws,skills:{home:join(root,'home')}});await server.start();
+ const socket=new WebSocket(`ws://127.0.0.1:${server.address().port}/host`,{headers:{authorization:'Bearer skills'}});await once(socket,'open');const frames=new FrameQueue(socket);
+ socket.send(encodeFrame({v:1,type:'open',sessionId:task.id}));await frames.next();
+ const reload=()=>fetch(`http://127.0.0.1:${server!.address().port}/api/skills`,{method:'POST',headers:{authorization:'Bearer skills','content-type':'application/json'},body:JSON.stringify({action:'reload',engine:'pi',scope:'user',conversationId:task.id})});
+ try{
+  pi.background={known:true,active:1};expect((await reload()).status).toBe(409);expect(pi.stopped).toBe(false);
+  pi.background={known:false,active:0};expect((await reload()).status).toBe(409);expect(pi.stopped).toBe(false);
+  pi.background={known:true,active:0};pi.holdAfterDelta=true;socket.send(encodeFrame({v:1,type:'prompt',requestId:'skill-reload-hold',text:'hold'}));await waitFor(()=>pi.history.length>0);
+  expect((await reload()).status).toBe(409);expect(pi.stopped).toBe(false);
+  pi.finish('done');expect((await reload()).status).toBe(200);expect(pi.stopped).toBe(true);expect(await ws.lookup(task.id)).toBeDefined();expect(pi.history.length).toBeGreaterThan(0);
+ }finally{socket.close();await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+});

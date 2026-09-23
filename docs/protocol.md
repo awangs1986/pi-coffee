@@ -249,3 +249,12 @@ It carries `version: 1`, `method: o200k_base_estimate`, `basis: last_request | s
 `{id,tokens}` categories. The Browser must use this total for the segmented chart,
 not cumulative `stats.tokens`. Missing breakdown is unavailable. Raw content
 never crosses this metadata interface.
+
+## Skill management HTTP
+
+Authenticated `POST /api/skills` is the additive native Skill management seam.
+The [canonical contract](spec/skill-management.md) defines `list`, `detail`,
+`install`, `update`, `enable`, `disable` and idle `reload`, scoped by `engine`,
+`scope` and an optional registered `conversationId`. It does not add Agent tools
+or alter WebSocket model/session protocols. Old Hosts return 404; Web must show
+management as unavailable. File/source ownership and all mutations remain on VM.
