@@ -76,3 +76,5 @@ This index links to maintained contracts and clearly dated evidence. It is not a
 - Wiki is a mirror, not a competing source. Frozen Picode V5 is not a work queue or implementation dependency.
 
 - [Context Usage attribution](spec/context-usage.md): seven source categories, actual-request observation, estimate/preview accuracy and bounded Host metadata; Agent #58 / Server #4.
+
+- [Web-managed Skills](spec/skill-management.md): VM-native installation and lifecycle, Web management, engine/user/project scope; Agent #62 / Server #14.
