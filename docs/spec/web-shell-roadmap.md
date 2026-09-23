@@ -22,7 +22,7 @@
 | | 模型 / thinking 选择 | `get_models` / `set_model` / `set_thinking`（模型来自 Relay 后的 `models.json`，只读选择，无 key） |
 | | 斜杠命令面板 | `get_commands`；输入 `/` 弹出；V5 的 `/harness`、`/verify` 装上即见 |
 | | 图片粘贴 / 拖拽 / 选择 | 浏览器缩放到 ≤1600px、JPEG，最多 8 张，随 `prompt.images` 发送 |
-| | 上下文用量 / 成本 / 压缩 | `get_stats` → 顶栏 chip；点击 → `compact` |
+| | Context Usage | `get_stats` → header chip → [seven-category usage dialog](context-usage.md); explicit compaction lives in task details |
 | | 快捷键 | `Ctrl/⌘+K` 新对话、`Esc` 停止/关闭弹层、空输入 `↑` 召回上一条 |
 
 ### D. Extension UI（`SHELL-001a`，已交付）

@@ -27,7 +27,7 @@ wss.on('connection',ws=>ws.on('message',raw=>{
  const f=JSON.parse(raw);const send=x=>ws.send(JSON.stringify(x));
  if(f.type==='list_sessions')send({type:'sessions',sessions:tasks.map((c,i)=>({id:c.id,name:'布局验收 '+i+' · 长任务标题测试，不包含用户对话',updatedAt:c.createdAt,messageCount:2}))});
  if(f.type==='open'){send({type:'opened',sessionId:f.sessionId,engine:'pi',state:{}});send({type:'event',sessionId:f.sessionId,event:{type:'extension_ui_request',method:'setStatus',key:'fixture',text:'⧉ idle'}});send({type:'history',sessionId:conversation.id,entries:[{kind:'user',text:'请检查项目的排版问题。'},{kind:'assistant',text:'已定位问题，变更保存在当前任务目录。\n\n```ts\nconst layout = "responsive";\n```'}]});}
- if(f.type==='get_stats')send({type:'stats',sessionId:conversation.id,stats:{contextUsage:{percent:50,tokens:5000,contextWindow:10000},tokens:{total:6000,input:5000,output:1000},cost:0.01}});
+ if(f.type==='get_stats')send({type:'stats',sessionId:conversation.id,stats:{contextBreakdown:{version:1,method:'o200k_base_estimate',basis:'last_request',capturedAt:'2026-09-23T10:00:00Z',contextWindow:256000,totalTokens:119100,categories:[{id:'system',tokens:1500},{id:'tools',tokens:13300},{id:'rules',tokens:2800},{id:'skills',tokens:3900},{id:'dynamic',tokens:2900},{id:'subagents',tokens:1600},{id:'conversation',tokens:93100}]},contextUsage:{percent:50,tokens:5000,contextWindow:10000},tokens:{total:6000,input:5000,output:1000},cost:0.01}});
  if(f.type==='get_models')send({type:'models',models:[{provider:'fixture',id:'demo-model',source:'native'}],current:{provider:'fixture',id:'demo-model'},thinkingLevels:['low','high'],thinkingLevel:'high'});
 }));
 const port=Number(process.env.PI_COFFEE_LAYOUT_PORT || 4175);
