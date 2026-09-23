@@ -17,8 +17,21 @@ try {
    const result=await page.evaluate(measureLayout);console.log(JSON.stringify({...result,collapsed}));assert.deepEqual(result.failures,[]);
   }
  }
+ await page.getByRole('button',{name:'关闭 Checkout 面板',exact:true}).click();
+ for(const [width,height] of [[1280,796],[390,844],[820,480],[1280,480]]) {
+  await page.setViewportSize({width,height});
+  await page.locator('#stats').click();
+  const panel=await page.evaluate(()=>{const p=document.querySelector('#stats-pop'),r=p.getBoundingClientRect();return {modal:p.matches(':modal'),rows:[...p.querySelectorAll('.legend-label')].map(e=>e.textContent),bounds:r.left>=0&&r.top>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1,overflow:p.scrollWidth>p.clientWidth};});
+  assert.equal(panel.modal,true);assert.equal(panel.bounds,true);assert.equal(panel.overflow,false);
+  assert.deepEqual(panel.rows,['System prompt','Tool definitions','Rules','Skills','MCP & dynamic tools','Subagent definitions','Conversation']);
+  await page.locator('#stats-close').press('Escape');
+  assert.equal(await page.locator('#stats-pop').isVisible(),false);
+  assert.equal(await page.evaluate(()=>document.activeElement.id),'stats');
+  await page.locator('#stats').click();await page.locator('#stats-close').click();
+ }
  await page.getByRole('textbox',{name:'输入',exact:true}).fill('Synthetic draft\n'.repeat(35));
  assert.deepEqual((await page.evaluate(measureLayout)).failures,[]);
+ await page.getByLabel('展开任务信息',{exact:true}).click();
  await page.getByRole('button',{name:'详情',exact:true}).click();
  assert.match(await page.locator('#modal-text').textContent(),/00000000-0000-4000-8000-000000000000/);
  console.log('Compact layout passed');
