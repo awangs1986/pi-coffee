@@ -1,11 +1,11 @@
 # M0–M5: native Codex and Claude Code delivery
 
-Status: **M0–M4 implemented on the delivery branch; M5 remains pending**. Date: 2026-09-23.
+Status: **M0–M5 implemented, merged and deployed**. Date: 2026-09-23.
 
 Canonical requirements: [native-engine SPEC](../spec/native-agent-engines.md), [ADR-0013](../adr/0013-native-agent-engines.md), and [Browser Shell SPEC](http://gitea:3000/awangs/pi-coffee-server/src/branch/main/docs/spec/native-agent-browser.md).
 Parents: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
 
-This is the native-engine M0–M5 sequence, not a reopening of the earlier Pi MVP or T0–T4 migration. Each milestone has one delivery Issue; M4 belongs to Server and the other five belong to Agent. M0–M4 implementation and bounded live checks are recorded in [dated evidence](../reviews/native-agents-m0-m4-20260923.md). Production deployment remains M5.
+This is the native-engine M0–M5 sequence, not a reopening of the earlier Pi MVP or T0–T4 migration. Each milestone has one delivery Issue; M4 belongs to Server and the other five belong to Agent. M0–M4 implementation and bounded live checks are recorded in [dated evidence](../reviews/native-agents-m0-m4-20260923.md). M5 production deployment and combined acceptance are recorded in [M5 deployment evidence](../reviews/native-agents-m5-20260923.md).
 
 ## Boundaries retained
 

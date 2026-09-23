@@ -13,13 +13,13 @@
 
 This index links to maintained contracts and clearly dated evidence. It is not another copy of their requirements.
 
-## Native engine integration — M0–M4 implemented, M5 deployment pending
+## Native engine integration — M0–M5 implemented and deployed
 
 - [M0–M5 delivery plan](./development/native-agents-m0-m5.md): transport validation, shared Host contract, native Adapters, Browser Shell and bounded end-to-end acceptance.
 
 - [Native Codex and Claude Code SPEC](./spec/native-agent-engines.md): engine isolation, official user authentication, shared Gitea/Workspace services, capabilities and acceptance; [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48).
 - [ADR-0013](./adr/0013-native-agent-engines.md): multiple native engines behind the existing Host; Pi customizations remain Pi-only. Server delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
-- Current production remains Pi-only. M0–M4 delivery evidence and limitations are in [the implementation record](reviews/native-agents-m0-m4-20260923.md); activation is documented in [the native runbook](deployment/native-agents.md).
+- Pi, Codex and Claude Code are enabled on both User VMs. [M5 deployment evidence](reviews/native-agents-m5-20260923.md) records production revisions, shared-project workflows and recovery; [M0–M4 evidence](reviews/native-agents-m0-m4-20260923.md) records native transport checks. See [activation and the manual checklist](deployment/native-agents.md) for supported capabilities.
 
 ## Start here
 

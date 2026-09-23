@@ -2,8 +2,8 @@
 
 This release adds opt-in Host Adapters for Codex CLI **0.154.0** and Claude Code
 CLI **2.1.280**. Other versions remain unavailable until their native interface
-is verified. Pi remains the default. Production activation and the two-user
-release gate belong to M5; implementation checks do not deploy either service.
+is verified. Pi remains the default. M5 production activation and two-user acceptance are
+recorded in [the deployment evidence](../reviews/native-agents-m5-20260923.md).
 
 ## Installation and activation
 
@@ -134,3 +134,99 @@ SHA. Refresh, restore native context and stop one active Task. Upload/download
 matching bytes to Chat folders and archive/restore them. Keep provider usage
 short and record native permission decisions and any unsupported operations.
 See the [dated evidence](../reviews/native-agents-m0-m4-20260923.md).
+
+## LAN deployment accepted on 2026-09-23
+
+Open `http://webserver:3000/` using the existing Gitea account. Web remains on
+`192.168.100.101`; `awangs` routes to linux001 and `pi-coffee-t4-user2` to
+linux002. Both User VMs have all three engines enabled. The owner-supplied native
+provider defaults are Codex `gpt-5.6-terra` and Claude `claude-sonnet-4-6`.
+The Codex credential is restricted to Terra even if the native catalogue lists
+other models. Native model catalogues describe CLI support, not provider access.
+
+The [M5 evidence](../reviews/native-agents-m5-20260923.md) pins deployed commits,
+checks, exact code Checkpoints and the recovery probe. Native provider secrets
+are loaded from `/etc/pi-coffee/native-agents.env` on each VM (root:awang, 0640).
+User settings are `~/.codex/config.toml` and `~/.claude/settings.json` (0600).
+The environment file is a deployment secret, never a project file. Interactive
+CLI use outside systemd needs the same protected environment; do not paste its
+contents into a Task. Service environment and user settings must use the same
+VM owner/home as the native process.
+
+### Repeatable release procedure
+
+1. From fresh clones at the intended Gitea commits, run `npm ci` and
+   `npm run check` on the target hosts. Stage builds under
+   `/opt/pi-coffee-releases/<commit>` and
+   `/opt/pi-coffee-server-releases/<commit>`. Install only verified native CLI
+   versions; retain existing native user configuration and credentials.
+2. Confirm no Task is running before restarting a Host. Retain the existing
+   Workspace/session directories and protected service configuration. Capture
+   registered Task IDs/bindings privately for before/after comparison.
+3. In `/etc/systemd/system/pi-coffee-host.service.d/30-native-agents-release.conf`,
+   set `WorkingDirectory` to the staged Agent release, load the protected
+   `EnvironmentFile`, and set the two absolute native executable paths. Retain
+   the existing service user, token, workspace roots and Pi configuration.
+4. Run `sudo systemctl daemon-reload` and
+   `sudo systemctl restart pi-coffee-host` on linux002 first, then linux001.
+   Verify `/healthz`, authenticated `/api/engines`, retained Task identities and
+   native readiness before continuing. Readiness alone does not prove upstream
+   model access.
+5. Point the analogous `pi-coffee-web.service.d/30-native-agents-release.conf`
+   `WorkingDirectory` to the tested Server release, preserving identity/routing
+   configuration. Reload systemd and restart `pi-coffee-web` on Web. Verify
+   `/healthz`, Gitea login, each fixed VM route and one bounded native flow.
+6. Record sanitized evidence and exact revisions in Agent #53 and both parents.
+   Retained old source directories are recovery artifacts, not the active release.
+
+### Tested activation rollback
+
+Keep the native-aware Agent build and all existing data. On an idle VM, add
+`/etc/systemd/system/pi-coffee-host.service.d/90-native-agents-disabled.conf`:
+
+```ini
+[Service]
+Environment=PI_COFFEE_CODEX_COMMAND=
+Environment=PI_COFFEE_CLAUDE_COMMAND=
+```
+
+Reload systemd and restart `pi-coffee-host`. Check that Pi is available and native
+Tasks are retained but unavailable. Remove only this temporary override, reload
+and restart to restore activation. This sequence passed on linux002 with native
+bindings/history intact. Do not restore old Workspace metadata or run a Pi-only
+binary against these records. Switching code revisions is safe only to a tested
+native-aware build, with settled Tasks and the same durable directories.
+
+### Shared project registration
+
+New-project import is repository migration; it is not a shared-repository picker.
+For an existing shared Gitea repository, an operator can stop an idle Host and
+use the deployed `Workspaces.registerProject(name, repoUrl, branch, repoId,
+webUrl)` interface as the VM owner, with the configured project/chat roots and
+VM Git credentials, then restart the Host. Do not modify the state JSON directly
+or keep a second Workspaces process running beside the Host. Gitea must already
+grant the user access. The registered repository ID determines the canonical PR
+owner/name, including repositories owned by another user. Browser users can then
+choose that Project and a verified remote starting branch normally.
+
+### Owner's short manual checklist
+
+1. Sign in at the LAN URL and verify the displayed VM is your assigned VM.
+2. Start a new Task. Choose Pi, Codex or Claude Code and Chat or Work. For Work,
+   choose a registered Gitea Project and starting branch. Confirm the Agent is
+   fixed immediately after creation and the complete local path is shown.
+3. Keep Codex on `gpt-5.6-terra` and Claude on `claude-sonnet-4-6` with the current
+   credentials. A model selector never changes the Task's Agent.
+4. Ask for a small read/edit/check in a disposable project. Review any native
+   permission request, watch tool results, and refresh once. The same Task and
+   history should return; do not resend a possibly accepted prompt automatically.
+5. Review Diff, create a Checkpoint, check synchronization, and open the Gitea PR.
+   Another engine needs a new Task from the published code branch; it receives
+   code, not the previous engine's conversation context.
+6. Try a Chat attachment and reopen the Task. Archive/restore should retain its
+   files and history. Permanent native-history cleanup is unavailable in this
+   release; archive is the supported lifecycle action.
+
+A known caption defect can leave the new-task action saying
+“为旧任务创建目录” after visiting a legacy Task; the selected new Task still receives
+its own directory and immutable Agent. This is a separate Browser follow-up.

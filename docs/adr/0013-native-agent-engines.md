@@ -1,10 +1,10 @@
 # Native agent engines behind the existing Host boundary
 
-Status: accepted, 2026-09-23. M0–M4 implemented on `codex/native-agents-m0-m4`; M5 deployment and combined release acceptance pending.
+Status: accepted, 2026-09-23. M0–M5 implemented, merged and deployed on the two dedicated User VMs and separate Web host.
 
-Implementation evidence: [M0–M4 review](../reviews/native-agents-m0-m4-20260923.md).
+Implementation evidence: [M0–M4 review](../reviews/native-agents-m0-m4-20260923.md) and [M5 deployment evidence](../reviews/native-agents-m5-20260923.md).
 
-PI Coffee will support the user's native Codex and Claude Code installations alongside Pi through engine-specific Host Adapters. The existing Browser Shell, Gitea identity and code collaboration, User VM ownership, Conversation Workspaces and transparent Web Server remain shared; Pi's prompts, Chat/Work policy, LSP, tools, plugins and context customizations remain exclusive to Pi. This preserves native engine behavior and user authentication while accepting the cost of explicit capability and lifecycle mapping instead of forcing every engine into Pi's semantics.
+PI Coffee supports the user's native Codex and Claude Code installations alongside Pi through engine-specific Host Adapters. The existing Browser Shell, Gitea identity and code collaboration, User VM ownership, Conversation Workspaces and transparent Web Server remain shared; Pi's prompts, Chat/Work policy, LSP, tools, plugins and context customizations remain exclusive to Pi. This preserves native engine behavior and user authentication while accepting the cost of explicit capability and lifecycle mapping instead of forcing every engine into Pi's semantics.
 
 ## Consequences and prior decisions
 
