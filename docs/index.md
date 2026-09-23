@@ -17,6 +17,8 @@ implementation are maintained in [`awangs/pi-coffee`](http://gitea:3000/awangs/p
 
 ## Native engine support — specification, not delivered behavior
 
+- [M0–M5 delivery plan](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/development/native-agents-m0-m5.md): this repository owns M4 ([pi-coffee-server #7](http://gitea:3000/awangs/pi-coffee-server/issues/7)); M1 fixtures unblock Browser development and M2/M3 unblock real-engine acceptance.
+
 - [Browser Shell native-engine SPEC](./spec/native-agent-browser.md): compact engine choice, capabilities, native interaction and compatibility within the existing layout; [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
 - [Canonical Agent SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md): native Codex/Claude Code adapters and shared Workspace/Gitea lifecycle; [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48).
 - Current Server implementation is Pi-oriented. No native-engine deployment or frontend audit merge is implied by this specification.

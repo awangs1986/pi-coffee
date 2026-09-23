@@ -79,6 +79,8 @@ The Server remains a transparent gateway. It does not run engines, parse native 
 
 ## Further Notes
 
+Implementation follows the [M0–M5 plan](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/development/native-agents-m0-m5.md). M4 ([pi-coffee-server #7](http://gitea:3000/awangs/pi-coffee-server/issues/7)) is the Server delivery; M1 provides the public contract/fixtures and M2/M3 are prerequisites for real-engine activation. M5 records combined release evidence.
+
 The Agent implementation is [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48); this Server delivery is [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). The [native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the requirements and references, and [ADR-0013](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/adr/0013-native-agent-engines.md) owns the architecture boundary.
 
 The existing [frontend audit](http://gitea:3000/awangs/pi-coffee-server/issues/4) and its PR remain separate. Current Server main and the review branch are still Pi-oriented; neither the Codex nor Claude Code integration is already delivered. No authentication or Gitea policy change is inferred from the existence of third-party UI projects.
