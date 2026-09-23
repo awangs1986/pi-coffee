@@ -107,7 +107,7 @@
                 </button>
                 <div class="agent-menu-wrap">
                   <button class="agent-trigger" id="agent-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="agent-menu" title="Agent 设置">
-                    <span>Agent</span><span class="agent-caret" aria-hidden="true">⌄</span>
+                    <span>Model</span><span class="agent-caret" aria-hidden="true">⌄</span>
                   </button>
                   <div class="agent-menu hidden" id="agent-menu" role="menu" aria-label="Agent 设置">
                     <div class="agent-menu-list">
@@ -145,6 +145,7 @@
             </div>
           </form>
           <section id="project-controls" class="project-context hidden" aria-label="Gitea 仓库和分支">
+            <label class="context-field"><span class="sr-only">Agent</span><select id="task-engine" aria-label="Agent"><option value="pi">Pi</option><option value="codex" disabled>Codex · 未就绪</option><option value="claude" disabled>Claude Code · 未就绪</option></select></label>
             <label class="context-field"><span class="sr-only">新任务类型</span><select id="task-kind" aria-label="新任务类型"><option value="chat">Chat · 本地目录</option><option value="project">Work · Gitea 项目</option></select></label>
             <button id="create-task" class="btn small" type="button">创建任务</button>
             <label class="context-field context-repo">
@@ -218,7 +219,7 @@
     <!-- Extension dialogs (Pi ctx.ui.select / confirm / input / editor) -->
     <div class="modal-backdrop hidden" id="ui-modal">
       <div class="modal ui-dialog" role="dialog" aria-modal="true" aria-labelledby="ui-title">
-        <div class="ui-badge">扩展请求</div>
+        <div class="ui-badge">Agent 请求</div>
         <h2 id="ui-title"></h2>
         <p id="ui-text"></p>
         <div id="ui-options" class="ui-options hidden" role="listbox"></div>
