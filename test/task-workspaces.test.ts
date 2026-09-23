@@ -45,5 +45,17 @@ it('creates Chat and Work through the Host API, displays a full cwd, and preserv
    const creates=calls.filter(c=>c.action==='conversation');expect(creates).toHaveLength(3);expect(creates[1].id).toBe(creates[2].id);expect(creates[2]).toMatchObject({projectId:'p',branch:'main',workspaceKind:'project'});
    expect(document.querySelector('#workspace-context')?.textContent).toContain('/home/awang/work/projects/checkouts/');
    expect(localStorage.getItem('pi-coffee.active.v2')).toBe(creates[2].id);
+   // Existing tasks expose metadata without redundant creation fields.
+   expect(project.closest('label')!.classList.contains('hidden')).toBe(true);
+   expect(document.querySelector('#start-branch')!.closest('label')!.classList.contains('hidden')).toBe(true);
+   const details=[...document.querySelectorAll('button')].find(b=>b.textContent==='详情');
+   expect(details).toBeDefined();details!.click();
+   expect(document.querySelector('#modal-text')?.textContent).toContain(creates[2].id);
+   expect(document.querySelector('#modal-text')?.textContent).toContain('owner/demo');
+   document.querySelector<HTMLButtonElement>('#modal-ok')!.click();
+   document.querySelector<HTMLButtonElement>('#new-task')!.click();await vi.advanceTimersByTimeAsync(10);
+   kind!.value='project';kind!.dispatchEvent(new Event('change'));
+   expect(project.closest('label')!.classList.contains('hidden')).toBe(false);
+   expect(document.querySelector('#create-task')?.textContent).toBe('创建任务');
  }finally{vi.clearAllTimers();vi.useRealTimers();vi.unstubAllGlobals();}
 });

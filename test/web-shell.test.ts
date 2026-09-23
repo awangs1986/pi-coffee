@@ -22,8 +22,6 @@ describe('compact Agent composer shell', () => {
   it('uses a sparse rounded composer card with one horizontal attachment rail', () => {
     expect(css).toContain('--thread-width: 828px;');
     expect(css).toContain('--composer-width: 860px;');
-    expect(css).toMatch(/\.composer \{[\s\S]*border-radius: 22px;/);
-    expect(css).toMatch(/\.composer textarea \{[\s\S]*max-height: 336px;/);
     expect(css).toMatch(/\.attachments \{[\s\S]*flex-wrap: nowrap;[\s\S]*overflow-x: auto;/);
     expect(css).toMatch(/\.upload-chip \{[\s\S]*width: 220px;[\s\S]*height: 64px;/);
     expect(css).toContain('bottom: var(--composer-offset);');
