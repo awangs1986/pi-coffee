@@ -94,3 +94,19 @@ directories and the remote task branch for inspection. Do not save credentials i
 2026-09-22：Conversation Workspace 部署于 `webserver:3000`，Agent 部署于 linux001/linux002。
 Agent 171 项、Server 40 项 clean-clone 检查通过；真实浏览器原图往返、Chat/Work 创建、实际分支/同步、路径复制、刷新、归档恢复与 VM 原生进程/清理通过。
 联合证据：[Agent review](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/conversation-workspaces-20260922.md)。
+
+## Native Agent release (2026-09-23)
+
+The Web service on `webserver` (`192.168.100.101`) serves `http://webserver:3000/`
+from `/opt/pi-coffee-server-releases/d9fff28d5d2d6fb114feb79e0a86cabda4d3e311`.
+Its systemd WorkingDirectory is selected by
+`/etc/systemd/system/pi-coffee-web.service.d/30-native-agents-release.conf`.
+Gitea OAuth, the fixed user routes and the previous source tree are retained.
+Both dedicated User VMs expose Pi, Codex and Claude Code through the compatible Host.
+
+See [M5 evidence](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/native-agents-m5-20260923.md) for exact Agent revisions and real acceptance, and the
+[Agent activation/recovery guide](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/deployment/native-agents.md)
+for native versions, protected VM configuration, safe activation rollback and the
+short owner manual checklist. Provider credentials remain on the User VMs.
+The supplied Codex credential uses `gpt-5.6-terra`; Claude uses `claude-sonnet-4-6`.
+The unrelated frontend audit PR is not part of this release.
