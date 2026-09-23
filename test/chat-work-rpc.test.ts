@@ -101,8 +101,21 @@ describe.skipIf(process.platform !== "linux")("Chat/Work real Pi provider seam",
       expect(JSON.stringify(requests.at(-1))).toContain("PROJECT_SENTINEL");
       expect(JSON.stringify(requests.at(-1))).toContain("Software development");
       expect(JSON.stringify(requests.at(-1))).toContain("lsp");
+      const usageNonce="00000000-0000-4000-8000-000000000000";
+      const contextCounts=async()=>{
+        await client.prompt(`/coffee-context-usage ${usageNonce}`);
+        const entries=(await client.getEntries()).entries;
+        return (entries.filter(e=>e.type==='custom' && e.customType==='coffee-context-usage').at(-1) as any).data.breakdown;
+      };
+      const workCounts=await contextCounts();
+      expect(workCounts.basis).toBe('last_request');
+      for(const id of ['system','tools','rules','skills','conversation'])expect(workCounts.categories.find((c:any)=>c.id===id).tokens).toBeGreaterThan(0);
+      expect(JSON.stringify(workCounts)).not.toContain('PROJECT_SENTINEL');
       await client.prompt("/chat");
       await client.promptAndWait("Hello again", undefined, 20000); assertChat();
+      const chatCounts=await contextCounts();
+      for(const id of ['system','rules','skills','subagents'])expect(chatCounts.categories.find((c:any)=>c.id===id).tokens).toBe(0);
+      expect(chatCounts.categories.find((c:any)=>c.id==='tools').tokens).toBeGreaterThan(0);
       await client.setModel("fixture", "two");
       await client.promptAndWait("Model switched", undefined, 20000); assertChat();
       await client.stop(); client = makeClient(); await client.start();

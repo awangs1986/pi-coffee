@@ -15,7 +15,8 @@ function markdownFiles(directory: string): string[] {
 
 function retiredModeNames(text: string): string[] {
   // Historical filenames/URLs remain valid citations, not selectable modes.
-  const prose = text.replace(/https?:\/\/[^\s)<>]+/g, "")
+  const prose = text.replace(/`(?:N|\d+(?:\.\d+)?)% Full`/g, "")
+    .replace(/https?:\/\/[^\s)<>]+/g, "")
     .replace(/[\w./-]+\.(?:md|ts|js|json)\b/g, "");
   return prose.match(/\b(?:simple|lean|full)\b/gi) ?? [];
 }
@@ -24,6 +25,7 @@ describe("Chat/Work documentation contract", () => {
   it("detects retired commands, tables and prose while allowing source citations", () => {
     expect(retiredModeNames("/harness simple | Lean | Full")).toHaveLength(3);
     expect(retiredModeNames("Chat / Work [audit](docs/gitea-full-audit.md)")).toEqual([]);
+    expect(retiredModeNames("Context Usage: `N% Full` or `46% Full`")).toEqual([]);
   });
 
   it("keeps retired mode aliases out of the runtime contracts", () => {
