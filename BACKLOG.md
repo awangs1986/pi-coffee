@@ -364,3 +364,11 @@ remain isolated. Delivery and clean-clone evidence are recorded in the Issue.
 ## Pi-only Chat creation (2026-09-23)
 
 [Agent #60](http://gitea:3000/awangs/pi-coffee/issues/60): new Chat defaults to Pi; native engines use Work. Existing native local tasks are retained. Browser navigation is Server #4. Pi account import into Web Server remains a future consideration, not current scope.
+
+## Web-managed Skills (2026-09-23)
+
+Agent #62 / Server #14 implement the accepted [Skill management contract](docs/spec/skill-management.md).
+The Web owns management controls; each User VM owns native Skill files and execution.
+This delivers the Skill portion of ARCH-002; generic extension installation and a
+central marketplace remain outside this change. Deployment evidence is recorded in
+the linked Issues rather than inferred from this decision.
