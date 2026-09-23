@@ -1,3 +1,4 @@
+import { parseAgentEngine, type AgentEngine } from "../shared/protocol.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
@@ -6,7 +7,8 @@ import { join, resolve, relative, isAbsolute, normalize, basename, dirname } fro
 import { fileURLToPath } from "node:url";
 const exec = promisify(execFile);
 export interface Project { id: string; name: string; path: string; branch: string; repoUrl?: string; repoId?: string; webUrl?: string }
-export interface Conversation { id: string; projectId?: string; workspaceKind?: "chat" | "project"; vmId?:string; creationState?:"creating"|"ready"|"failed"; creationError?:string; startBranch?:string; publishStarted?:boolean; directoryCreated?:boolean; cwd: string; branch: string; archived: boolean; createdAt: string; startSha?: string; lastRemoteSha?: string; lastRemoteAt?: string; syncError?: string; pullRequest?: PullRequest; legacyCwd?:string; migrationBranch?:string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; cleanupStarted?:boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
+export interface NativeBinding { writers?:"idle"|"unknown";state:"prepared"|"starting"|"bound";id?:string;requestedId?:string}
+export interface Conversation { id: string; engine?: AgentEngine; nativeBinding?: NativeBinding; acceptedRequestIds?:string[]; projectId?: string; workspaceKind?: "chat" | "project"; vmId?:string; creationState?:"creating"|"ready"|"failed"; creationError?:string; startBranch?:string; publishStarted?:boolean; directoryCreated?:boolean; cwd: string; branch: string; archived: boolean; createdAt: string; startSha?: string; lastRemoteSha?: string; lastRemoteAt?: string; syncError?: string; pullRequest?: PullRequest; legacyCwd?:string; migrationBranch?:string; runState?: "running" | "idle" | "interrupted"; workspaceRemoved?: boolean; cleanupStarted?:boolean; artifacts?: Artifact[]; baseline?: Record<string,string>; quiesced?: boolean }
 interface Artifact { path:string; modifiedAt:string; size:number; available:boolean }
 export interface PullRequest { number:number; url:string; state:string; target:string; source:string }
 export interface WorkspaceOptions { ownerId?: string; chatRoot?: string; forge?: CodeForge }
@@ -63,6 +65,7 @@ export class Workspaces {
       if(![1,2].includes(data.version) || !Array.isArray(data.projects) || !Array.isArray(data.conversations)) throw new Error('Unsupported workspace metadata');
       this.state={...data,version:2};
     } catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
+    for (const c of this.state.conversations) c.engine=parseAgentEngine(c.engine);
     let interrupted=false;
     for(const c of this.state.conversations) if(c.runState==="running") {c.runState="interrupted";interrupted=true;}
     for(const c of this.state.conversations)if(c.creationState==='creating'){c.creationState='failed';c.creationError='Creation interrupted; retry the same task after inspecting retained files';interrupted=true;}
@@ -237,20 +240,26 @@ export class Workspaces {
     }
     return root;
   }
+  async setNativeBinding(id:string,binding:NativeBinding) {return this.mutate(async()=>{
+    const c=this.conversation(id);
+    if(c.nativeBinding?.id && c.nativeBinding.id!==binding.id)throw new Error("Native Session binding cannot change");
+    c.nativeBinding=binding;await this.save();
+  },()=>this.conversationLock(id));}
   async runtimeEnvironment(id:string):Promise<Record<string,string>> {
     const c=await this.lookup(id);if(!c)throw new Error('Unknown workspace');
     const root=await this.dataRoot(id),subagentRoot=join(root,'artifacts','subagent-runs');
     await mkdir(subagentRoot,{recursive:true,mode:0o700});
     return {PI_COFFEE_DATA_ROOT:root,PI_COFFEE_WORKSPACE_CWD:c.cwd,PI_COFFEE_INITIAL_MODE:c.workspaceKind==='chat'?'chat':'work',PI_SUBAGENTS_TEMP_ROOT:subagentRoot};
   }
-  async createChatConversation(id=randomUUID()) {return this.mutate(async()=>{
+  async createChatConversation(id=randomUUID(), engine:AgentEngine="pi") {return this.mutate(async()=>{
     this.assertId(id);let c=this.state.conversations.find(c=>c.id===id);
+    if(c && (c.engine ?? 'pi')!==engine)throw new Error('Task Agent is fixed at creation');
     if(c && c.workspaceKind!=='chat')throw new Error('Creation ID belongs to a different task');
     if(c && (!c.creationState || c.creationState==='ready')){await this.checkDirectory(c);return structuredClone(c);}
     const cwd=join(this.chatRoot,id);
     if(!c){
       if(await lstat(cwd).then(()=>true,()=>false))throw new Error('Chat directory already exists; inspect it before retrying');
-      c={id,workspaceKind:'chat',vmId:this.ownerId,cwd,branch:'',archived:false,createdAt:new Date().toISOString(),creationState:'creating'};
+      c={id,engine,workspaceKind:'chat',vmId:this.ownerId,cwd,branch:'',archived:false,createdAt:new Date().toISOString(),creationState:'creating'};
       this.state.conversations.push(c);await this.save();
     }
     try {
@@ -259,9 +268,10 @@ export class Workspaces {
       c.creationState='ready';await this.dataRoot(id);delete c.creationError;await this.save();return structuredClone(c);
     }catch(error){c.creationState='failed';c.creationError=`Creation failed; retained directory: ${cwd}. ${error instanceof Error ? error.message : 'Inspect before retrying'}`;await this.save();throw new Error(c.creationError);}
   },()=>this.conversationLock(id));}
-  async createConversation(projectId:string, branch?:string, id=randomUUID()) {return this.mutate(async()=>{
+  async createConversation(projectId:string, branch?:string, id=randomUUID(), engine:AgentEngine="pi") {return this.mutate(async()=>{
     this.assertId(id);const p=this.project(projectId),from=branch || p.branch;
     let c=this.state.conversations.find(c=>c.id===id);
+    if(c && (c.engine ?? 'pi')!==engine)throw new Error('Task Agent is fixed at creation');
     if(c && (c.projectId!==projectId || (c.startBranch && c.startBranch!==from)))throw new Error('Creation ID belongs to a different task');
     if(c && (!c.creationState || c.creationState==='ready')){await this.checkDirectory(c);return structuredClone(c);}
     if(!p.repoUrl)throw new Error('Project must be registered to Gitea before creating a code Conversation');
@@ -270,7 +280,7 @@ export class Workspaces {
     await mkdir(join(this.root,'checkouts'),{recursive:true,mode:0o700});
     if(!c) {
       if(await lstat(cwd).then(()=>true,()=>false))throw new Error('Checkout destination already exists; inspect it before retrying');
-      c={id,projectId,workspaceKind:'project',vmId:this.ownerId,cwd,branch:ownedBranch,startBranch:from,archived:false,createdAt:new Date().toISOString(),creationState:'creating'};
+      c={id,engine,projectId,workspaceKind:'project',vmId:this.ownerId,cwd,branch:ownedBranch,startBranch:from,archived:false,createdAt:new Date().toISOString(),creationState:'creating'};
       this.state.conversations.push(c);await this.save();
     }
     c.creationState='creating';delete c.creationError;await this.save();
@@ -301,9 +311,13 @@ export class Workspaces {
     }
   },()=>this.conversationLock(id));}
   async cwd(id:string) { const c=await this.lookup(id);if(!c)throw new Error('Create a task before prompting');if(c.archived || c.workspaceRemoved)throw new Error('Restore the archived conversation first (pending deletion cannot be resumed)');return this.checkDirectory(c); }
-  async markRun(id:string, runState:"running"|"idle"|"interrupted") {return this.mutate(async()=>{
+  async markRun(id:string, runState:"running"|"idle"|"interrupted",requestId?:string) {return this.mutate(async()=>{
     const c=this.state.conversations.find(c=>c.id===id);if(!c)return;
     if(runState==="running" && c.archived)throw new Error("Conversation archived");
+    if(requestId && c.engine && c.engine!=="pi") {
+      if(c.acceptedRequestIds?.includes(requestId))throw new Error("This request was already accepted; it was not replayed. Inspect native history before retrying with a new request.");
+      c.acceptedRequestIds=[...(c.acceptedRequestIds??[]),requestId].slice(-256);
+    }
     c.runState=runState;await this.save();
   },()=>this.state.conversations.some(c=>c.id===id) ? this.conversationLock(id) : 'legacy:'+id);}
   async settleRuns(isBusy:(id:string)=>boolean|undefined) {
@@ -397,7 +411,7 @@ export class Workspaces {
     const remoteSha=remote ? remote.split(/\s+/)[0] : undefined;
     return {state:remoteSha===localSha ? 'synced' as const : 'unsynced' as const,localSha,remoteSha};
   }
-  async continueFrom(projectId:string,sourceBranch:string,expectedSha:string,id=randomUUID()) {return this.mutate(async()=>{
+  async continueFrom(projectId:string,sourceBranch:string,expectedSha:string,id=randomUUID(),engine:AgentEngine="pi") {return this.mutate(async()=>{
     this.assertId(id);
     if(!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(expectedSha))throw new Error('Expected remote SHA is invalid');
     if(this.state.conversations.some(c=>c.id===id))throw new Error('Conversation already exists');
@@ -413,7 +427,7 @@ export class Workspaces {
       if(await this.remoteBranchSha(cwd,branch))throw new Error('Conversation branch already exists on Gitea; use a new Conversation ID');
       await this.git(cwd,['checkout','-b',branch]);
       await this.pushAndConfirm(cwd,branch,head,['--set-upstream',`--force-with-lease=refs/heads/${branch}:`,'origin',`HEAD:refs/heads/${branch}`]);
-      const c:Conversation={id,projectId,workspaceKind:'project',vmId:this.ownerId,creationState:'ready',startBranch:sourceBranch,cwd,branch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString()};this.state.conversations.push(c);await this.dataRoot(id);await this.save();return c;
+      const c:Conversation={id,engine,projectId,workspaceKind:'project',vmId:this.ownerId,creationState:'ready',startBranch:sourceBranch,cwd,branch,archived:false,createdAt:new Date().toISOString(),startSha:head,lastRemoteSha:head,lastRemoteAt:new Date().toISOString()};this.state.conversations.push(c);await this.dataRoot(id);await this.save();return c;
     } catch(error) {await rm(cwd,{recursive:true,force:true});throw error;}
   },()=>`conversation:${id}`);}
   /** Read-only change view against the last fetched target branch. */
