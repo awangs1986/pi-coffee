@@ -2,7 +2,7 @@
 
 PI Coffee 的 User VM 运行时领域词汇；网页与中央网关属于独立的 Server。
 
-Native-engine terms below describe the accepted target in [ADR-0013](./docs/adr/0013-native-agent-engines.md). Current implementation remains Pi-only until the linked integration Issues pass acceptance.
+Native-engine terms below describe the accepted target in [ADR-0013](./docs/adr/0013-native-agent-engines.md). M0–M5 are implemented and deployed; supported native capabilities and acceptance are recorded in the linked SPEC and M5 evidence.
 
 ## Participants
 
