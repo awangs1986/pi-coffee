@@ -22,3 +22,5 @@ implementation are maintained in [`awangs/pi-coffee`](http://gitea:3000/awangs/p
 - [Browser Shell native-engine SPEC](./spec/native-agent-browser.md): compact engine choice, capabilities, native interaction and compatibility within the existing layout; [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
 - [Canonical Agent SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md): native Codex/Claude Code adapters and shared Workspace/Gitea lifecycle; [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48).
 - [M4 delivery evidence](reviews-native-agents-m4-20260923.md) records controller/gateway checks and live native workflows. [M5 production evidence](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/native-agents-m5-20260923.md) records the deployed Web and two dedicated User VMs; the unrelated frontend audit remains separate.
+
+- [Context Usage and compact task information](spec/context-usage.md): seven-category reference layout and one-row footer, Server #4 / Agent #58.
