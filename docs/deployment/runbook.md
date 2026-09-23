@@ -104,3 +104,27 @@ unset PI_COFFEE_GIT_TOKEN
 Also replace the clone's hostname, machine ID, SSH host keys, Host transport
 token and stable VM ID, and clear copied workspaces, sessions and task output.
 Do not leave the source credential file on the clone as a backup.
+
+## Skills management
+
+The Web Skills page calls the owning Host. No new service or database is needed.
+Skill state defaults to `~/.local/share/pi-coffee/skills`; optionally set
+`PI_COFFEE_SKILL_ROOT` to an absolute persistent VM directory. Keep this registry,
+retained versions and the native user directories in VM backups. Project Skill
+files are ordinary checkout changes. Web rollback does not remove Skill files.
+
+After `npm ci --ignore-scripts && npm run check`, run
+`node scripts/smoke-skills.mjs` from a Git checkout. It creates an isolated temporary
+Host and home, installs the repository's synthetic fixture for all three native
+directory mappings, checks Pi discovery, updates/toggles/inspects it, and cleans up.
+It does not call a model or touch normal user Skill folders. To probe remote Git,
+set `SKILL_SMOKE_SOURCE` to the repository clone URL and `SKILL_SMOKE_REF` to the
+release SHA; the optional existing VM Gitea environment supplies authentication.
+Never paste tokens into URLs, Issues or browser forms.
+
+If an interrupted mutation leaves `mutation.lock`, stop concurrent management and
+inspect its `recovery.json` (target, retained backup, record ID), registry and native
+files on the VM. Reconcile the last published registry entry with those files,
+restore the retained copy if necessary, then remove only the stale lock. Do not
+blindly clear the lock during a running install. Local edits are never silently
+reset by Web; preserve them before reconciling an externally edited managed Skill.

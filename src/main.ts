@@ -47,6 +47,7 @@ async function run(): Promise<void> {
     idleTimeoutMs: envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000),
     transfer,
     workspaces,
+    skills: {root:process.env.PI_COFFEE_SKILL_ROOT,piAgentDir:process.env.PI_COFFEE_AGENT_DIR ?? process.env.PI_CODING_AGENT_DIR,claudeDir:process.env.CLAUDE_CONFIG_DIR,bundledPiSkills:resolvePiSkills(),...(process.env.PI_COFFEE_GITEA_URL && process.env.PI_COFFEE_GITEA_TOKEN && process.env.PI_COFFEE_GITEA_OWNER ? {gitea:{url:process.env.PI_COFFEE_GITEA_URL,token:process.env.PI_COFFEE_GITEA_TOKEN,owner:process.env.PI_COFFEE_GITEA_OWNER}} : {})},
     factory: new NativeAgentFactory({
       workspaces,
       ...(process.env.PI_COFFEE_CODEX_COMMAND ? {codex:{command:process.env.PI_COFFEE_CODEX_COMMAND}} : {}),

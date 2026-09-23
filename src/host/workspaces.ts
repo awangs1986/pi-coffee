@@ -18,6 +18,8 @@ export interface CodeForge {
   createPullRequest(project:Project,source:string,target:string,title:string):Promise<PullRequest>;
 }
 const privateName=(name:string)=> /^(\.git|\.pi|\.coffee|\.ssh|\.aws|\.env(?:\..*)?|\.npmrc|\.netrc|auth\.json|credentials(?:\..*)?)$/i.test(name);
+// Project Pi Skills are source files; the rest of .pi remains private runtime data.
+const privateParts=(parts:string[])=>parts.some((part,index)=>privateName(part) && !(part==='.pi' && index===0 && parts[1]==='skills' && parts.length>2));
 const pythonCommand=process.platform === "win32" ? "python" : "python3";
 const LF=String.fromCharCode(10),BACKSLASH=String.fromCharCode(92);
 const samePath=(left:string,right:string)=> {
@@ -28,7 +30,7 @@ const samePath=(left:string,right:string)=> {
 const displayPath=(path:string)=> {
   if(!path || path.startsWith('/') || path.startsWith(BACKSLASH+BACKSLASH) || path.split('').some(char=>char.charCodeAt(0)<32))return false;
   const parts=path.split('/').flatMap(part=>part.split(BACKSLASH));
-  return !parts.some(part=>part==='..' || part==='.pi-coffee' || privateName(part));
+  return !parts.some(part=>part==='..' || part==='.pi-coffee') && !privateParts(parts);
 };
 interface State { version: 2; projects: Project[]; conversations: Conversation[]; legacyArchived?: string[]; deletedIds?:string[] }
 const slug = (v: unknown) => { if(typeof v !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(v)) throw new Error('Use a project name containing letters, numbers, - or _ (1–64 characters)');return v; };
@@ -365,7 +367,7 @@ export class Workspaces {
     if(c.runState==='running')throw new Error('Stop the conversation before checkpointing');
     if(!Array.isArray(paths) || paths.length===0)throw new Error('Choose the code files to checkpoint');
     const selected=[...new Set(paths)];
-    if(selected.some(path=>!displayPath(path) || path.split(/[\\/]/).some(p=>privateName(p) || p==='.pi-coffee')))throw new Error('Checkpoint contains a private or invalid path');
+    if(selected.some(path=>!displayPath(path)))throw new Error('Checkpoint contains a private or invalid path');
     if(typeof message!=='string' || !message.trim() || message.length>200)throw new Error('Checkpoint message is required (maximum 200 characters)');
     await this.git(c.cwd,['var','GIT_AUTHOR_IDENT']).catch(()=>{throw new Error('Configure Git user.name and user.email in the VM before checkpointing');});
     await this.git(c.cwd,['add','--',...selected]);
@@ -542,7 +544,7 @@ export class Workspaces {
   async file(id:string,path:string) {
     const c=await this.lookup(id);if(!c)throw new Error('Unknown workspace');
     await this.checkDirectory(c);const base=await realpath(c.cwd); const dest=await realpath(resolve(base,path || '.'));const rel=relative(base,dest);
-    if(rel.startsWith('..') || isAbsolute(rel) || rel.split(/[\\/]/).some(privateName))throw new Error('Path outside workspace or Git internals');return dest;
+    if(rel.startsWith('..') || isAbsolute(rel) || privateParts(rel.split(/[\\/]/)))throw new Error('Path outside workspace or Git internals');return dest;
   }
   async artifacts(id:string):Promise<Artifact[]> {
     await this.load();const c=this.conversation(id);if(c.workspaceRemoved)return [];

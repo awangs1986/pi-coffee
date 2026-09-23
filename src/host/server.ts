@@ -1,3 +1,4 @@
+import { SkillManager, type SkillManagerOptions } from "./skills.js";
 import { capabilitiesFor } from "../shared/protocol.js";
 import { stopLspDaemon } from "../lsp/transport.js";
 import { readJson, json } from "../shared/http.js";
@@ -32,6 +33,7 @@ export interface HostServerOptions {
   /** LocalSend v2 transfer endpoint on the User VM; browsers are told about it after `opened`. */
   transfer?: TransferServer;
   workspaces?: Workspaces;
+  skills?: SkillManagerOptions;
 }
 
 export interface HostAddress {
@@ -57,6 +59,7 @@ export class HostServer {
   private readonly workspaces?: Workspaces;
   private execution?:ExecutionCapability;
   private readonly factory: PiSessionFactory;
+  private readonly skills?: SkillManager;
 
   constructor(options: HostServerOptions) {
     this.factory = options.factory;
@@ -65,6 +68,7 @@ export class HostServer {
     this.token = options.token;
     this.transfer = options.transfer;
     this.workspaces = options.workspaces;
+    this.skills = options.skills ? new SkillManager(options.skills, options.workspaces) : undefined;
     this.registry = new HostSessionRegistry({
       factory: options.factory,
       eventBufferSize: options.eventBufferSize,
@@ -103,6 +107,41 @@ export class HostServer {
     if(req.url === "/api/engines" && req.method === "GET") {
       try { json(res,200,{engines:await this.factory.engines?.() ?? PI_ONLY_ENGINES}); }
       catch { json(res,503,{error:"Agent discovery unavailable"}); }
+      return;
+    }
+    if(req.url === "/api/skills") {
+      if(!this.skills){json(res,404,{error:"Skill management is not configured on this Host"});return;}
+      if(req.method!=="POST"){json(res,405,{error:"Use POST for scoped Skill requests"});return;}
+      try {
+        const input=await readJson(req);
+        if(input.action==='reload') {
+          const id=input.conversationId,task=typeof id==='string'?await this.workspaces?.lookup(id):undefined;
+          if(!task || task.archived || (task.engine??'pi')!==input.engine)throw new Error('Select an active Task using this Agent');
+          await this.skills.handle({...input,action:'list'});
+          if(this.lifecycleLocks.has(id))throw new Error('Task lifecycle operation in progress');
+          this.lifecycleLocks.add(id);
+          try {
+            const live=this.registry.get(id);
+            if(live){
+              if(live.isBusy)throw new Error('Wait for the running task before reloading Skills');
+              const state=await live.backgroundState();if(!state.known || state.active)throw new Error('Background work is active or unknown; the Agent was not stopped');
+              await this.registry.stopIdle(id);
+              for(const socket of this.sockets)if(socket.sessionId===id)socket.close();
+            }
+            json(res,200,{ok:true,reloaded:Boolean(live),activation:'Skills will be discovered when the Agent next opens; conversation history is retained.'});
+          }finally{this.lifecycleLocks.delete(id);}
+        } else if(input.scope==='project' && ['install','update','enable','disable'].includes(input.action)) {
+          const id=input.conversationId;
+          if(typeof id!=='string' || this.lifecycleLocks.has(id))throw new Error('Project lifecycle operation in progress');
+          this.lifecycleLocks.add(id);
+          try {
+            const live=this.registry.get(id);
+            if(live){if(live.isBusy)throw new Error('Wait for the running task before changing project Skills');const state=await live.backgroundState();if(!state.known||state.active)throw new Error('Project has active or unknown background work');}
+            json(res,200,await this.skills.handle(input));
+          }finally{this.lifecycleLocks.delete(id);}
+        } else json(res,200,await this.skills.handle(input));
+      }
+      catch(e){json(res,409,{error:e instanceof Error?e.message:"Skill operation failed"});}
       return;
     }
     const ws=this.workspaces;
