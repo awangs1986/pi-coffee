@@ -29,7 +29,14 @@ async function start(root?: string, native = false, kind: "codex" | "claude" = "
   hosts.push(host); await host.start();
   const url = `http://127.0.0.1:${host.address().port}/api/workspace`;
   const request = (body?: unknown) => fetch(url, { method: body ? "POST" : "GET", headers: { authorization: "Bearer test-token", "content-type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  return { root, host, request };
+  let project=(await (await request()).json()).projects.find((p:any)=>p.name==='native-fixture');
+  if(!project){
+    const source=join(root,'fixture-source'),remote=join(root,'fixture.git');await mkdir(source);
+    const git=promisify(execFile),run=(args:string[])=>git('git',['-c','user.name=Test','-c','user.email=test@localhost',...args],{cwd:source});
+    await run(['init','-b','main']);await writeFile(join(source,'note.txt'),'base\n');await run(['add','.']);await run(['commit','-m','base']);await run(['clone','--bare',source,remote]);
+    project=await (await request({action:'project',name:'native-fixture',url:remote})).json();
+  }
+  return { root, host, request, projectId:project.id };
 }
 
 it("fixes the Task Agent at creation before the first prompt and retains it across Host restart", async () => {
@@ -47,7 +54,7 @@ it("fixes the Task Agent at creation before the first prompt and retains it acro
 
 it("runs the native Claude CLI and reloads its own transcript after Host restart", async () => {
   const app = await start(undefined, true, "claude");
-  expect((await app.request({ action: "conversation", workspaceKind: "chat", id: "claude-task", engine: "claude" })).status).toBe(200);
+  expect((await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id: "claude-task", engine: "claude" })).status).toBe(200);
   const client = await connect(app.host, "claude-task");
   expect(await client.next(f => f.type === "opened")).toMatchObject({ engine: "claude" });
   client.socket.send(JSON.stringify({ v: 1, type: "prompt", requestId: "read", text: "Read a native file" }));
@@ -63,7 +70,7 @@ it("runs the native Claude CLI and reloads its own transcript after Host restart
 
 it("answers a Claude native permission request without bypassing its permission mode", async () => {
   const app = await start(undefined, true, "claude");
-  await app.request({ action: "conversation", workspaceKind: "chat", id: "claude-approval", engine: "claude" });
+  await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id: "claude-approval", engine: "claude" });
   const client = await connect(app.host, "claude-approval");
   await client.next(f => f.type === "opened");
   client.socket.send(JSON.stringify({ v: 1, type: "prompt", requestId: "ask", text: "ask approval" }));
@@ -124,7 +131,7 @@ async function connect(host: HostServer, id: string, nativeProtocol = 1) {
 
 it("runs a Codex Task through the Host and resumes its native history after Host restart", async () => {
   const app = await start(undefined, true);
-  expect((await app.request({ action: "conversation", workspaceKind: "chat", id: "codex-task", engine: "codex" })).status).toBe(200);
+  expect((await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id: "codex-task", engine: "codex" })).status).toBe(200);
   const client = await connect(app.host, "codex-task");
   expect(await client.next(f => f.type === "opened")).toMatchObject({ engine: "codex", state: { isStreaming: false } });
   client.socket.send(JSON.stringify({ v: 1, type: "prompt", requestId: "first", text: "Read the workspace marker" }));
@@ -143,7 +150,7 @@ it("runs a Codex Task through the Host and resumes its native history after Host
 
 it("restores a native approval on reconnect and rejects a stale second answer", async () => {
   const app = await start(undefined, true);
-  await app.request({ action: "conversation", workspaceKind: "chat", id: "approval-task", engine: "codex" });
+  await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id: "approval-task", engine: "codex" });
   const first = await connect(app.host, "approval-task");
   await first.next(f => f.type === "opened");
   first.socket.send(JSON.stringify({ v: 1, type: "prompt", requestId: "ask", text: "ask approval" }));
@@ -163,7 +170,7 @@ it("restores a native approval on reconnect and rejects a stale second answer", 
 
 it("interrupts only the requested Task and keeps another native run alive across browser disconnect", async () => {
   const app = await start(undefined, true);
-  for (const id of ["stop-one", "keep-two"]) await app.request({ action: "conversation", workspaceKind: "chat", id, engine: "codex" });
+  for (const id of ["stop-one", "keep-two"]) await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id, engine: "codex" });
   const one = await connect(app.host, "stop-one"), two = await connect(app.host, "keep-two");
   await one.next(f => f.type === "opened"); await two.next(f => f.type === "opened");
   for (const client of [one, two]) client.socket.send(JSON.stringify({ v: 1, type: "prompt", requestId: "hold", text: "hold" }));
@@ -191,16 +198,16 @@ it("reports three Agent choices without activating unconfigured engines or falli
     expect.objectContaining({ id: "codex", available: false, reason: expect.any(String) }),
     expect.objectContaining({ id: "claude", available: false, reason: expect.any(String) }),
   ]);
-  const unavailable = await app.request({ action: "conversation", workspaceKind: "chat", id: "no-native", engine: "codex" });
+  const unavailable = await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id: "no-native", engine: "codex" });
   expect(unavailable.status).toBe(409);
-  const invalid = await app.request({ action: "conversation", workspaceKind: "chat", id: "invalid-native", engine: "other" });
+  const invalid = await app.request({ action: "conversation", workspaceKind: "project", projectId:app.projectId, id: "invalid-native", engine: "other" });
   expect(invalid.status).toBe(409);
   expect((await (await app.request()).json()).conversations).toEqual([]);
 });
 
 it('advertises native capabilities and retains native workspace data when cleanup is unsupported', async()=>{
  const app=await start(undefined,true);
- const task=await (await app.request({action:'conversation',workspaceKind:'chat',id:'retained',engine:'codex'})).json();
+ const task=await (await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'retained',engine:'codex'})).json();
  const old=await connect(app.host,task.id,0);
  expect(await old.next(f=>f.type==='error')).toMatchObject({message:expect.any(String)});old.socket.close();
  const client=await connect(app.host,task.id);
@@ -214,7 +221,7 @@ it('advertises native capabilities and retains native workspace data when cleanu
 });
 
  it('streams stable native tool results and correlates native questions through the Host',async()=>{
- const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'chat',id:'interactions',engine:'codex'});
+ const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'interactions',engine:'codex'});
  const client=await connect(app.host,'interactions');await client.next(f=>f.type==='opened');
  client.socket.send(JSON.stringify({v:1,type:'prompt',requestId:'tool',text:'tool'}));
  expect(await client.next(f=>f.type==='event'&&f.event.type==='tool_update'&&f.event.status==='completed')).toMatchObject({event:{id:'tool-1',result:'file content'}});
@@ -227,14 +234,14 @@ it('advertises native capabilities and retains native workspace data when cleanu
  client.socket.close();
  });
 it('fails visibly when native history is missing and never replaces the bound Session',async()=>{
- const app=await start(undefined,true);const task=await (await app.request({action:'conversation',workspaceKind:'chat',id:'missing',engine:'codex'})).json();
+ const app=await start(undefined,true);const task=await (await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'missing',engine:'codex'})).json();
  const first=await connect(app.host,task.id);await first.next(f=>f.type==='opened');first.socket.close();await app.host.close();hosts.splice(hosts.indexOf(app.host),1);
  await rm(join(task.cwd,'.fake-native-thread.json'));
  const resumed=await start(app.root,true);const client=await connect(resumed.host,task.id);expect(await client.next(f=>f.type==='error')).toMatchObject({message:expect.stringContaining('Native session missing')});client.socket.close();
  const listed=(await (await resumed.request()).json()).conversations.find((c:any)=>c.id===task.id);expect(listed.nativeBinding).toMatchObject({state:'bound',id:'native-fixed'});
 });
 it('keeps an invalid native approval pending for a corrected answer',async()=>{
- const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'chat',id:'correct-approval',engine:'codex'});
+ const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'correct-approval',engine:'codex'});
  const client=await connect(app.host,'correct-approval');await client.next(f=>f.type==='opened');client.socket.send(JSON.stringify({v:1,type:'prompt',requestId:'ask',text:'ask approval'}));
  const pending=await client.next(f=>f.type==='event'&&f.event.type==='native_request');
  client.socket.send(JSON.stringify({v:1,type:'ui_response',id:pending.event.id,value:'invalid',requestId:'invalid'}));await client.next(f=>f.type==='error'&&f.requestId==='invalid');
@@ -248,22 +255,22 @@ it('does not treat an unknown Task identifier as a new Pi Session',async()=>{
 it('disables an unverified native CLI version with an explicit readiness reason',async()=>{
  const app=await start(undefined,true,'codex',{FIXTURE_VERSION:'codex-cli 9.0.0'});const response=await fetch(`http://127.0.0.1:${app.host.address().port}/api/engines`,{headers:{authorization:'Bearer test-token'}});
  expect((await response.json()).engines.find((e:any)=>e.id==='codex')).toMatchObject({available:false,reason:expect.stringContaining('Unsupported')});
- expect((await app.request({action:'conversation',id:'wrong-version',workspaceKind:'chat',engine:'codex'})).status).toBe(409);
+ expect((await app.request({action:'conversation',id:'wrong-version',workspaceKind:'project',projectId:app.projectId,engine:'codex'})).status).toBe(409);
 });
 it('rejects replay of an already accepted native prompt after Host restart',async()=>{
- const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'chat',id:'once-only',engine:'codex'});
+ const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'once-only',engine:'codex'});
  const first=await connect(app.host,'once-only');await first.next(f=>f.type==='opened');const prompt={v:1,type:'prompt',requestId:'stable-delivery',text:'Run once'};first.socket.send(JSON.stringify(prompt));await first.next(f=>f.type==='event'&&f.event.type==='run_completed');first.socket.close();await app.host.close();hosts.splice(hosts.indexOf(app.host),1);
  const next=await start(app.root,true);const client=await connect(next.host,'once-only');await client.next(f=>f.type==='opened');client.socket.send(JSON.stringify(prompt));expect(await client.next(f=>f.requestId==='stable-delivery'&&(f.type==='ack'||f.type==='error'))).toMatchObject({type:'error',message:expect.stringContaining('already accepted')});client.socket.close();
 });
 
 it('reports confirmed Claude cancellation as interrupted rather than a provider failure',async()=>{
- const app=await start(undefined,true,'claude');await app.request({action:'conversation',workspaceKind:'chat',id:'claude-stop',engine:'claude'});const client=await connect(app.host,'claude-stop');await client.next(f=>f.type==='opened');
+ const app=await start(undefined,true,'claude');await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'claude-stop',engine:'claude'});const client=await connect(app.host,'claude-stop');await client.next(f=>f.type==='opened');
  client.socket.send(JSON.stringify({v:1,type:'prompt',requestId:'hold',text:'hold'}));await client.next(f=>f.type==='event'&&f.event.type==='run_started');client.socket.send(JSON.stringify({v:1,type:'abort'}));
  expect(await client.next(f=>f.type==='event'&&f.event.type==='run_completed')).toMatchObject({event:{status:'interrupted'}});client.socket.close();
 });
 
 it('restores a pending native approval even when its cursor fell outside the replay buffer',async()=>{
- const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'chat',id:'overflow',engine:'codex'});const client=await connect(app.host,'overflow');await client.next(f=>f.type==='opened');
+ const app=await start(undefined,true);await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'overflow',engine:'codex'});const client=await connect(app.host,'overflow');await client.next(f=>f.type==='opened');
  client.socket.send(JSON.stringify({v:1,type:'prompt',requestId:'overflow',text:'ask approval overflow'}));const request=await client.next(f=>f.type==='event'&&f.event.type==='native_request');await client.next(f=>f.type==='event'&&f.cursor>=300);client.socket.close();
  const next=await connect(app.host,'overflow');await next.next(f=>f.type==='resync_required');expect(await next.next(f=>f.type==='event'&&f.event.type==='native_request')).toMatchObject({event:{id:request.event.id}});next.socket.close();
 });
@@ -271,5 +278,14 @@ it('restores a pending native approval even when its cursor fell outside the rep
 it.each(['codex','claude'] as const)('reports missing native authentication before creating a %s Task',async engine=>{
  const app=await start(undefined,true,engine,{FIXTURE_AUTH_MISSING:'1'});const result=await fetch(`http://127.0.0.1:${app.host.address().port}/api/engines`,{headers:{authorization:'Bearer test-token'}});
  expect((await result.json()).engines.find((e:any)=>e.id===engine)).toMatchObject({available:false,authentication:'required',reason:expect.stringContaining('authentication')});
- expect((await app.request({action:'conversation',workspaceKind:'chat',id:'no-auth',engine})).status).toBe(409);
+ expect((await app.request({action:'conversation',workspaceKind:'project',projectId:app.projectId,id:'no-auth',engine})).status).toBe(409);
+});
+
+it('rejects native Chat creation without persisting a Task and defaults Chat to Pi',async()=>{
+ const app=await start(undefined,true);
+ const denied=await app.request({action:'conversation',workspaceKind:'chat',id:'native-chat',engine:'codex'});
+ expect(denied.status).toBe(409);expect(await denied.json()).toMatchObject({error:expect.stringContaining('Chat is available only with Pi')});
+ expect((await (await app.request()).json()).conversations).toEqual([]);
+ const allowed=await app.request({action:'conversation',workspaceKind:'chat',id:'default-chat'});
+ expect(allowed.status).toBe(200);expect(await allowed.json()).toMatchObject({engine:'pi',workspaceKind:'chat'});
 });
