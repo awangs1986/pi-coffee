@@ -48,7 +48,7 @@ let sessions = [], commands = [], models = null, statsCache = null;
 let entries = [];
 const nativeItems=new Map();let nativeCursor=0;let pendingDelivery=null;let uncertainTask=null;
 let engine="pi", capabilities=null;
-const engineName=()=>({pi:"Pi",codex:"Codex",claude:"Claude Code"})[engine] || engine;
+const engineName=(value=engine)=>({pi:"Pi",codex:"Codex",claude:"Claude Code"})[value] || value;
 const supports=(name)=>capabilities ? capabilities[name]===true : engine==="pi";
 async function loadEngines(){
   let available=[];try{const response=await fetch("/api/engines");if(response.ok)available=(await response.json()).engines??[];}catch{}
@@ -670,20 +670,37 @@ function renderProjectContext() {
   ui.startBranch.disabled = lockedToConversation;
   const kind=$('#task-kind');kind.disabled=lockedToConversation;
   if(conversation)kind.value=conversation.workspaceKind==='chat'?'chat':'project';
+  for(const option of kind.options)option.textContent=option.value==='chat'?(lockedToConversation?'Chat':'Chat · 本地目录'):(lockedToConversation?'Work':'Work · Gitea 项目');
   const projectWorkspace=kind.value==='project';
-  ui.projectSelect.closest('label').classList.toggle('hidden',!projectWorkspace);
-  ui.startBranch.closest('label').classList.toggle('hidden',!projectWorkspace);
+  ui.projectSelect.closest('label').classList.toggle('hidden',!projectWorkspace || lockedToConversation);
+  ui.startBranch.closest('label').classList.toggle('hidden',!projectWorkspace || lockedToConversation);
   $('#create-task').classList.toggle('hidden',lockedToConversation);
-  if(!lockedToConversation && activeId)$('#create-task').textContent='为旧任务创建目录';
+  $('#create-task').textContent=!lockedToConversation && activeId?'为旧任务创建目录':'创建任务';
+  $('#project-controls').classList.toggle('task-bound',lockedToConversation);
+  $('.context-sep').classList.toggle('hidden',!projectWorkspace || lockedToConversation);
+  const projectLink=$('#task-project');
+  projectLink.classList.toggle('hidden',!activeProject?.webUrl);
+  projectLink.textContent=projectLabel || '';projectLink.title=projectLabel || '';
+  if(activeProject?.webUrl)projectLink.href=activeProject.webUrl;
   const context=$('#workspace-context');context.replaceChildren();
   if(conversation){
-    context.append(el('span','',`VM：${conversation.vmId || workspaceState.vmId || '未知'} · ${projectLabel || '无项目'} · ${conversation.creationState==='failed'?'创建失败':conversation.creationState==='creating'?'创建中':'就绪'}`));
-    const path=el('code','workspace-path',conversation.cwd);const copy=el('button','btn small','复制路径');copy.type='button';
+    const vm=conversation.vmId || workspaceState.vmId || '未知';
+    const state=conversation.creationState==='failed'?'创建失败':conversation.creationState==='creating'?'创建中':'就绪';
+    const branch=conversation.workspaceKind==='chat'?'本地文件':workspaceSync?.branch || conversation.branch || '正在核查…';
+    const identity=el('span','workspace-identity',`VM ${vm} · ${branch} · ${state}`);
+    identity.title=identity.textContent;
+    const details=el('button','context-action','详情');details.type='button';
+    details.onclick=()=>void askModal({title:'任务详情',text:[
+      `任务：${conversation.id}`,`Agent：${engineName(conversation.engine || 'pi')}`,`VM：${vm}`,`项目：${projectLabel || '无项目'}`,
+      `本地路径：${conversation.cwd}`,`当前分支：${branch}`,`状态：${state}`,
+      `最后核查：${workspaceSync?.lastRemoteAt || '尚未核查远端'}`,conversation.creationError
+    ].filter(Boolean).join('\n'),okLabel:'关闭'});
+    const path=el('code','workspace-path',conversation.cwd);path.title=conversation.cwd;
+    const copy=el('button','context-action','复制路径');copy.type='button';
     copy.onclick=async()=>{try{await navigator.clipboard.writeText(conversation.cwd);toast('已复制完整路径');}catch{const selection=window.getSelection();const range=document.createRange();range.selectNodeContents(path);selection.removeAllRanges();selection.addRange(range);toast('已选中完整路径，可复制');}};
-    context.append(path,copy);
-    if(activeProject?.webUrl){const link=el('a','','打开项目');link.href=activeProject.webUrl;link.target='_blank';link.rel='noopener noreferrer';context.append(link);}
-    context.append(el('span','workspace-branch',conversation.workspaceKind==='chat'?'本地文件 · 分支/同步不适用':`当前分支：${workspaceSync?.branch ?? '正在核查…'} · ${workspaceSync?.lastRemoteAt ? '最后核查 '+workspaceSync.lastRemoteAt : '尚未核查远端'}`));
-    if(conversation.creationError)context.append(el('span','',conversation.creationError));
+    context.append(identity,details,path,copy);
+    if(conversation.creationError){identity.textContent=`VM ${vm} · 创建失败：${conversation.creationError}`;identity.title=identity.textContent;identity.classList.add('workspace-error');}
+
   }
   ui.projectSelect.title = activeProject ? activeProject.name : 'Gitea 仓库';
   ui.startBranch.title = conversation ? `当前对话固定使用 ${conversation.branch}` : '新对话起始分支';
