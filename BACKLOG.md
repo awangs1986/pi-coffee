@@ -360,3 +360,7 @@ MVP-001..005 (已完成)
 [seven-category context contract](docs/spec/context-usage.md), consumed by Server #4.
 Local numeric estimates stay distinct from provider billing; native-engine contexts
 remain isolated. Delivery and clean-clone evidence are recorded in the Issue.
+
+## Pi-only Chat creation (2026-09-23)
+
+[Agent #60](http://gitea:3000/awangs/pi-coffee/issues/60): new Chat defaults to Pi; native engines use Work. Existing native local tasks are retained. Browser navigation is Server #4. Pi account import into Web Server remains a future consideration, not current scope.

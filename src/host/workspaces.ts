@@ -255,6 +255,7 @@ export class Workspaces {
     this.assertId(id);let c=this.state.conversations.find(c=>c.id===id);
     if(c && (c.engine ?? 'pi')!==engine)throw new Error('Task Agent is fixed at creation');
     if(c && c.workspaceKind!=='chat')throw new Error('Creation ID belongs to a different task');
+    if(!c && engine!=='pi')throw new Error('Chat is available only with Pi; choose Work instead');
     if(c && (!c.creationState || c.creationState==='ready')){await this.checkDirectory(c);return structuredClone(c);}
     const cwd=join(this.chatRoot,id);
     if(!c){
