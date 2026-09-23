@@ -1,8 +1,8 @@
 # Native-engine support in the existing Browser Shell
 
-Status: **ready for implementation; no native-engine UI or deployment is delivered by this SPEC**.
+Status: **M4 implemented on the delivery branch; M5 production deployment remains pending**. See [delivery evidence](../reviews-native-agents-m4-20260923.md).
 Date: 2026-09-23. Tracking: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
-Blocked by: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) for the additive Host contract and activation.
+Depends on: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) for the additive Host contract and activation.
 Canonical contract: [Agent native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md).
 
 ## Problem Statement
@@ -70,7 +70,7 @@ The Server remains a transparent gateway. It does not run engines, parse native 
 
 ## Out of Scope
 
-- Runtime implementation or deployment during this documentation task.
+- Production deployment (owned by M5).
 - Native CLI processes, provider credential storage, model traffic routing, native transcript conversion or Agent protocol implementation inside the Web Server.
 - A new login system, new VM provisioning, a unified subscription pool, or an SDK product impersonating native CLI authentication.
 - Changing Pi customizations, applying them to other engines, engine switching inside an existing Task, or moving the three main panes.
@@ -83,4 +83,4 @@ Implementation follows the [M0–M5 plan](http://gitea:3000/awangs/pi-coffee/src
 
 The Agent implementation is [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48); this Server delivery is [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). The [native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the requirements and references, and [ADR-0013](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/adr/0013-native-agent-engines.md) owns the architecture boundary.
 
-The existing [frontend audit](http://gitea:3000/awangs/pi-coffee-server/issues/4) and its PR remain separate. Current Server main and the review branch are still Pi-oriented; neither the Codex nor Claude Code integration is already delivered. No authentication or Gitea policy change is inferred from the existence of third-party UI projects.
+The existing [frontend audit](http://gitea:3000/awangs/pi-coffee-server/issues/4) and its PR remain separate. M4 is implemented on the native-engine delivery branch; production remains unchanged until M5. No authentication or Gitea policy change is inferred from the existence of third-party UI projects.

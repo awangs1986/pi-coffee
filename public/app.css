@@ -719,3 +719,14 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
 .workspace-path {overflow-wrap:anywhere;white-space:normal;flex:1 1 70%;user-select:all;}
 .workspace-branch {flex-basis:100%;overflow-wrap:anywhere;}
 .project-context {flex-wrap:wrap;}
+
+/* Keep pane placement stable when the sidebar is removed from grid flow. */
+.app > .sidebar { grid-column: 1; grid-row: 1; }
+.app > .main { grid-column: 2; grid-row: 1; }
+.app > .workspace-panel { grid-column: 3; grid-row: 1; }
+.project-context { height: auto; min-height: 31px; flex-shrink: 0; }
+.workspace-context { flex-shrink: 0; }
+@media (max-width: 820px) {
+  .app, .app.side-collapsed, .app.files-open, .app.side-collapsed.files-open { grid-template-columns: minmax(0, 1fr); }
+  .app > .main { grid-column: 1; }
+}
