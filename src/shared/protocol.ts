@@ -89,12 +89,26 @@ export interface ExtensionInfo {
   commands: Array<{ name: string; description?: string }>;
 }
 
+export type ContextCategoryId = "system" | "tools" | "rules" | "skills" | "dynamic" | "subagents" | "conversation";
+export interface ContextBreakdown {
+  version: 1;
+  method: "o200k_base_estimate";
+  basis: "last_request" | "session_preview";
+  model: string;
+  capturedAt: string;
+  contextWindow: number;
+  totalTokens: number;
+  categories: Array<{ id: ContextCategoryId; tokens: number }>;
+  mediaOmitted: boolean;
+}
+
 export interface SessionStats {
   userMessages: number;
   assistantMessages: number;
   toolCalls: number;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
   cost: number;
+  contextBreakdown?: ContextBreakdown;
   contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
 }
 

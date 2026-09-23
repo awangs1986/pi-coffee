@@ -47,6 +47,8 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
   if (isEnabled(env.PI_COFFEE_PI_MCP_ADAPTER)) extensions.push(resolvePiMcpAdapterExtension(env));
   if (!isDisabled(env.PI_COFFEE_CONTEXT_FOLD)) extensions.push(resolveContextFoldExtension(env));
   extensions.push(harness);
+  // Observe the final payload after the Harness has removed Chat system fields.
+  extensions.push(resolveContextUsageExtension());
   return extensions;
 }
 
@@ -119,3 +121,6 @@ function isEnabled(value: string | undefined): boolean {
   if (value === undefined) return false;
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
+
+/** Read-only observer, after all payload-changing extensions. */
+export function resolveContextUsageExtension(): string { return join(moduleDirectory,"context","usage-extension.js"); }

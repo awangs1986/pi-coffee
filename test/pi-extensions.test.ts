@@ -3,6 +3,7 @@ import { delimiter, isAbsolute } from "node:path";
 import { discoverAndLoadExtensions } from "@earendil-works/pi-coding-agent";
 import {
   resolveWebExtension,
+  resolveContextUsageExtension,
   resolveHarnessExtension,
   resolvePiExtensions,
   resolveContextFoldExtension,
@@ -17,7 +18,7 @@ import {
 import subagentsResourceExtension from "../src/subagents/extension.js";
 
 describe("PI Coffee native extension selection", () => {
-  it("loads Harness last to enforce the Chat boundary after packaged extensions", () => {
+  it("loads the read-only context observer after the final Harness boundary", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
       resolveWebExtension(),
@@ -26,6 +27,7 @@ describe("PI Coffee native extension selection", () => {
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
     expect(extensions.every((path) => isAbsolute(path))).toBe(true);
     // Local extension entries point at the build output (`dist/src`); the
@@ -42,12 +44,14 @@ describe("PI Coffee native extension selection", () => {
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([
       resolveWebExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
   });
 
@@ -58,6 +62,7 @@ describe("PI Coffee native extension selection", () => {
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
   });
 
@@ -68,6 +73,7 @@ describe("PI Coffee native extension selection", () => {
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_WEB_ACCESS: "off" })).toEqual([
       resolveWebExtension(),
@@ -75,6 +81,7 @@ describe("PI Coffee native extension selection", () => {
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
   });
 

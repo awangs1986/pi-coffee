@@ -157,3 +157,6 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 2026-09-22：owner 补充确认 PA-013；Chat 和 Work 均有逐 Conversation 本地目录，Chat 统一置于 `chats/` 父目录，附件、搜索、图片与产物不再使用跨 Conversation 全局落点。该项已由 Agent #46 / Server #3 实现并部署；见[联合验收](../reviews/conversation-workspaces-20260922.md)。
 
 2026-09-22：owner 澄清检查目标是遗漏与合理性，固定“一任务 = 一 Conversation = 一 VM 本地目录”，补充 Work 自动 clone、前端五项上下文、独立 clone、创建重试与归档/清理合同，见 CW-07～10；修正旧 Task 一对多定义，Agent #46 / Server #3 已完成实现与流程验收。
+
+The owner-corrected [Context Usage contract](context-usage.md) specializes PA-006
+with seven source-attributed categories and explicit local-estimate semantics.
