@@ -6,7 +6,7 @@ import {WebSocketServer} from 'ws';
 const root=resolve('public');
 const conversation={id:'layout-task',workspaceKind:'project',creationState:'ready',projectId:'demo',cwd:'/home/awang/work/projects/checkouts/00000000-0000-4000-8000-000000000000',branch:'coffee/test-vm/00000000-0000-4000-8000-000000000000',startSha:'abc',createdAt:new Date().toISOString()};
 const tasks=Array.from({length:40},(_,i)=>({...conversation,id:i?'layout-task-'+i:conversation.id,engine:'pi'}));
-const changes={branch:conversation.branch,base:'abc123',target:'def456',refreshedAt:'2026-09-22T12:00:00Z',files:Array.from({length:90},(_,i)=>({path:'src/components/example-'+i+'.ts',status:'M',additions:8,deletions:2})),checks:[{command:'git diff --check',ok:true,output:''}],patch:'diff --git a/src/example.ts b/src/example.ts\n--- a/src/example.ts\n+++ b/src/example.ts\n@@ -1 +1 @@\n-old\n+new',stat:'1 file changed',checkpointPaths:['src/example.ts']};
+const changes={branch:conversation.branch,base:'abc123',target:'def456',refreshedAt:'2026-09-22T12:00:00Z',files:Array.from({length:90},(_,i)=>({path:'src/components/example-'+i+'.ts',status:'M',additions:8,deletions:2})),checks:[{command:'git diff --check',ok:true,output:''}],patch:'diff --git a/src/components/example-0.ts b/src/components/example-0.ts\n--- a/src/components/example-0.ts\n+++ b/src/components/example-0.ts\n@@ -1 +1 @@\n-old\n+new',stat:'1 file changed',checkpointPaths:['src/example.ts']};
 const server=createServer(async(req,res)=>{
  res.setHeader('content-type','application/json');
  if(req.url==='/api/engines')return res.end(JSON.stringify({engines:['pi','codex','claude'].map(id=>({id,name:id,available:true}))}));

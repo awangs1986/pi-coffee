@@ -42,7 +42,7 @@ owner 要求按大方向收拢，不再逐条追问边缘细节。首版界面�
 
 布局与交互合同已按以下原则固化，后续只能在公共 seam 上增量调整：
 
-1. 宽屏默认三栏；中栏对话、输入卡和 Gitea 上下文共享同一水平轴线。窄屏（≤1100px）仍把右栏降级为浮层。
+1. The right changes pane starts closed, including on wide screens and when switching tasks. The top-right folder icon explicitly opens it. Conversation, composer and Gitea context share one horizontal axis; on narrow screens (≤1100px), the right pane is an overlay.
 2. 已打开对话的仓库与 Conversation 分支只读展示，不在运行中切换脏 Checkout；空白新对话可用同一上下文条选择仓库和起始分支。
 3. 附件横向轨道不换行、不令输入卡整体不可预测增高；输入卡向上生长到 14 行后内部滚动；空文本禁用发送。
 4. 项目管理动作可以因「管理」菜单进行，但不能在非交互状态堆叠常驻按钮；主界面只有归档，不提供多 Git 仓切换；远端 PR 显示真实 Gitea 状态和链接，不模拟 CI/PR。
