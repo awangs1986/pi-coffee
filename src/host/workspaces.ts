@@ -398,7 +398,6 @@ export class Workspaces {
   async openPullRequest(id:string,title:string) {return this.mutate(async()=>{
     const c=this.conversation(id),p=this.project(c.projectId);
     await this.assertCodeBranch(c);
-    if(c.pullRequest?.state==='open')return c.pullRequest;
     if(!this.forge)throw new Error('Gitea pull request adapter is not configured');
     if(typeof title!=='string' || !title.trim() || title.length>200)throw new Error('Pull request title is required (maximum 200 characters)');
     const status=await this.syncStatusUnlocked(c);
