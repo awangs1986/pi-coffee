@@ -26,7 +26,25 @@ The right pane starts closed at every viewport size, on initial task open and on
 task switch/new conversation. Background polling and streamed changes cannot open
 it. A folder icon in the top-right toolbar toggles the change-list pane; the icon
 has an accessible name and expanded state. Preserve the existing pane positions,
-responsive sidebar and composer. On narrow screens review remains an overlay.
+responsive sidebar and composer. The review card is about 320 CSS pixels wide, inset below the folder control,
+with a subtle border, rounded corners and an internally scrolling file list. It
+must not consume a percentage of a wide viewport. On narrow screens the same
+bounded card overlays the conversation with viewport margins; its header/footer
+remain visible. The folder control stays at the upper-right when the card opens.
+
+## Search destination
+
+The sidebar contains a Search button, not an always-visible input. It opens a
+main-area search page with its own heading, search field, type filters and dated
+results, following the supplied Arena reference. Filters are All (active), Chat,
+Work and Archived, based on actual task metadata. Search matches available titles
+and previews only; it does not claim full-transcript search or invented media
+categories. The sidebar task list remains independent of the search query.
+
+The running task, connection, transcript and unsent draft stay mounted while
+search is open. Close or Escape returns to that task without aborting it. Selecting
+an active result opens the task; archived results expose existing restore actions.
+New conversation exits search. Search closes the review card and Diff dialog.
 
 ## Diff
 
