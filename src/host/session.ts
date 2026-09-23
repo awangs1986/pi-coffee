@@ -10,7 +10,7 @@ import type {
   SessionSummary,
   UiResponse,
 } from "../shared/protocol.js";
-import type { PiHistory, PiModels, PiSessionFactory, PiSession } from "./pi-adapter.js";
+import type { AgentHistory as PiHistory, AgentModels as PiModels, AgentSessionFactory as PiSessionFactory, AgentSession as PiSession } from "./agent-adapter.js";
 
 export interface SessionSink {
   send(frame: ServerFrame): void;
@@ -57,6 +57,7 @@ export class HostSession {
   private activeRequestId?: string;
   /** Extension dialogs awaiting an answer, keyed by request id. */
   private readonly pendingUi = new Map<string, ServerFrame>();
+  private readonly answeringUi = new Set<string>();
   private started = false;
   private interrupted = false;
   private recoveryPromise?: Promise<void>;
@@ -149,7 +150,7 @@ export class HostSession {
   releasePrompt(requestId: string): void { if(this.activeRequestId===requestId)this.activeRequestId=undefined; }
 
   reservePrompt(requestId: string): void {
-    if (this.interrupted) throw new Error("Pi was interrupted. Reopen the conversation before retrying; the previous request was not replayed.");
+    if (this.interrupted) throw new Error("Agent was interrupted. Reopen the conversation before retrying; the previous request was not replayed.");
     if (!this.pi || !this.started) throw new Error("Session is not ready");
     if (this.activeRequestId !== undefined || this.state.isStreaming) {
       throw new SessionBusyError();
@@ -201,11 +202,10 @@ export class HostSession {
 
   /** Answer a pending extension dialog; unknown ids are ignored (already answered or timed out). */
   async respondUi(response: UiResponse): Promise<boolean> {
-    if (!this.pendingUi.has(response.id)) return false;
-    // Remove first so a duplicate answer racing with Pi's follow-on events is rejected.
-    this.pendingUi.delete(response.id);
-    await this.ready().respondUi(response);
-    return true;
+    if (!this.pendingUi.has(response.id) || this.answeringUi.has(response.id)) return false;
+    this.answeringUi.add(response.id);
+    try {await this.ready().respondUi(response);this.pendingUi.delete(response.id);return true;}
+    finally {this.answeringUi.delete(response.id);}
   }
 
   /** Dialogs Pi is still blocked on; re-sent to every browser that opens the Session. */
@@ -278,7 +278,7 @@ export class HostSession {
     let settled = false;
     let lifecycle = false;
     if (isRecord(safeEvent) && typeof safeEvent.type === "string") {
-      if (safeEvent.type === "agent_interrupted") {
+      if ((safeEvent.type === "agent_interrupted" || safeEvent.type === "run_interrupted")) {
         this.interrupted = true;
         this.state = {...this.state,isStreaming:false};
         this.activeRequestId = undefined;
@@ -288,14 +288,14 @@ export class HostSession {
         this.lastMessageEndCursor = this.cursor;
         this.clearIdleTimer();
         this.onLifecycle?.(this);
-        for (const sink of this.sinks) sink.send({v:1,type:"error",code:"pi_interrupted",fatal:true,message:"Pi exited unexpectedly. This run was interrupted and was not replayed. Reopen the conversation, inspect the saved results, and retry explicitly."});
+        for (const sink of this.sinks) sink.send({v:1,type:"error",code:safeEvent.type==="agent_interrupted"?"pi_interrupted":"agent_interrupted",fatal:true,message:"Agent exited unexpectedly. This run was interrupted and was not replayed. Reopen the conversation, inspect the saved results, and retry explicitly."});
         return;
       }
-      if (safeEvent.type === "agent_start") {
+      if ((safeEvent.type === "agent_start" || safeEvent.type === "run_started")) {
         this.state = { ...this.state, isStreaming: true };
         lifecycle = true;
       }
-      if (safeEvent.type === "agent_settled") {
+      if ((safeEvent.type === "agent_settled" || safeEvent.type === "run_completed")) {
         this.state = { ...this.state, isStreaming: false };
         this.activeRequestId = undefined;
         settled = true;
@@ -308,7 +308,7 @@ export class HostSession {
     this.cursor += 1;
     // Pi appends a message to its session file when the message ends, so from
     // this cursor on the durable history is complete up to and including it.
-    if (isRecord(safeEvent) && (safeEvent.type === "message_end" || safeEvent.type === "agent_settled")) {
+    if (isRecord(safeEvent) && (safeEvent.type === "message_end" || (safeEvent.type === "agent_settled" || safeEvent.type === "run_completed"))) {
       this.lastMessageEndCursor = this.cursor;
     }
     const frame: ServerFrame = {
@@ -321,7 +321,7 @@ export class HostSession {
     };
     this.events.push(frame);
     while (this.events.length > this.eventBufferSize) this.events.shift();
-    if (isRecord(safeEvent) && safeEvent.type === "extension_ui_request" && typeof safeEvent.id === "string" && isDialogMethod(safeEvent.method)) {
+    if (isRecord(safeEvent) && (safeEvent.type === "extension_ui_request" || safeEvent.type === "native_request") && typeof safeEvent.id === "string" && isDialogMethod(safeEvent.method)) {
       this.pendingUi.set(safeEvent.id, frame);
     }
     for (const sink of this.sinks) sink.send(frame);
@@ -423,7 +423,7 @@ export class HostSessionRegistry {
     // Pi writes the session file at startup; a conversation nobody has spoken
     // in yet is noise in a shared list (the opening browser shows it locally).
     const summaries: SessionSummary[] = stored
-      .filter((item) => item.messageCount > 0)
+      .filter((item) => item.messageCount > 0 || item.engine && item.engine!=="pi")
       .map((item) => ({
         ...item,
         running: this.sessions.get(item.id)?.isStreaming ?? false,

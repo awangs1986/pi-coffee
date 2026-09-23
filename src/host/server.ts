@@ -1,3 +1,4 @@
+import { capabilitiesFor } from "../shared/protocol.js";
 import { stopLspDaemon } from "../lsp/transport.js";
 import { readJson, json } from "../shared/http.js";
 import type { Workspaces } from "./workspaces.js";
@@ -6,6 +7,7 @@ import { URL } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
 import {
   decodeClientFrame,
+  parseAgentEngine,
   encodeFrame,
   MAX_FRAME_BYTES,
   PROTOCOL_VERSION,
@@ -14,7 +16,7 @@ import {
   type JsonValue,
   type ServerFrame,
 } from "../shared/protocol.js";
-import type { PiSessionFactory } from "./pi-adapter.js";
+import { PI_ONLY_ENGINES, type AgentSessionFactory as PiSessionFactory } from "./agent-adapter.js";
 import { HostSession, HostSessionRegistry, SessionBusyError, type SessionSink } from "./session.js";
 import type { TransferServer } from "./transfer.js";
 import { inspectExecutionCapability, type ExecutionCapability } from "./execution-capability.js";
@@ -54,8 +56,10 @@ export class HostServer {
   private readonly lifecycleLocks = new Set<string>();
   private readonly workspaces?: Workspaces;
   private execution?:ExecutionCapability;
+  private readonly factory: PiSessionFactory;
 
   constructor(options: HostServerOptions) {
+    this.factory = options.factory;
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 8788;
     this.token = options.token;
@@ -96,6 +100,11 @@ export class HostServer {
   private async handleApi(req: IncomingMessage, res: import("node:http").ServerResponse) {
     if(!this.token || req.headers.authorization !== `Bearer ${this.token}`) {json(res,401,{error:"Unauthorized"});return;}
     if(req.url === "/api/revoke-files" && req.method === "POST") {this.transfer?.revokeAll();json(res,200,{ok:true});return;}
+    if(req.url === "/api/engines" && req.method === "GET") {
+      try { json(res,200,{engines:await this.factory.engines?.() ?? PI_ONLY_ENGINES}); }
+      catch { json(res,503,{error:"Agent discovery unavailable"}); }
+      return;
+    }
     const ws=this.workspaces;
     if(!ws || req.url!=="/api/workspace") {json(res,404,{error:"Project workspace mode is not configured"});return;}
     let locked: string | undefined;
@@ -105,21 +114,34 @@ export class HostServer {
       const input=await readJson(req);
       // Reject mutating lifecycle operations while the parent is streaming. External commands remain trusted VM operations.
       const target=input.id;
+      if(input.action==="conversation" || input.action==="continue") {
+        const engine=parseAgentEngine(input.engine);
+        const existing=target ? await ws.lookup(target) : undefined;
+        if(existing && (existing.engine ?? "pi")!==engine)throw new Error("Task Agent is fixed at creation");
+        const available=(await this.factory.engines?.() ?? PI_ONLY_ENGINES).find(item=>item.id===engine);
+        if(!existing && !available?.available)throw new Error(available?.reason ?? "Agent unavailable");
+      }
+      if(input.action==="delete" && target) {
+        const task=await ws.lookup(target);
+        if(task?.engine && task.engine!=="pi")throw new Error("Native cleanup is unavailable; Workspace and native history are retained. Archive this Task instead.");
+      }
       if(target && !["files","changes","status"].includes(input.action)) {
         if(this.lifecycleLocks.has(target) || (input.action!=="archive" && this.registry.get(target)?.isBusy))throw new Error("Stop the source conversation before changing its lifecycle");
         this.lifecycleLocks.add(target);locked=target;
       }
-      if(target && (["checkpoint","pull_request","delete"].includes(input.action) || input.action==="conversation" && this.registry.get(target))) {
+      if(target && (["checkpoint","sync","pull_request","delete"].includes(input.action) || input.action==="conversation" && this.registry.get(target))) {
         const c=await ws.lookup(target);
         if(this.registry.get(target) || (!c?.creationState || c.creationState==='ready') && !c?.workspaceRemoved && !c?.cleanupStarted) {
           const opened=this.registry.get(target) ?? (await this.registry.open(target)).session;
           if(opened.isBusy)throw new Error("Source conversation is busy");
           const background=await opened.backgroundState();
-          if(!background.known || background.active>0)throw new Error("Workspace has active/queued children or their status is unknown. Wait for completion and retry; no task was stopped.");
+          if(!background.known || background.active>0)throw new Error("Workspace has active/queued children or their status is unknown. Wait for completion, or have the VM owner inspect and reconcile interrupted native work; no task was stopped.");
           if(opened.isBusy)throw new Error("Source conversation resumed while checking background work");
           // Stop only a verified idle parent before mutating its workspace; never stop children to satisfy a lock.
-          await this.registry.stopIdle(target);
-          for(const socket of this.sockets)if(socket.sessionId===target)socket.close();
+          if(!c?.engine || c.engine==="pi") {
+            await this.registry.stopIdle(target);
+            for(const socket of this.sockets)if(socket.sessionId===target)socket.close();
+          }
         }
       }
       let result:unknown;
@@ -142,8 +164,8 @@ export class HostServer {
         }
         case "conversation":
           if(input.workspaceKind && !['chat','project'].includes(input.workspaceKind))throw new Error('Invalid workspace kind');
-          result=input.workspaceKind==='chat' ? await ws.createChatConversation(input.id) : await ws.createConversation(input.projectId,input.branch,input.id);break;
-        case "continue": result=await ws.continueFrom(input.projectId,input.sourceBranch,input.sourceSha,input.id);break;
+          result=input.workspaceKind==='chat' ? await ws.createChatConversation(input.id,parseAgentEngine(input.engine)) : await ws.createConversation(input.projectId,input.branch,input.id,parseAgentEngine(input.engine));break;
+        case "continue": result=await ws.continueFrom(input.projectId,input.sourceBranch,input.sourceSha,input.id,parseAgentEngine(input.engine));break;
         case "migration_plan": result=await ws.migrationPlan(input.id);break;
         case "migrate": result=await ws.migrateConversation(input.id);break;
         case "checkpoint": result=await ws.checkpoint(input.id,input.paths,input.message);break;
@@ -430,6 +452,8 @@ class HostSocket implements SessionSink {
     }
     if(frame.sessionId && this.lifecycleLocks.has(frame.sessionId))throw new Error("Workspace lifecycle operation in progress; reconnect shortly");
     if(frame.sessionId && await this.workspaces?.isArchived(frame.sessionId))throw new Error("Restore the archived conversation first");
+    const task=frame.sessionId ? await this.workspaces?.lookup(frame.sessionId) : undefined;
+    if(task?.engine && task.engine!=="pi" && frame.nativeProtocol!==1)throw new Error("This Task requires a native-Agent capable client");
     const result = await this.registry.open(frame.sessionId, frame.after);
     this.session = result.session;
     this.opened = true;
@@ -440,6 +464,8 @@ class HostSocket implements SessionSink {
     this.send({
       v: 1,
       type: "opened",
+      engine:task?.engine ?? "pi",
+      capabilities:capabilitiesFor(task?.engine ?? "pi"),
       sessionId: result.session.id,
       cursor: result.session.currentCursor,
       state,
@@ -466,7 +492,6 @@ class HostSocket implements SessionSink {
         oldestCursor: result.resync.oldestCursor,
         newestCursor: result.resync.newestCursor,
       });
-      return;
     }
     for (const replay of result.replay) this.send(replay);
     // A dialog Pi is still blocked on must reach this browser even if the
@@ -496,7 +521,7 @@ class HostSocket implements SessionSink {
     }
     const session=this.session;
     session.reservePrompt(frame.requestId);
-    try {await this.workspaces?.markRun(session.id,"running");}
+    try {await this.workspaces?.markRun(session.id,"running",frame.requestId);}
     catch(e){session.releasePrompt(frame.requestId);throw e;}
     // Acknowledgement means the command crossed the seam and was accepted;
     // lifecycle events continue asynchronously after it.
