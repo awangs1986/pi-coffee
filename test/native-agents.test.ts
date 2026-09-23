@@ -16,7 +16,7 @@ async function setup(legacy=false,wide=false){
   if(body.action==='changes')return {ok:true,json:async()=>({branch:'coffee/demo',base:'abc123',target:'def456',refreshedAt:'2026-09-23',files:[{path:'src/a.ts',status:'M',additions:1,deletions:1}],patch:'diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -9,2 +9,2 @@\n-before\n+after\n unchanged',checks:[]})};
   return {ok:true,json:async()=>({state:'local',files:[]})};
  }));vi.useFakeTimers();await import('../public/app.js');await vi.advanceTimersByTimeAsync(20);
- return {requests,frames,sockets};
+ return {requests,frames,sockets,conversations};
 }
 it('fixes Agent at Task creation, scopes Model controls and ignores obsolete socket frames',async()=>{
  const app=await setup();const select=document.querySelector<HTMLSelectElement>('#task-engine')!;
@@ -116,4 +116,28 @@ it('opens a separate numbered Diff with functional Unified/Split and file foldin
  document.querySelector<HTMLButtonElement>('#diff-collapse')!.click();expect(dialog.querySelector<HTMLDetailsElement>('.review-file')!.open).toBe(false);
  document.querySelector<HTMLButtonElement>('#diff-unified')!.click();expect(dialog.querySelector('table')?.getAttribute('data-layout')).toBe('unified');
  document.querySelector<HTMLButtonElement>('#diff-close')!.click();expect(dialog.open).toBe(false);expect(document.querySelector('#workspace-panel')!.classList.contains('hidden')).toBe(false);
+});
+
+it('opens search as a separate view, filters results without filtering the sidebar, and preserves the draft',async()=>{
+ const app=await setup();const prompt=document.querySelector<HTMLTextAreaElement>('#prompt')!;prompt.value='unfinished draft';
+ app.sockets[0].receive({type:'sessions',sessions:[{id:'one',name:'Alpha project',updatedAt:new Date().toISOString()},{id:'two',name:'Beta chat',updatedAt:new Date().toISOString()}]});
+ const trigger=document.querySelector<HTMLButtonElement>('#search-open');expect(trigger).not.toBeNull();expect(document.querySelector('.sidebar input[type="search"]')).toBeNull();
+ trigger!.click();expect(document.querySelector('#search-page')!.classList.contains('hidden')).toBe(false);expect(document.activeElement).toBe(document.querySelector('#search'));
+ const input=document.querySelector<HTMLInputElement>('#search')!;input.value='Alpha';input.dispatchEvent(new Event('input'));
+ expect(document.querySelector('#search-results')!.textContent).toContain('Alpha project');expect(document.querySelector('#search-results')!.textContent).not.toContain('Beta chat');
+ expect(document.querySelector('#session-list')!.textContent).toContain('Beta chat');expect(app.frames.filter(f=>f.type==='prompt'||f.type==='abort')).toHaveLength(0);
+ document.querySelector<HTMLButtonElement>('#search-close')!.click();expect(document.querySelector('#search-page')!.classList.contains('hidden')).toBe(true);expect(prompt.value).toBe('unfinished draft');
+ trigger!.click();document.querySelector<HTMLButtonElement>('#new-task')!.click();expect(document.querySelector('#search-page')!.classList.contains('hidden')).toBe(true);
+});
+
+it('filters search by actual task kind and archive state, and Escape returns without stopping a run',async()=>{
+ const app=await setup();app.conversations.push({id:'chat',workspaceKind:'chat'},{id:'work',workspaceKind:'project'},{id:'archived',workspaceKind:'chat',archived:true});await vi.advanceTimersByTimeAsync(5000);
+ app.sockets[0].receive({type:'sessions',sessions:[{id:'chat',name:'Chat result',updatedAt:new Date().toISOString()},{id:'work',name:'Work result',updatedAt:new Date().toISOString()},{id:'archived',name:'Archived result',updatedAt:new Date().toISOString()}]});
+ document.querySelector<HTMLButtonElement>('#search-open')!.click();
+ for(const [filter,name] of [['chat','Chat result'],['project','Work result'],['archived','Archived result']]){
+  document.querySelector<HTMLButtonElement>('[data-filter="'+filter+'"]')!.click();
+  expect([...document.querySelectorAll('.search-result-title')].map(n=>n.textContent)).toEqual([name]);
+ }
+ document.querySelector<HTMLInputElement>('#search')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ expect(document.querySelector('#search-page')!.classList.contains('hidden')).toBe(true);expect(app.frames.filter(f=>f.type==='abort')).toHaveLength(0);
 });

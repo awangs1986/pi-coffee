@@ -28,7 +28,7 @@
   --thread-width: 828px;
   --composer-width: 860px;
   --composer-offset: 150px;
-  --workspace-width: minmax(360px, 38%);
+  --workspace-width: 332px;
   --radius: 14px;
   --shadow-soft: 0 1px 2px rgb(0 0 0 / .05), 0 12px 32px rgb(0 0 0 / .06);
   --font: Inter, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -581,20 +581,20 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
 .app.side-collapsed.files-open { grid-template-columns: 0 minmax(390px, 1fr) var(--workspace-width); }
 .workspace-panel {
   min-width: 0; min-height: 0; display: flex; flex-direction: column;
-  background: var(--bg-side); border-left: 1px solid var(--border); overflow: hidden;
+  background: var(--bg-side); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 64px 12px 12px 0;
 }
-.workspace-panel header.wt-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--border); min-height: 48px; }
+.workspace-panel header.wt-header { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 5px; border-bottom: 1px solid var(--border); min-height: 44px; }
 .wt-tabs { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .wt-tab { display: flex; align-items: baseline; gap: 4px; border: 0; background: transparent; border-radius: 8px; padding: 6px 8px; font-size: 13.5px; color: var(--text-3); cursor: pointer; white-space: nowrap; }
 .wt-tab:hover { color: var(--text); background: var(--bg-subtle); }
-.wt-tab.active { color: var(--text); font-weight: 700; }
+.wt-tab.active { color: var(--text); font-weight: 600; background: var(--bg-subtle); box-shadow: 0 1px 3px rgb(0 0 0 / .06); }
 .wt-summary { display: inline-flex; gap: 5px; font: 12px/1.6 var(--mono); font-weight: 500; }
 .wt-add { color: var(--ok); }
 .wt-del { color: var(--danger); }
 .wt-new { color: var(--text-3); font-size: 11px; }
 .wt-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .workspace-list { min-height: 0; flex: 1; overflow-y: auto; padding: 4px 0; }
-.wt-file { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; text-align: left; padding: 7px 12px; font-size: 13px; color: var(--text); cursor: pointer; }
+.wt-file { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; text-align: left; padding: 11px 14px; font-size: 13px; color: var(--text); cursor: pointer; }
 .wt-file:hover { background: var(--bg-subtle); }
 .wt-file.selected { background: var(--active); }
 .wt-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -703,7 +703,7 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
 @media (max-width: 1100px) {
   .app.files-open { grid-template-columns: var(--sidebar-width) minmax(0,1fr); }
   .app.side-collapsed.files-open { grid-template-columns: 0 minmax(0,1fr); }
-  .files-open .workspace-panel { position: fixed; right: 0; top: 0; bottom: 0; width: min(520px, 85vw); z-index: 40; box-shadow: -8px 0 30px rgb(0 0 0 / .12); }
+  .files-open .workspace-panel { position: fixed; right: 12px; top: 64px; bottom: 12px; width: min(320px, calc(100vw - 24px)); margin: 0; z-index: 40; box-shadow: var(--shadow-soft); }
 }
 @media (max-width: 760px) {
   .app.files-open { grid-template-columns: minmax(0,1fr); }
@@ -802,3 +802,27 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
 :root:not([data-theme="dark"]) .review-code .tok-v { color: #953800; }
 :root:not([data-theme="dark"]) .review-code .tok-a { color: #116329; }
 :root:not([data-theme="dark"]) .review-code .tok-p { color: #57606a; }
+
+/* Search is a main-area destination; the live conversation and draft remain mounted. */
+.search-trigger[aria-expanded="true"] { background: var(--bg-subtle); }
+.search-open .main > :not(#search-page):not(.conn-banner) { display: none !important; }
+.search-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.search-heading { display: flex; align-items: center; justify-content: space-between; min-height: 54px; padding: 8px 24px; border-bottom: 1px solid var(--border); }
+.search-heading h1 { margin: 0; font-size: 16px; font-weight: 500; }
+.search-body { overflow-y: auto; padding: 48px clamp(16px, 6vw, 90px) 24px; }
+.search-field { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; color: var(--text-3); }
+.search-field:focus-within { border-color: var(--focus); }
+.search-field input { border: 0; outline: 0; min-width: 0; width: 100%; background: transparent; color: var(--text); font: 15px var(--font); }
+.search-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 24px; }
+.search-filters button { padding: 9px 20px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-2); background: var(--bg); font: 13px var(--font); cursor: pointer; }
+.search-filters button[aria-pressed="true"] { background: var(--bg-subtle); color: var(--text); border-color: var(--border-strong); }
+.search-results { list-style: none; padding: 0; margin: 0; }
+.search-group { color: var(--text-3); font-size: 12px; margin: 20px 0 8px; }
+.search-result-open { display: flex; gap: 16px; align-items: center; width: 100%; padding: 14px 8px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); text-align: left; cursor: pointer; font: 14px var(--font); }
+.search-result-open:hover { background: var(--bg-subtle); }
+.search-result-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-result-meta { flex: none; font-size: 12px; color: var(--text-3); }
+@media(max-width:600px) { .search-body { padding-top: 24px; } .search-filters button { padding: 8px 14px; } }
+
+.search-trigger { justify-content: flex-start; padding-left: 14px; box-shadow: none; border-color: transparent; }
+.files-open #files-toggle { position: fixed; right: 16px; top: 10px; z-index: 41; }
