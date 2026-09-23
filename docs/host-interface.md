@@ -39,11 +39,11 @@ Archive retains running work and files; permanent cleanup explicitly covers loca
 and history, retains remote objects and legacy global data, and requires the exact ID.
 The protocol additions and lifecycle guarantees are defined by Agent `docs/protocol.md`.
 
-## Planned native engines (2026-09-23)
+## Deployed native engines (2026-09-23)
 
-The [Agent native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the planned additive contract for engine selection, native Session bindings, capabilities and common presentation Events. The Agent Host remains responsible for native transport, configuration and lifecycle; the gateway continues to forward the existing public HTTP/WebSocket traffic without interpreting engine protocols or handling provider authentication. Legacy Pi compatibility must be verified before activation.
+The [Agent native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the implemented additive contract for engine selection, native Session bindings, capabilities and common presentation Events. The Agent Host remains responsible for native transport, configuration and lifecycle; the gateway continues to forward the existing public HTTP/WebSocket traffic without interpreting engine protocols or handling provider authentication. Legacy Pi compatibility was verified during the staged M5 rollout.
 
-The [Browser Shell companion](./spec/native-agent-browser.md) preserves the existing layout and scopes all Pi-specific controls to Pi. Agent delivery: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48). Server delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). These are implementation requirements, not a claim that the currently deployed Host or Server supports Codex or Claude Code.
+The [Browser Shell companion](./spec/native-agent-browser.md) preserves the existing layout and scopes all Pi-specific controls to Pi. Agent delivery: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48). Server delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). The [M5 evidence](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/native-agents-m5-20260923.md) records the deployed native support and its capability limits.
 
 ## Native Agent capability extension
 
@@ -62,6 +62,6 @@ Native run, message, tool, pending-input and background-state events use the sam
 Task-scoped event envelope. Stable item IDs update existing cards; repeated cursors
 are ignored, while pending native request IDs are deduplicated separately. Stop
 acknowledgement is not terminal evidence. Unsupported Pi controls are hidden.
-Read the [canonical Host protocol](http://gitea:3000/awangs/pi-coffee/src/branch/codex/native-agents-m0-m4/docs/protocol.md)
-and [native runbook](http://gitea:3000/awangs/pi-coffee/src/branch/codex/native-agents-m0-m4/docs/deployment/native-agents.md)
+Read the [canonical Host protocol](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/protocol.md)
+and [native runbook](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/deployment/native-agents.md)
 for field definitions, recovery and the version-pinned capability matrix.
