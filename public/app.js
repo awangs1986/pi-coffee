@@ -45,6 +45,7 @@ let connected = false, opened = false, streaming = false, modelPending = null;
 let activeId = sessionStorage.getItem(ACTIVE_KEY) || localStorage.getItem(ACTIVE_KEY) || null;
 function rememberTask(id){if(id){sessionStorage.setItem(ACTIVE_KEY,id);localStorage.setItem(ACTIVE_KEY,id);}else{sessionStorage.removeItem(ACTIVE_KEY);localStorage.removeItem(ACTIVE_KEY);}}
 let pendingOpenId = null, queuedPrompt = null, prepareNew = false;
+let searchOpen = false, searchFilter = 'all';
 let sessions = [], commands = [], models = null, statsCache = null;
 let entries = [];
 const nativeItems=new Map();let nativeCursor=0;let pendingDelivery=null;let uncertainTask=null;
@@ -400,7 +401,7 @@ function sessionTitle(session) {
 }
 function renderSessionList() {
   ui.sessionList.innerHTML = '';
-  const filter = ui.search.value.trim().toLowerCase();
+  renderSearchResults();
   let known = sessions.slice();
   if (activeId && !known.some((s) => s.id === activeId)) known.unshift({ id: activeId, preview: '', running: streaming, messageCount: 0, updatedAt: new Date().toISOString() });
   if(workspaceState) {
@@ -408,9 +409,8 @@ function renderSessionList() {
     const selected=activeId ? '' : $('#project-select').value;
     known=known.filter(s=> {const c=workspaceState.conversations.find(c=>c.id===s.id);return Boolean(c?.archived || workspaceState.legacyArchived?.includes(s.id))===showArchived && (!selected || c?.projectId===selected);});
   }
-  if (filter) known = known.filter((s) => sessionTitle(s).toLowerCase().includes(filter) || (s.preview || '').toLowerCase().includes(filter));
   if (known.length === 0) {
-    ui.sessionList.appendChild(el('li', 'empty-list', filter ? '没有匹配的对话' : '还没有对话'));
+    ui.sessionList.appendChild(el('li', 'empty-list', '还没有对话'));
     return;
   }
   let group = null;
@@ -1548,6 +1548,7 @@ ui.stop.addEventListener('click', () => { if (opened) { send({ v: 1, type: 'abor
 
 // ---------- session actions ----------
 function switchSession(id) {
+  setSearchOpen(false);
   if(workspaceState?.conversations.find(c=>c.id===id)?.archived || workspaceState?.legacyArchived?.includes(id)) {toast("请从对话菜单恢复后再打开");return;}
   if (id === activeId && opened) return;
   ui.projectManage.open = false;
@@ -1567,6 +1568,7 @@ function switchSession(id) {
   connect();
 }
 function newSession(focus = true) {
+  setSearchOpen(false);
   ui.projectManage.open = false;
   setWorkspaceOpen(false);closeDiffDialog();
   clearExtensionUi();
@@ -1593,7 +1595,37 @@ $('#new-task').addEventListener('click', () => { newSession(); closeSidebarOnMob
 $('#open-side').addEventListener('click', openSidebar);
 $('#close-side').addEventListener('click', collapseSidebar);
 function closeSidebarOnMobile() { ui.app.classList.remove('side-open'); }
-ui.search.addEventListener('input', renderSessionList);
+function setSearchOpen(open) {
+  searchOpen=open;ui.app.classList.toggle('search-open',open);
+  $('#search-page').classList.toggle('hidden',!open);
+  $('#search-open').setAttribute('aria-expanded',String(open));
+  if(open){setWorkspaceOpen(false);closeDiffDialog();closeBrandMenu();closeSidebarOnMobile();renderSearchResults();ui.search.focus();}
+}
+function renderSearchResults() {
+  if(!searchOpen)return;
+  const list=$('#search-results');list.replaceChildren();
+  const query=ui.search.value.trim().toLowerCase();
+  const known=sessions.slice();
+  for(const c of workspaceState?.conversations || [])if(!known.some(s=>s.id===c.id))known.push({id:c.id,preview:c.workspaceKind==='chat'?'Chat 任务':'Work 任务',updatedAt:c.createdAt});
+  const results=known.filter(session=>{
+    const task=workspaceState?.conversations.find(c=>c.id===session.id);
+    const archived=Boolean(task?.archived || workspaceState?.legacyArchived?.includes(session.id));
+    return archived===(searchFilter==='archived') && (['all','archived'].includes(searchFilter) || task?.workspaceKind===searchFilter) && (!query || [sessionTitle(session),session.preview || ''].some(text=>text.toLowerCase().includes(query)));
+  }).sort((a,b)=>String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  if(!results.length){list.append(el('li','empty-list',query?'没有匹配的对话':'没有对话'));return;}
+  let group=null;
+  for(const session of results){
+    const current=timeGroup(session.updatedAt);if(current!==group){group=current;list.append(el('li','search-group',group));}
+    const row=el('li','search-result');const open=el('button','search-result-open');open.type='button';
+    open.append(el('span','search-result-title',sessionTitle(session)),el('span','search-result-meta',relativeTime(session.updatedAt)));
+    open.addEventListener('click',()=>{if(searchFilter==='archived'){openSessionMenu(session,open);return;}switchSession(session.id);closeSidebarOnMobile();});
+    row.append(open);if(searchFilter==='archived')open.title='对话操作 · 恢复后打开';list.append(row);
+  }
+}
+$('#search-open').addEventListener('click',()=>setSearchOpen(true));
+$('#search-close').addEventListener('click',()=>{setSearchOpen(false);$('#search-open').focus();});
+$('#search-filters').addEventListener('click',event=>{const button=event.target.closest('[data-filter]');if(!button)return;searchFilter=button.dataset.filter;for(const item of $('#search-filters').querySelectorAll('button'))item.setAttribute('aria-pressed',String(item===button));renderSearchResults();});
+ui.search.addEventListener('input',renderSearchResults);
 ui.scroller.addEventListener('scroll', () => ui.toBottom.classList.toggle('hidden', nearBottom()));
 ui.toBottom.addEventListener('click', scrollToEnd);
 document.addEventListener('keydown', (event) => {
@@ -1608,6 +1640,7 @@ document.addEventListener('keydown', (event) => {
     if (ui.projectManage?.open) { ui.projectManage.open = false; return; }
     if (!ui.slash.classList.contains('hidden')) { ui.slash.classList.add('hidden'); return; }
     if (workspaceDetailOpen) { closeWorkspaceDetail(); return; }
+    if(searchOpen){setSearchOpen(false);$('#search-open').focus();return;}
     closeSidebarOnMobile();
     if (streaming && opened && document.activeElement !== ui.prompt) { send({ v: 1, type: 'abort' }); pushNote('已请求停止当前任务。'); }
   }
@@ -1636,6 +1669,7 @@ async function workspaceApi(value) {
   const data=await r.json();if(!r.ok)throw new Error(data.error || '工作区请求失败');return data;
 }
 function setWorkspaceOpen(open) {
+  (open ? ui.app : $('.topbar-actions')).append($('#files-toggle'));
   ui.app.classList.toggle('files-open', open);
   $('#files-toggle').setAttribute('aria-expanded',String(open));
   $('#workspace-panel').classList.toggle('hidden', !open);
