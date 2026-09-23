@@ -9,6 +9,7 @@ async function setup(legacy=false,wide=false){
  class Socket{static OPEN=1;readyState=1;onopen:any;onmessage:any;onclose:any;onerror:any;constructor(){sockets.push(this);queueMicrotask(()=>this.onopen?.());}close(){}send(text:string){frames.push(JSON.parse(text));}receive(frame:any){this.onmessage?.({data:JSON.stringify(frame)});}}
  vi.stubGlobal('WebSocket',Socket);
  vi.stubGlobal('fetch',vi.fn(async(url:any,init:any)=>{
+  if(url==='/api/skills') {const body=JSON.parse(init.body);requests.push(body);return {ok:true,status:200,json:async()=>body.action==='detail'?{content:'---\nname: sample\ndescription: Fixture skill.\n---\n<script>not executable</script>'}:body.action==='list'?{directory:'/home/demo/.pi/agent/skills',skills:[{id:'skill-1',name:'sample',description:'Fixture skill.',managed:true,enabled:true,path:'/home/demo/.pi/agent/skills/sample/SKILL.md',revision:'abcdef123456',repoUrl:'https://example.com/skills.git',ref:'main',subdir:'skills/sample'}],warnings:[]}:({ok:true})};}
   if(url==='/api/me')return {ok:true,json:async()=>null};
   if(url==='/api/engines')return {ok:!legacy,json:async()=>({engines:[{id:'pi',name:'Pi',available:true},{id:'codex',name:'Codex',available:true},{id:'claude',name:'Claude Code',available:false,reason:'CLI unavailable'}]})};
   const body=init?.body?JSON.parse(init.body):null;if(!body)return {ok:true,json:async()=>({projects:[{id:"p",name:"demo",branch:"main"}],conversations,vmId:'linux001',capabilities:{chatWorkspaces:true}})};
@@ -140,4 +141,37 @@ it('filters search by actual task kind and archive state, and Escape returns wit
  }
  document.querySelector<HTMLInputElement>('#search')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
  expect(document.querySelector('#search-page')!.classList.contains('hidden')).toBe(true);expect(app.frames.filter(f=>f.type==='abort')).toHaveLength(0);
+});
+
+it('manages scoped Skills from the brand menu without losing the conversation draft',async()=>{
+ const app=await setup();const prompt=document.querySelector<HTMLTextAreaElement>('#prompt')!;prompt.value='keep this draft';
+ const entry=document.querySelector<HTMLButtonElement>('#skills-btn');expect(entry).not.toBeNull();expect(entry!.closest('#brand-menu')).not.toBeNull();
+ entry!.click();await vi.advanceTimersByTimeAsync(20);expect(document.querySelector('#skills-page')!.classList.contains('hidden')).toBe(false);
+ expect(document.querySelector('#skills-list')!.textContent).toContain('sample');expect(app.requests.at(-1)).toMatchObject({action:'list',engine:'pi',scope:'user'});
+ document.querySelector<HTMLButtonElement>('[data-skill-action="detail"]')!.click();await vi.advanceTimersByTimeAsync(20);
+ expect(document.querySelector('#skill-content')!.textContent).toContain('<script>not executable</script>');expect(document.querySelector('#skill-content script')).toBeNull();
+ document.querySelector<HTMLButtonElement>('[data-skill-action="disable"]')!.click();await vi.advanceTimersByTimeAsync(20);expect(app.requests.some(r=>r.action==='disable'&&r.id==='skill-1')).toBe(true);
+ const agent=document.querySelector<HTMLSelectElement>('#skills-engine')!;agent.value='codex';agent.dispatchEvent(new Event('change'));await vi.advanceTimersByTimeAsync(20);expect(app.requests.at(-1)).toMatchObject({engine:'codex',scope:'user'});
+ document.querySelector<HTMLButtonElement>('#skills-close')!.click();expect(prompt.value).toBe('keep this draft');expect(document.querySelector('#skills-page')!.classList.contains('hidden')).toBe(true);expect(app.frames.some(f=>f.type==='prompt'||f.type==='abort')).toBe(false);
+});
+
+it('installs a Skill with explicit source and scope, and handles legacy Hosts without false success',async()=>{
+ const app=await setup();document.querySelector<HTMLButtonElement>('#skills-btn')!.click();await vi.advanceTimersByTimeAsync(20);
+ for(const [id,value] of [['skill-url','https://example.com/skills.git'],['skill-ref','v1'],['skill-subdir','skills/demo']])(document.querySelector('#'+id) as HTMLInputElement).value=value;
+ document.querySelector('#skills-form')!.dispatchEvent(new Event('submit',{cancelable:true}));await vi.advanceTimersByTimeAsync(20);
+ expect(app.requests.find(r=>r.action==='install')).toMatchObject({engine:'pi',scope:'user',repoUrl:'https://example.com/skills.git',ref:'v1',subdir:'skills/demo'});
+ const original=fetch;vi.stubGlobal('fetch',vi.fn((url:any,init:any)=>url==='/api/skills'?Promise.resolve({ok:false,status:404,json:async()=>({error:'Unavailable'})}):original(url,init)));
+ document.querySelector<HTMLButtonElement>('#skills-refresh')!.click();await vi.advanceTimersByTimeAsync(20);
+ expect(document.querySelector('#skills-status')!.textContent).toContain('更新 Host');expect(document.querySelector<HTMLButtonElement>('#skills-install')!.disabled).toBe(true);
+});
+
+it('ignores stale Skill inventories after the user changes Agent',async()=>{
+ await setup();const original=fetch;let release:any;
+ vi.stubGlobal('fetch',vi.fn((url:any,init:any)=>{
+  if(url==='/api/skills'&&JSON.parse(init.body).engine==='pi')return new Promise(resolve=>{release=resolve;});return original(url,init);
+ }));
+ document.querySelector<HTMLButtonElement>('#skills-btn')!.click();await vi.advanceTimersByTimeAsync(1);
+ const select=document.querySelector<HTMLSelectElement>('#skills-engine')!;select.value='codex';select.dispatchEvent(new Event('change'));await vi.advanceTimersByTimeAsync(20);
+ release({ok:true,json:async()=>({directory:'/old/pi',skills:[{id:'old',name:'obsolete-pi',description:'stale',managed:false,enabled:true}],warnings:[]})});await vi.advanceTimersByTimeAsync(20);
+ expect(document.querySelector('#skills-list')!.textContent).not.toContain('obsolete-pi');expect(select.value).toBe('codex');
 });

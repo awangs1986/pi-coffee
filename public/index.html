@@ -26,6 +26,7 @@
               <button id="project-discover" class="brand-menu-item" type="button" role="menuitem">发现已有项目</button>
               <button id="show-active" class="brand-menu-item" type="button" role="menuitem">活动对话</button>
               <button id="show-archive" class="brand-menu-item" type="button" role="menuitem">归档对话</button>
+              <button id="skills-btn" class="brand-menu-item" type="button" role="menuitem">Skills</button>
               <div class="brand-menu-label">设置</div>
               <button class="brand-menu-item theme-toggle" id="theme-toggle" type="button" role="menuitem" aria-pressed="false">
                 <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
@@ -83,6 +84,32 @@
           <div class="topbar-meta hidden" id="session-meta"></div>
         </header>
         <div class="conn-banner hidden" id="conn-banner" role="status">连接已断开，正在自动重连…（Host 上的任务不会被打断）</div>
+
+        <section id="skills-page" class="skills-page hidden" aria-label="Skills 管理">
+          <header class="search-heading"><h1>Skills</h1><button id="skills-close" class="icon-btn" type="button" aria-label="关闭 Skills">×</button></header>
+          <div class="skills-body">
+            <p class="skills-intro">在 Web 管理，在你的 VM 安装和执行。每个 Agent 保留自己的 Skill 加载方式。</p>
+            <div class="skills-toolbar">
+              <label>Agent <select id="skills-engine" aria-label="Skill Agent"><option value="pi">Pi</option><option value="codex">Codex</option><option value="claude">Claude Code</option></select></label>
+              <label>范围 <select id="skills-scope" aria-label="Skill 范围"><option value="user">用户级 · 所有任务</option><option value="project">项目级 · 当前 Work 目录</option></select></label>
+              <button id="skills-refresh" class="btn small" type="button">刷新</button>
+              <button id="skills-reload" class="btn small" type="button">重新加载当前任务</button>
+            </div>
+            <p id="skills-directory" class="skill-path"></p>
+            <p id="skills-status" role="status" aria-live="polite"></p>
+            <details class="skills-install-box"><summary>从 Git 仓库安装</summary>
+              <form id="skills-form">
+                <label>仓库地址<input id="skill-url" required autocomplete="off" placeholder="https://gitea/owner/skills.git" /></label>
+                <div class="skills-source-fields"><label>分支 / Tag / Commit<input id="skill-ref" placeholder="HEAD" /></label><label>Skill 子目录<input id="skill-subdir" placeholder="skills/example（根目录填 .）" /></label></div>
+                <p class="skills-help">目录需包含 SKILL.md。脚本和资源一起安装，安装时不执行。私有仓库使用 VM 已配置的 Git 凭据。</p>
+                <button id="skills-install" class="btn small" type="submit">安装到 VM</button>
+              </form>
+            </details>
+            <div id="skills-list" class="skills-list"></div>
+            <section id="skill-detail" class="skill-detail hidden"><header><h2 id="skill-detail-title"></h2><button id="skill-detail-close" class="icon-btn" type="button" aria-label="关闭 Skill 内容">×</button></header><pre id="skill-content"></pre></section>
+            <p class="skills-help">更新和启停在下一次 Agent 启动时生效；不会自动重启任务，也不会删除已经进入历史的内容。Pi Chat 保持零系统提示词，Skill 可通过 /skill:名称 显式调用。</p>
+          </div>
+        </section>
 
         <section id="search-page" class="search-page hidden" aria-label="搜索对话">
           <header class="search-heading"><h1>搜索</h1><button id="search-close" class="icon-btn" type="button" aria-label="返回对话" title="返回对话">×</button></header>

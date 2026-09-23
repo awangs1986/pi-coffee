@@ -25,7 +25,7 @@ class FakeHost {
         return;
       }
       if (request.url === "/api/engines") {response.writeHead(200,{"content-type":"application/json"});response.end(JSON.stringify({engines:[{id:"pi",available:true},{id:"codex",available:true},{id:"claude",available:false}]}));return;}
-      if (request.url === "/api/workspace") {
+      if (request.url === "/api/workspace" || request.url === "/api/skills") {
         if(request.method==="POST") {let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{response.writeHead(200,{"content-type":"application/json"});response.end(JSON.stringify({forwarded:JSON.parse(body)}));});return;}
         response.writeHead(200, { "content-type": "application/json" });response.end(JSON.stringify({ projects: [], conversations: [] }));
         return;
@@ -136,6 +136,13 @@ async function connect(url: string, options?: ConstructorParameters<typeof WebSo
 }
 
 describe("Web gateway seam", () => {
+  it("forwards scoped Skill management to the authenticated Host and rejects cross-origin writes",async()=>{
+    host=new FakeHost();await host.start();web=new WebServer({host:"127.0.0.1",port:0,hostUrl:host.url(),hostToken:"host-token"});await web.start();const base=`http://127.0.0.1:${web.address().port}`;
+    const body={action:'install',engine:'pi',scope:'user',repoUrl:'https://example.com/skills.git',ref:'main',subdir:'skills/example'};
+    const post=(origin:string)=>fetch(base+'/api/skills',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
+    expect((await post('https://unrelated.example')).status).toBe(403);
+    const response=await post(base);expect(response.status).toBe(200);expect(await response.json()).toEqual({forwarded:body});
+  });
   it("forwards authenticated Agent readiness to the fixed Host as read-only",async()=>{
     host=new FakeHost();await host.start();web=new WebServer({host:"127.0.0.1",port:0,hostUrl:host.url(),hostToken:"host-token"});await web.start();const base=`http://127.0.0.1:${web.address().port}`;
     const response=await fetch(base+"/api/engines");expect(response.status).toBe(200);expect((await response.json()).engines.map((e:any)=>e.id)).toEqual(["pi","codex","claude"]);
