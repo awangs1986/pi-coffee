@@ -1,5 +1,7 @@
 # 任务、Conversation 与 VM 本地工作目录
 
+> Native-engine extension (2026-09-23): the shared Workspace, file ownership and Gitea contracts remain in force. Codex/Claude Code Session bindings and writer-state adapters are planned in the [native-engine SPEC](./native-agent-engines.md); Pi-specific startup, mode, history and cleanup descriptions below are the current implementation, not automatic rules for the new engines.
+
 状态：owner 已确认（2026-09-22）；Agent/Server 已实现本合同，验收记录见 [联合证据](../reviews/conversation-workspaces-20260922.md)与 Agent #46 / Server #3。此规格定义行为，具体检查与部署结果以工单证据为准。
 
 本文件补足 [Pi Agent 主规格](./pi-agent.md)、[Gitea 工作区合同](./gitea-workspaces.md)和文件所有权 ADR。目标是让每个 Conversation 在所属 User VM 中都有唯一、稳定的本地目录，同时保持中央 Server 不拥有聊天正文或文件。

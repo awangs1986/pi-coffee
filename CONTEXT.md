@@ -2,18 +2,32 @@
 
 PI Coffee 的 User VM 运行时领域词汇；网页与中央网关属于独立的 Server。
 
+Native-engine terms below describe the accepted target in [ADR-0013](./docs/adr/0013-native-agent-engines.md). Current implementation remains Pi-only until the linked integration Issues pass acceptance.
+
 ## Participants
 
 **Browser User**:
-The internal person who writes prompts and reads Pi replies in a browser.
+The internal person who writes prompts and reads Agent Engine replies in a browser.
 _Avoid_: operator, tenant
+
+**Agent Engine**:
+The selected upstream coding agent, such as Pi, Codex or Claude Code, that owns its native reasoning, tools, configuration and conversation state.
+_Avoid_: model provider, runtime mode
+
+**Agent Adapter**:
+The Host boundary that maps one Agent Engine's supported interactions and lifecycle into PI Coffee's common conversation interface.
+_Avoid_: replacement agent loop, model Relay
+
+**Native Session Binding**:
+The association between one Conversation, its Agent Engine and that engine's own Session identity in the owning User VM.
+_Avoid_: shared conversation ID, transcript conversion
 
 **Pi Agent**:
 The unmodified upstream coding agent that reasons, calls tools, and writes its native session transcript.
 _Avoid_: V5 agent, Coffee agent
 
 **Host**:
-The long-lived process in the User VM that owns Pi Agent sessions and continues them when a browser disconnects.
+The long-lived process in the User VM that owns Agent Engine Sessions and continues them when a browser disconnects.
 _Avoid_: worker, sandbox, VM manager
 
 **Web Server**:
@@ -25,7 +39,7 @@ The coordination role around the Web Server that authenticates users, selects a 
 _Avoid_: execution host, transcript server
 
 **User VM**:
-An owner-managed isolated virtual machine in which one internal user's Host, Pi sessions, context, and files live.
+An owner-managed isolated virtual machine in which one internal user's Host, native Sessions, context, and files live.
 _Avoid_: sandbox, VM worker
 
 **Browser Shell**:
@@ -37,15 +51,15 @@ The user-facing name for one Conversation: one task belongs to one User VM and h
 _Avoid_: HTTP request, prompt
 
 **Native Transcript**:
-The session history written and read by the original Pi Agent in the User VM.
+The session history written and read by the selected Agent Engine in the User VM.
 _Avoid_: Control Plane log, browser cache
 
 **Model Context**:
-The messages and agent state that Pi uses to continue a Session.
+The messages and agent state that an Agent Engine uses to continue a Session.
 _Avoid_: Browser projection, usage record
 
 **Session**:
-One Pi conversation owned by a Host. A Session remains alive independently of any Browser User connection until it is explicitly stopped or the Host shuts down.
+One native engine conversation owned by a Host. A Session remains alive independently of any Browser User connection until it is explicitly stopped or the Host shuts down.
 _Avoid_: tab, request
 
 **Subagent**:
@@ -63,7 +77,7 @@ One versioned JSON message exchanged between the Browser User, Web Server, and H
 _Avoid_: packet, event (when referring to commands)
 
 **Event**:
-A Pi-originated observation, such as a text delta or settled marker, carried in a server Frame.
+An engine-originated observation, such as a text delta or settled marker, carried in a server Frame.
 _Avoid_: response (a response may also be an acknowledgement or error)
 
 **Cursor**:
@@ -75,7 +89,7 @@ Sending buffered Events after a Browser User reconnects with a prior Cursor.
 _Avoid_: retry, duplicate delivery
 
 **Bridge**:
-The authenticated transport between Browser Shell and Host, without ownership of Pi session state.
+The authenticated transport between Browser Shell and Host, without ownership of native Session state.
 _Avoid_: proxy (when discussing session ownership)
 
 **LLM Relay**:
@@ -99,7 +113,7 @@ The directory inside one Conversation's Workspace where uploaded and pasted orig
 _Avoid_: Control Plane upload store, temporary web directory
 
 **Image Message**:
-An original image retained in the User VM and presented to Pi either as model-supported image content or as a User VM reference.
+An original image retained in the User VM and presented to the selected Agent Engine either as supported image content or as a User VM reference.
 _Avoid_: thumbnail, screenshot cache
 
 **Deployment Skill**:
@@ -139,11 +153,11 @@ PI Coffee's registration of a Repository for use by Conversations.
 _Avoid_: default-branch checkout, shared worktree
 
 **Conversation**:
-A Host-owned Pi Session and its work context. Every Conversation has one dedicated Workspace; a code Conversation's Workspace is a Checkout with a Conversation Branch.
+A Host-owned conversation with one Agent Engine, a Native Session Binding and its work context. Every Conversation has one dedicated Workspace; a code Conversation's Workspace is a Checkout with a Conversation Branch.
 _Avoid_: browser tab, cross-host code backup
 
 **Workspace**:
-The stable User VM directory owned by one Conversation. A Chat Workspace is an ordinary directory; a Project Workspace is an independent Checkout. Workspace type and Chat/Work runtime mode are separate dimensions.
+The stable User VM directory owned by one Conversation. A Chat Workspace is an ordinary directory; a Project Workspace is an independent Checkout. Workspace type, Agent Engine and native runtime mode are separate dimensions; Pi Chat/Work policy does not define other engines' modes.
 _Avoid_: shared chat directory, security sandbox, runtime mode
 
 **Checkout**:

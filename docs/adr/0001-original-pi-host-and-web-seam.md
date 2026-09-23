@@ -9,3 +9,5 @@ PI Coffee starts as an independent application that consumes the published origi
 - Forking or modifying the V5 repository first: rejected because it would mix an unproven transport with the frozen V5 baseline.
 - Letting the Web Server instantiate Pi directly: rejected because browser connection lifetime would become session lifetime and a later split into User VMs would be expensive.
 - Spawning the original Pi RPC process behind the Host: accepted because it preserves the upstream runtime and gives the Host a narrow, testable adapter.
+
+Native-engine scope update (2026-09-23): [ADR-0013](./0013-native-agent-engines.md) extends the Host to Codex and Claude Code while preserving Pi behavior. Its explicit authentication, native-permission, history and repository boundaries govern that planned extension; this earlier Pi-specific decision does not imply native-engine support is already implemented.

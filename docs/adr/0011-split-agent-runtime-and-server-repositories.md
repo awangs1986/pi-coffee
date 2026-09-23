@@ -25,3 +25,5 @@ then forwards WebSocket frames without duplicating Host protocol parsing.
 - Cross-repository compatibility is checked at the public WS/HTTP seam.
 - Server changes must accept the currently deployed Host version; Host changes
   ship backward-compatible first and remove old behavior only after Server rollout.
+
+Native-engine scope update (2026-09-23): [ADR-0013](./0013-native-agent-engines.md) extends the Host to Codex and Claude Code while preserving Pi behavior. Its explicit authentication, native-permission, history and repository boundaries govern that planned extension; this earlier Pi-specific decision does not imply native-engine support is already implemented.
