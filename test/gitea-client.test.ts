@@ -12,8 +12,9 @@ describe("Gitea code collaboration adapter",()=>{
     server=createServer((request,response)=>{
       response.setHeader("content-type","application/json");
       if(request.url==="/api/v1/repositories/32")return response.end(JSON.stringify({owner:{login:"other-user"},name:"shared"}));
-      const pull={number:2,html_url:"http://gitea/other-user/shared/pulls/2",state:"open"};
-      if(request.method==="GET" && request.url==="/api/v1/repos/other-user/shared/pulls?state=open&head=other-user%3Acoffee%2Fvm%2Ftask&base=main")return response.end(JSON.stringify(created?[pull]:[]));
+      const pull={number:2,html_url:"http://gitea/other-user/shared/pulls/2",state:"open",head:{ref:"coffee/vm/task",repo_id:32},base:{ref:"main",repo_id:32}};
+      const unrelated={number:1,html_url:"http://gitea/other-user/shared/pulls/1",state:"open",head:{ref:"coffee/another-vm/another-task",repo_id:32},base:{ref:"main",repo_id:32}};
+      if(request.method==="GET" && request.url==="/api/v1/repos/other-user/shared/pulls?state=open&head=other-user%3Acoffee%2Fvm%2Ftask&base=main&page=1&limit=50")return response.end(JSON.stringify(created?[unrelated,pull]:[unrelated]));
       if(request.method==="POST" && request.url==="/api/v1/repos/other-user/shared/pulls"){
         let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{
           if(created || JSON.stringify(JSON.parse(body))!==JSON.stringify({head:"coffee/vm/task",base:"main",title:"Ready"})){response.statusCode=409;return response.end('{}');}
@@ -36,7 +37,7 @@ describe("Gitea code collaboration adapter",()=>{
         requests.push({method:request.method,url:request.url,body});response.setHeader("content-type","application/json");
         if(request.url==="/api/v1/user/repos")return response.end(JSON.stringify({id:9,name:"demo",default_branch:"main",clone_url:"http://gitea/a/demo.git",html_url:"http://gitea/a/demo"}));
         if(request.url==="/api/v1/repositories/9")return response.end(JSON.stringify({owner:{login:"a"},name:"demo"}));
-        if(request.url?.includes("/pulls?"))return response.end(JSON.stringify([{number:4,html_url:"http://gitea/a/demo/pulls/4",state:"open",head:{ref:"coffee/vm/c1"},base:{ref:"main"}}]));
+        if(request.url?.includes("/pulls?"))return response.end(JSON.stringify([{number:4,html_url:"http://gitea/a/demo/pulls/4",state:"open",head:{ref:"coffee/vm/c1",repo_id:9},base:{ref:"main",repo_id:9}}]));
         response.statusCode=500;response.end('{}');
       });
     });server.listen(0,"127.0.0.1");await once(server,"listening");
@@ -44,6 +45,6 @@ describe("Gitea code collaboration adapter",()=>{
     const client=new GiteaClient({baseUrl:`http://127.0.0.1:${address.port}`,token:"secret",owner:"a"});
     expect(await client.createRepository("demo")).toMatchObject({repoId:"9",branch:"main",repoUrl:"http://gitea/a/demo.git"});
     expect(await client.createPullRequest({id:"9",name:"demo",path:"",branch:"main",repoId:"9",repoUrl:"http://gitea/a/demo.git"},"coffee/vm/c1","main","Ready")).toMatchObject({number:4,url:"http://gitea/a/demo/pulls/4"});
-    expect(requests.map(item=>item.url)).toContain("/api/v1/repos/a/demo/pulls?state=open&head=a%3Acoffee%2Fvm%2Fc1&base=main");
+    expect(requests.map(item=>item.url)).toContain("/api/v1/repos/a/demo/pulls?state=open&head=a%3Acoffee%2Fvm%2Fc1&base=main&page=1&limit=50");
   });
 });
