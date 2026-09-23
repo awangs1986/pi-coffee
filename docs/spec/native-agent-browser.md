@@ -1,13 +1,13 @@
 # Native-engine support in the existing Browser Shell
 
-Status: **M4 implemented on the delivery branch; M5 production deployment remains pending**. See [delivery evidence](../reviews-native-agents-m4-20260923.md).
+Status: **M4 merged; M5 production deployment and combined acceptance completed**. See [M4 evidence](../reviews-native-agents-m4-20260923.md) and [M5 production evidence](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/native-agents-m5-20260923.md).
 Date: 2026-09-23. Tracking: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
 Depends on: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) for the additive Host contract and activation.
 Canonical contract: [Agent native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md).
 
 ## Problem Statement
 
-Browser Users want to communicate with their own authenticated native Codex or Claude Code in the same PI Coffee interface used for Pi. The Browser Shell currently understands Pi-specific Events and controls. A new engine must not appear to support Pi's Harness modes, tool configuration, LSP or compaction merely because it shares the browser.
+Browser Users want to communicate with their own authenticated native Codex or Claude Code in the same PI Coffee interface used for Pi. Before this integration the Browser Shell understood Pi-specific Events and controls. A new engine must not appear to support Pi's Harness modes, tool configuration, LSP or compaction merely because it shares the browser.
 
 The owner requires the existing left task list, center conversation/composer and right changes panel to remain clean and concise. Gitea Project selection, independent task directories, files and code review must continue working without a second interface or workspace manager.
 
@@ -83,4 +83,4 @@ Implementation follows the [M0–M5 plan](http://gitea:3000/awangs/pi-coffee/src
 
 The Agent implementation is [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48); this Server delivery is [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). The [native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the requirements and references, and [ADR-0013](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/adr/0013-native-agent-engines.md) owns the architecture boundary.
 
-The existing [frontend audit](http://gitea:3000/awangs/pi-coffee-server/issues/4) and its PR remain separate. M4 is implemented on the native-engine delivery branch; production remains unchanged until M5. No authentication or Gitea policy change is inferred from the existence of third-party UI projects.
+The existing [frontend audit](http://gitea:3000/awangs/pi-coffee-server/issues/4) and its PR remain separate. M4 and M5 are merged and deployed; pinned versions, acceptance and limitations are recorded in the M5 evidence. No authentication or Gitea policy change is inferred from the existence of third-party UI projects.
