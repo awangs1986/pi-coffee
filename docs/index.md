@@ -14,3 +14,9 @@
 
 Agent prompts, Chat/Work modes, tools, Skills, LSP, subagents and User VM Host
 implementation are maintained in [`awangs/pi-coffee`](http://gitea:3000/awangs/pi-coffee).
+
+## Native engine support — specification, not delivered behavior
+
+- [Browser Shell native-engine SPEC](./spec/native-agent-browser.md): compact engine choice, capabilities, native interaction and compatibility within the existing layout; [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6).
+- [Canonical Agent SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md): native Codex/Claude Code adapters and shared Workspace/Gitea lifecycle; [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48).
+- Current Server implementation is Pi-oriented. No native-engine deployment or frontend audit merge is implied by this specification.

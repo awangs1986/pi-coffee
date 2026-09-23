@@ -38,3 +38,9 @@ into the owning VM inbox before a prompt can reference them. No central file per
 Archive retains running work and files; permanent cleanup explicitly covers local files
 and history, retains remote objects and legacy global data, and requires the exact ID.
 The protocol additions and lifecycle guarantees are defined by Agent `docs/protocol.md`.
+
+## Planned native engines (2026-09-23)
+
+The [Agent native-engine SPEC](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/spec/native-agent-engines.md) owns the planned additive contract for engine selection, native Session bindings, capabilities and common presentation Events. The Agent Host remains responsible for native transport, configuration and lifecycle; the gateway continues to forward the existing public HTTP/WebSocket traffic without interpreting engine protocols or handling provider authentication. Legacy Pi compatibility must be verified before activation.
+
+The [Browser Shell companion](./spec/native-agent-browser.md) preserves the existing layout and scopes all Pi-specific controls to Pi. Agent delivery: [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48). Server delivery: [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). These are implementation requirements, not a claim that the currently deployed Host or Server supports Codex or Claude Code.
