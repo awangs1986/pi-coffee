@@ -47,10 +47,10 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           新对话
         </button>
-        <div class="search">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <input id="search" type="search" placeholder="搜索对话" aria-label="搜索对话" autocomplete="off" />
-        </div>
+        <button class="new-task search-trigger" id="search-open" type="button" aria-controls="search-page" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          搜索
+        </button>
         <div class="session-scroll">
           <ul class="session-list" id="session-list"></ul>
         </div>
@@ -83,6 +83,17 @@
           <div class="topbar-meta hidden" id="session-meta"></div>
         </header>
         <div class="conn-banner hidden" id="conn-banner" role="status">连接已断开，正在自动重连…（Host 上的任务不会被打断）</div>
+
+        <section id="search-page" class="search-page hidden" aria-label="搜索对话">
+          <header class="search-heading"><h1>搜索</h1><button id="search-close" class="icon-btn" type="button" aria-label="返回对话" title="返回对话">×</button></header>
+          <div class="search-body">
+            <label class="search-field"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="搜索对话标题和摘要…" aria-label="搜索对话" autocomplete="off" /></label>
+            <div id="search-filters" class="search-filters" role="group" aria-label="对话类型">
+              <button type="button" data-filter="all" aria-pressed="true">全部</button><button type="button" data-filter="chat" aria-pressed="false">Chat</button><button type="button" data-filter="project" aria-pressed="false">Work</button><button type="button" data-filter="archived" aria-pressed="false">已归档</button>
+            </div>
+            <ul id="search-results" class="search-results" aria-label="搜索结果" aria-live="polite"></ul>
+          </div>
+        </section>
 
         <div class="scroller" id="scroller">
           <div class="thread" id="thread"></div>
