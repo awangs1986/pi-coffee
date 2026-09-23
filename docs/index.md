@@ -26,3 +26,5 @@ implementation are maintained in [`awangs/pi-coffee`](http://gitea:3000/awangs/p
 - [Context Usage and compact task information](spec/context-usage.md): seven-category reference layout and one-row footer, Server #4 / Agent #58.
 
 - [Arena navigation and review](spec/arena-navigation.md): Pi Chat default, brand-menu ownership, opt-in change pane and separate Diff.
+
+- [Web Skills management](spec/skill-management.md): brand-menu management page, native Agent/scoped operations and VM-only storage; Server #14 / Agent #62.
