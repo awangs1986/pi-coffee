@@ -19,10 +19,16 @@ export class GiteaClient implements CodeForge {
     return this.registration(repo);
   }
   async createPullRequest(project:Project,source:string,target:string,title:string):Promise<PullRequest> {
-    const name=project.name;
-    const query=new URLSearchParams({state:'open',head:`${this.options.owner}:${source}`,base:target});
-    const existing=await this.request(`/api/v1/repos/${encodeURIComponent(this.options.owner)}/${encodeURIComponent(name)}/pulls?${query}`,'GET') as Array<Record<string,unknown>>;
-    const pull=existing[0] ?? await this.request(`/api/v1/repos/${encodeURIComponent(this.options.owner)}/${encodeURIComponent(name)}/pulls`,'POST',{head:source,base:target,title}) as Record<string,unknown>;
+    let owner=this.options.owner,name=project.name;
+    if(project.repoId){
+      const repo=await this.request(`/api/v1/repositories/${encodeURIComponent(project.repoId)}`,'GET') as {owner?:{login?:string};name?:string};
+      if(!repo.owner?.login || !repo.name)throw new Error('Gitea repository identity unavailable');
+      owner=repo.owner.login;name=repo.name;
+    }
+    const path=`/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/pulls`;
+    const query=new URLSearchParams({state:'open',head:`${owner}:${source}`,base:target});
+    const existing=await this.request(`${path}?${query}`,'GET') as Array<Record<string,unknown>>;
+    const pull=existing[0] ?? await this.request(path,'POST',{head:source,base:target,title}) as Record<string,unknown>;
     return {number:Number(pull.number),url:String(pull.html_url),state:String(pull.state),source,target};
   }
   private registration(repo:Record<string,unknown>):RepositoryRegistration {

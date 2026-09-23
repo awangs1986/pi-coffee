@@ -7,12 +7,35 @@ let server:ReturnType<typeof createServer>|undefined;
 afterEach(async()=>{if(server){server.close();await once(server,"close");server=undefined;}});
 
 describe("Gitea code collaboration adapter",()=>{
+  it("creates and reuses a PR in the shared repository owned by another user",async()=>{
+    let created=false;
+    server=createServer((request,response)=>{
+      response.setHeader("content-type","application/json");
+      if(request.url==="/api/v1/repositories/32")return response.end(JSON.stringify({owner:{login:"other-user"},name:"shared"}));
+      const pull={number:2,html_url:"http://gitea/other-user/shared/pulls/2",state:"open"};
+      if(request.method==="GET" && request.url==="/api/v1/repos/other-user/shared/pulls?state=open&head=other-user%3Acoffee%2Fvm%2Ftask&base=main")return response.end(JSON.stringify(created?[pull]:[]));
+      if(request.method==="POST" && request.url==="/api/v1/repos/other-user/shared/pulls"){
+        let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{
+          if(created || JSON.stringify(JSON.parse(body))!==JSON.stringify({head:"coffee/vm/task",base:"main",title:"Ready"})){response.statusCode=409;return response.end('{}');}
+          created=true;response.end(JSON.stringify(pull));
+        });return;
+      }
+      response.statusCode=404;response.end('{}');
+    });server.listen(0,"127.0.0.1");await once(server,"listening");
+    const address=server.address();if(!address || typeof address==="string")throw new Error("missing address");
+    const client=new GiteaClient({baseUrl:`http://127.0.0.1:${address.port}`,token:"fixture",owner:"collaborator"});
+    const project={id:"32",repoId:"32",name:"local-alias",path:"",branch:"main"};
+    const expected={number:2,url:"http://gitea/other-user/shared/pulls/2",source:"coffee/vm/task",target:"main"};
+    expect(await client.createPullRequest(project,"coffee/vm/task","main","Ready")).toMatchObject(expected);
+    expect(await client.createPullRequest(project,"coffee/vm/task","main","Ready")).toMatchObject(expected);
+  });
   it("creates repositories and returns an existing pull request idempotently",async()=>{
     const requests:Array<{method?:string;url?:string;body:string}>=[];
     server=createServer((request,response)=>{
       let body="";request.on("data",chunk=>body+=chunk);request.on("end",()=>{
         requests.push({method:request.method,url:request.url,body});response.setHeader("content-type","application/json");
         if(request.url==="/api/v1/user/repos")return response.end(JSON.stringify({id:9,name:"demo",default_branch:"main",clone_url:"http://gitea/a/demo.git",html_url:"http://gitea/a/demo"}));
+        if(request.url==="/api/v1/repositories/9")return response.end(JSON.stringify({owner:{login:"a"},name:"demo"}));
         if(request.url?.includes("/pulls?"))return response.end(JSON.stringify([{number:4,html_url:"http://gitea/a/demo/pulls/4",state:"open",head:{ref:"coffee/vm/c1"},base:{ref:"main"}}]));
         response.statusCode=500;response.end('{}');
       });
