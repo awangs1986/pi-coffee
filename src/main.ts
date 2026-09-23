@@ -1,3 +1,4 @@
+import { NativeAgentFactory } from "./host/native/factory.js";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { HostServer } from "./host/server.js";
@@ -46,7 +47,11 @@ async function run(): Promise<void> {
     idleTimeoutMs: envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000),
     transfer,
     workspaces,
-    factory: new RpcPiSessionFactory({
+    factory: new NativeAgentFactory({
+      workspaces,
+      ...(process.env.PI_COFFEE_CODEX_COMMAND ? {codex:{command:process.env.PI_COFFEE_CODEX_COMMAND}} : {}),
+      ...(process.env.PI_COFFEE_CLAUDE_COMMAND ? {claude:{command:process.env.PI_COFFEE_CLAUDE_COMMAND}} : {}),
+      pi: new RpcPiSessionFactory({
       cwd: workdir,
       cwdForSession: workspaces ? async (id, existing) => {
         if (await workspaces.lookup(id)) return workspaces.file(id,"");
@@ -65,6 +70,7 @@ async function run(): Promise<void> {
       extensions: resolvePiExtensions(),
       skills: resolvePiSkills(),
       env: withCoffeeLspPath(),
+    }),
     }),
   });
   await host.start();

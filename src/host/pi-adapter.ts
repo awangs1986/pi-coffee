@@ -16,59 +16,8 @@ import type {
   UiResponse,
 } from "../shared/protocol.js";
 
-export interface PiHistory {
-  entries: HistoryEntry[];
-  leafId: string | null;
-}
-
-/** A conversation known to the durable session store; `running` is added by the Host. */
-export type PiSessionListing = Omit<SessionSummary, "running">;
-
-/**
- * The only Pi-specific seam in PI Coffee.  The Host and Web Server depend on
- * this small interface rather than on Pi's SDK or RPC implementation.
- */
-export interface PiModels {
-  models: ModelChoice[];
-  current: { provider: string; id: string; source?: "native" | "relay" } | null;
-  thinkingLevel: string;
-  thinkingLevels: string[];
-}
-
-export interface PiSession {
-  backgroundState?(): Promise<{known:boolean;active:number}>;
-  prompt(text: string, images?: ImageInput[]): Promise<void>;
-  /** Interrupt a running turn after its current tool calls. */
-  steer(text: string, images?: ImageInput[]): Promise<void>;
-  /** Queue a message for after the current run finishes. */
-  followUp(text: string, images?: ImageInput[]): Promise<void>;
-  abort(): Promise<void>;
-  getState(): Promise<SessionState>;
-  /** Completed conversation entries from the durable session, display-ready. */
-  getHistory(): Promise<PiHistory>;
-  rename(name: string): Promise<void>;
-  getModels(): Promise<PiModels>;
-  setModel(provider: string, id: string): Promise<void>;
-  setThinkingLevel(level: string): Promise<void>;
-  getCommands(): Promise<CommandInfo[]>;
-  /** Extensions, skills and prompt templates this Pi process actually loaded. */
-  getExtensions(): Promise<ExtensionInfo[]>;
-  getStats(): Promise<SessionStats>;
-  compact(): Promise<void>;
-  /** Answer a blocking extension dialog (select / confirm / input / editor). */
-  respondUi(response: UiResponse): Promise<void>;
-  onEvent(listener: (event: unknown) => void): () => void;
-  stop(): Promise<void>;
-}
-
-export interface PiSessionFactory {
-  /** Start (or resume, when the store already has it) the session with this id. */
-  create(options: { sessionId: string }): Promise<PiSession>;
-  /** Conversations in the durable store, newest first. */
-  list(): Promise<PiSessionListing[]>;
-  /** Remove a conversation from the durable store. Resolves false when unknown. */
-  delete(sessionId: string): Promise<boolean>;
-}
+import type { AgentHistory as PiHistory, AgentSessionListing as PiSessionListing, AgentModels as PiModels, AgentSession as PiSession, AgentSessionFactory as PiSessionFactory } from "./agent-adapter.js";
+export type { AgentHistory as PiHistory, AgentSessionListing as PiSessionListing, AgentModels as PiModels, AgentSession as PiSession, AgentSessionFactory as PiSessionFactory } from "./agent-adapter.js";
 
 export interface RpcPiSessionFactoryOptions {
   cwd?: string;

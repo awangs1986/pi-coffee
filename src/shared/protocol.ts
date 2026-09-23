@@ -12,6 +12,13 @@ export const MAX_FRAME_BYTES = 1024 * 1024;
 export const MAX_PROMPT_CHARS = 64 * 1024;
 export const MAX_REQUEST_ID_CHARS = 256;
 
+export type AgentEngine = "pi" | "codex" | "claude";
+export function parseAgentEngine(value: unknown): AgentEngine {
+  if (value === undefined) return "pi";
+  if (value === "pi" || value === "codex" || value === "claude") return value;
+  throw new Error("Unknown Agent; choose Pi, Codex or Claude Code");
+}
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -33,6 +40,7 @@ export interface SessionState {
  */
 export interface SessionSummary {
   id: string;
+  engine?: AgentEngine;
   name?: string;
   createdAt: string;
   updatedAt: string;
@@ -114,6 +122,17 @@ export type AckOperation =
  * method select / confirm / input / editor). Mirrors Pi's RPC response shape:
  * exactly one of value, confirmed or cancelled.
  */
+export interface AgentCapabilities {
+  models:boolean; images:boolean; stop:boolean; questions:boolean; tools:boolean;
+  thinking:boolean; steer:boolean; followUp:boolean; stats:boolean;
+  commands:boolean; extensions:boolean; compact:boolean; rename:boolean; cleanup:boolean;
+}
+
+export function capabilitiesFor(engine:AgentEngine):AgentCapabilities {
+  const pi=engine==="pi";
+  return {models:true,images:pi,stop:true,questions:true,tools:true,thinking:pi,steer:pi,followUp:pi,stats:pi,commands:pi,extensions:pi,compact:pi,rename:pi,cleanup:pi};
+}
+
 export interface UiResponse {
   id: string;
   value?: string;
@@ -127,6 +146,7 @@ export type ClientFrame =
       type: "open";
       sessionId?: string;
       after?: number;
+      nativeProtocol?: 1;
     }
   | {
       v: typeof PROTOCOL_VERSION;
@@ -182,6 +202,8 @@ export type ServerFrame =
   | {
       v: typeof PROTOCOL_VERSION;
       type: "opened";
+      engine?: AgentEngine;
+      capabilities?: AgentCapabilities;
       sessionId: string;
       cursor: number;
       state: SessionState;
@@ -404,11 +426,13 @@ export class ProtocolError extends Error {
 function parseOpen(value: Record<string, unknown>): ClientFrame {
   const sessionId = optionalString(value.sessionId, "sessionId", 256);
   const after = optionalNonNegativeInteger(value.after, "after");
+  if(value.nativeProtocol!==undefined && value.nativeProtocol!==1)throw new ProtocolError("unsupported_version","Unsupported native Agent presentation protocol");
   return {
     v: PROTOCOL_VERSION,
     type: "open",
     ...(sessionId === undefined ? {} : { sessionId }),
     ...(after === undefined ? {} : { after }),
+    ...(value.nativeProtocol === 1 ? {nativeProtocol:1 as const} : {}),
   };
 }
 
