@@ -24,3 +24,5 @@ implementation are maintained in [`awangs/pi-coffee`](http://gitea:3000/awangs/p
 - [M4 delivery evidence](reviews-native-agents-m4-20260923.md) records controller/gateway checks and live native workflows. [M5 production evidence](http://gitea:3000/awangs/pi-coffee/src/branch/main/docs/reviews/native-agents-m5-20260923.md) records the deployed Web and two dedicated User VMs; the unrelated frontend audit remains separate.
 
 - [Context Usage and compact task information](spec/context-usage.md): seven-category reference layout and one-row footer, Server #4 / Agent #58.
+
+- [Arena navigation and review](spec/arena-navigation.md): Pi Chat default, brand-menu ownership, opt-in change pane and separate Diff.
