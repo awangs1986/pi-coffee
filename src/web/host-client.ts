@@ -4,6 +4,8 @@ import { decodeServerFrame, encodeFrame, type ServerFrame } from "../shared/prot
 export interface HostClientOptions {
   url: string;
   token?: string;
+  /** Extra upgrade headers, e.g. the authenticated Browser User's name. */
+  headers?: Record<string, string>;
   onUnavailable?: (error: Error) => void;
 }
 
@@ -21,10 +23,11 @@ export class HostClient {
 
   async connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return;
-    const headers = this.options.token === undefined
-      ? undefined
-      : { Authorization: `Bearer ${this.options.token}` };
-    const socket = new WebSocket(this.options.url, headers === undefined ? undefined : { headers });
+    const headers: Record<string, string> = {
+      ...(this.options.headers ?? {}),
+      ...(this.options.token === undefined ? {} : { Authorization: `Bearer ${this.options.token}` }),
+    };
+    const socket = new WebSocket(this.options.url, Object.keys(headers).length === 0 ? undefined : { headers });
     this.socket = socket;
     this.intentionalClose = false;
     socket.on("message", (data: RawData) => {

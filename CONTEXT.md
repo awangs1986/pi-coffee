@@ -25,8 +25,8 @@ The coordination role around the Web Server that authenticates users, selects a 
 _Avoid_: execution host, transcript server
 
 **User VM**:
-An owner-managed isolated virtual machine in which one internal user's Host, Pi sessions, context, and files live.
-_Avoid_: sandbox, VM worker
+The owner-managed virtual machine in which the Host, every internal user's Pi sessions, context, and files live. Since ADR-0010 there is one shared User VM logged in to the one enterprise model account; each Browser User has their own folders inside it. Since ADR-0011 the Host can drive either Pi or Codex CLI (`codex app-server`) behind the same session seam; `PI_COFFEE_AGENT` picks one.
+_Avoid_: sandbox, VM worker, per-user VM
 
 **Browser Shell**:
 The single browser tab that presents one user's collection of Tasks and Sessions.
@@ -87,7 +87,7 @@ The existing OpenAI-compatible upstream relay used for Chat Completions, Respons
 _Avoid_: provider implementation
 
 **Routing Index**:
-The minimal Control Plane record that maps an authenticated user to a fixed User VM and opaque transport identifiers.
+The minimal Control Plane record that maps an authenticated user to a fixed User VM and opaque transport identifiers. With one shared User VM this is the `PI_COFFEE_ALLOWED_USERS` list plus the login name forwarded to the Host.
 _Avoid_: user database, transcript index
 
 **Usage Metadata**:

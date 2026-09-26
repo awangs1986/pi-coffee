@@ -1,9 +1,14 @@
 import { readFileSync } from "node:fs";
-import { HostServer } from "./host/server.js";
-import { RpcPiSessionFactory } from "./host/pi-adapter.js";
+import { mkdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { CodexSessionFactory } from "./host/codex-adapter.js";
+import { HostServer, type UserScope } from "./host/server.js";
+import { RpcPiSessionFactory, type PiSessionFactory } from "./host/pi-adapter.js";
 import { DEFAULT_MAX_BATCH_BYTES, DEFAULT_MAX_FILE_BYTES, TransferServer } from "./host/transfer.js";
 import { resolvePiExtensions } from "./pi-extensions.js";
 import { RelayServer } from "./relay/server.js";
+import { normalizeUsername, parseAllowedUsers } from "./shared/identity.js";
+import { GiteaAuth } from "./web/auth.js";
 import { WebServer } from "./web/server.js";
 
 type Role = "host" | "web" | "relay" | "all";
@@ -71,6 +76,52 @@ async function run(selectedRole: Role): Promise<void> {
   });
   if (transfer) await transfer.start();
 
+  // One shared User VM, one model login, one Host (ADR-0010). Each Gitea user
+  // the Web Server forwards gets a private cwd and session store under the
+  // shared roots; the agent dir (model account, models.json) stays common.
+  const piOptions = {
+    agentDir: process.env.PI_COFFEE_AGENT_DIR,
+    provider: process.env.PI_COFFEE_PROVIDER,
+    model: process.env.PI_COFFEE_MODEL,
+    extensions: resolvePiExtensions(),
+  };
+  const sessionRoot = process.env.PI_COFFEE_SESSION_DIR?.trim();
+  // Which agent runs behind the seam (ADR-0011): the original Pi (default) or
+  // Codex CLI's app-server. Both are logged in once, in the VM, by its owner.
+  const agent = envString("PI_COFFEE_AGENT", "pi").toLowerCase();
+  if (agent !== "pi" && agent !== "codex") throw new Error("PI_COFFEE_AGENT must be pi or codex");
+  const codexSandbox = envString("PI_COFFEE_CODEX_SANDBOX", "danger-full-access");
+  const codexApproval = envString("PI_COFFEE_CODEX_APPROVAL", "never");
+  if (!["read-only", "workspace-write", "danger-full-access"].includes(codexSandbox)) throw new Error("PI_COFFEE_CODEX_SANDBOX must be read-only, workspace-write or danger-full-access");
+  if (!["never", "on-request", "untrusted"].includes(codexApproval)) throw new Error("PI_COFFEE_CODEX_APPROVAL must be never, on-request or untrusted");
+  const factoryFor = (cwd: string, sessionDir: string | undefined, perUser: boolean): PiSessionFactory => {
+    if (agent === "codex") {
+      return new CodexSessionFactory({
+        cwd,
+        cliPath: process.env.PI_COFFEE_CODEX_BIN?.trim() || undefined,
+        codexHome: process.env.PI_COFFEE_CODEX_HOME?.trim() || undefined,
+        model: process.env.PI_COFFEE_MODEL?.trim() || undefined,
+        reasoningEffort: process.env.PI_COFFEE_CODEX_EFFORT?.trim() || undefined,
+        sandbox: codexSandbox as "read-only" | "workspace-write" | "danger-full-access",
+        approvalPolicy: codexApproval as "never" | "on-request" | "untrusted",
+        args: envList("PI_COFFEE_CODEX_ARGS", ":"),
+      });
+    }
+    return new RpcPiSessionFactory({
+      ...piOptions,
+      cwd,
+      ...(sessionDir === undefined ? {} : { sessionDir }),
+      // Research closures are user content too; keep them beside the user's work.
+      env: perUser && !process.env.PI_COFFEE_RESEARCH_DIR ? { PI_COFFEE_RESEARCH_DIR: join(cwd, ".pi-coffee", "research") } : {},
+    });
+  };
+  const scopeForUser = async (user: string): Promise<UserScope> => {
+    const cwd = resolve(workdir, user);
+    await mkdir(cwd, { recursive: true });
+    const sessionDir = sessionRoot ? join(sessionRoot, user) : undefined;
+    if (sessionDir !== undefined) await mkdir(sessionDir, { recursive: true });
+    return { workdir: cwd, factory: factoryFor(cwd, sessionDir, true) };
+  };
   host = !wantHost ? undefined : new HostServer({
     host: envString("PI_COFFEE_HOST_BIND", "127.0.0.1"),
     port: envNumber("PI_COFFEE_HOST_PORT", 8788),
@@ -78,23 +129,49 @@ async function run(selectedRole: Role): Promise<void> {
     eventBufferSize: envNumber("PI_COFFEE_EVENT_BUFFER", 256),
     idleTimeoutMs: envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000),
     transfer,
-    factory: new RpcPiSessionFactory({
-      cwd: workdir,
-      agentDir: process.env.PI_COFFEE_AGENT_DIR,
-      sessionDir: process.env.PI_COFFEE_SESSION_DIR,
-      provider: process.env.PI_COFFEE_PROVIDER,
-      model: process.env.PI_COFFEE_MODEL,
-      extensions: resolvePiExtensions(),
-    }),
+    factory: factoryFor(workdir, sessionRoot, false),
+    scopeForUser,
   });
   if (host) await host.start();
 
-  const web = selectedRole === "host" || selectedRole === "relay" ? undefined : new WebServer({
+  // Gitea OAuth is on as soon as the app credentials are configured. Without
+  // them the shell is open (local smoke); PI_COFFEE_DEFAULT_USER can still
+  // exercise the per-user layout on the Host.
+  const giteaUrl = process.env.PI_COFFEE_GITEA_URL?.trim();
+  const giteaClientId = process.env.PI_COFFEE_GITEA_CLIENT_ID?.trim();
+  const giteaClientSecret = process.env.PI_COFFEE_GITEA_CLIENT_SECRET?.trim();
+  const wantWeb = selectedRole !== "host" && selectedRole !== "relay";
+  let auth: GiteaAuth | undefined;
+  if (wantWeb && (giteaUrl || giteaClientId || giteaClientSecret)) {
+    if (!giteaUrl || !giteaClientId || !giteaClientSecret) {
+      throw new Error("Set PI_COFFEE_GITEA_URL, PI_COFFEE_GITEA_CLIENT_ID and PI_COFFEE_GITEA_CLIENT_SECRET together");
+    }
+    const allowedUsers = parseAllowedUsers(process.env.PI_COFFEE_ALLOWED_USERS);
+    if (allowedUsers.length === 0) throw new Error("PI_COFFEE_ALLOWED_USERS must list at least one Gitea login when Gitea login is enabled");
+    const cookieSecret = process.env.PI_COFFEE_COOKIE_SECRET?.trim();
+    if (!cookieSecret) console.warn("PI_COFFEE_COOKIE_SECRET is not set: everyone must log in again after each Web Server restart");
+    auth = new GiteaAuth({
+      giteaUrl,
+      clientId: giteaClientId,
+      clientSecret: giteaClientSecret,
+      allowedUsers,
+      publicUrl: process.env.PI_COFFEE_PUBLIC_URL?.trim() || undefined,
+      cookieSecret,
+    });
+  }
+  const defaultUser = normalizeUsername(process.env.PI_COFFEE_DEFAULT_USER);
+  if (process.env.PI_COFFEE_DEFAULT_USER?.trim() && defaultUser === undefined) {
+    throw new Error("PI_COFFEE_DEFAULT_USER must be a plain login name (letters, digits, . - _)");
+  }
+
+  const web = !wantWeb ? undefined : new WebServer({
     host: envString("PI_COFFEE_WEB_BIND", "127.0.0.1"),
     port: envNumber("PI_COFFEE_WEB_PORT", 3000),
     hostUrl: process.env.PI_COFFEE_HOST_URL ?? `ws://127.0.0.1:${host?.address().port ?? envNumber("PI_COFFEE_HOST_PORT", 8788)}/host`,
     hostToken: process.env.PI_COFFEE_HOST_TOKEN,
     ...(webTls === undefined ? {} : { tls: webTls }),
+    ...(auth === undefined ? {} : { auth }),
+    ...(auth !== undefined || defaultUser === undefined ? {} : { defaultUser }),
   });
   if (web) await web.start();
 
@@ -109,9 +186,9 @@ async function run(selectedRole: Role): Promise<void> {
 
   const addresses = [
     relay ? `Relay http://${relay.address().host}:${relay.address().port}/v1` : undefined,
-    host ? `Host ws://${host.address().host}:${host.address().port}/host` : undefined,
+    host ? `Host ws://${host.address().host}:${host.address().port}/host (agent: ${agent})` : undefined,
     transfer ? `Transfer ${transfer.publicUrl()}/api/localsend/v2 (LocalSend v2, inbox ${transfer.inboxFor("<session>").split("\\").join("/")})` : undefined,
-    web ? `Web ${web.scheme}://${web.address().host}:${web.address().port}/` : undefined,
+    web ? `Web ${web.scheme}://${web.address().host}:${web.address().port}/${auth ? " (Gitea login on)" : defaultUser ? ` (user ${defaultUser})` : ""}` : undefined,
   ].filter((address): address is string => address !== undefined);
   for (const address of addresses) console.log(address);
 }
@@ -135,9 +212,9 @@ function loadTls(certVar: string, keyVar: string): { cert: Buffer; key: Buffer }
   return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
 }
 
-function envList(name: string): string[] {
+function envList(name: string, separator = ","): string[] {
   return (process.env[name] ?? "")
-    .split(",")
+    .split(separator)
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
 }

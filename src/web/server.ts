@@ -10,6 +10,8 @@ import {
   type ClientFrame,
   type ServerFrame,
 } from "../shared/protocol.js";
+import { USER_HEADER } from "../shared/identity.js";
+import type { GiteaAuth } from "./auth.js";
 import { HostClient } from "./host-client.js";
 
 /** PEM material for the optional HTTPS route (internal CA); HTTP when omitted. */
@@ -25,6 +27,14 @@ export interface WebServerOptions {
   hostToken?: string;
   publicDir?: string;
   tls?: TlsMaterial;
+  /**
+   * Gitea login (ADR-0004). When present, the shell and `/ws` require a valid
+   * session cookie and the Gitea login name is forwarded to the Host, which
+   * keeps each user's conversations and files apart (ADR-0010).
+   */
+  auth?: GiteaAuth;
+  /** Identity forwarded when `auth` is off (local smoke on a shared VM); none by default. */
+  defaultUser?: string;
 }
 
 export interface WebAddress {
@@ -39,6 +49,8 @@ export class WebServer {
   private readonly hostUrl: string;
   private readonly hostToken?: string;
   private readonly publicDir: string;
+  private readonly auth?: GiteaAuth;
+  private readonly defaultUser?: string;
   private readonly http: HttpServer;
   private readonly wsServer: WebSocketServer;
   private readonly bridges = new Set<BrowserBridge>();
@@ -52,14 +64,18 @@ export class WebServer {
     this.hostToken = options.hostToken;
     this.publicDir = options.publicDir ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../public");
     this.secure = options.tls !== undefined;
+    this.auth = options.auth;
+    this.defaultUser = options.defaultUser;
     const handler = (request: IncomingMessage, response: ServerResponse) => void this.handleHttp(request, response);
     this.http = options.tls ? createHttpsServer({ cert: options.tls.cert, key: options.tls.key }, handler) : createServer(handler);
     this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
     this.http.on("upgrade", (request, socket, head) => this.handleUpgrade(request, socket, head));
-    this.wsServer.on("connection", (socket) => {
+    this.wsServer.on("connection", (socket, request: IncomingMessage) => {
+      const user = this.userOf(request);
       const bridge = new BrowserBridge(socket, {
         url: this.hostUrl,
         token: this.hostToken,
+        ...(user === undefined ? {} : { user }),
       });
       this.bridges.add(bridge);
       bridge.onClose = () => this.bridges.delete(bridge);
@@ -108,6 +124,12 @@ export class WebServer {
     this.started = false;
   }
 
+  /** The Browser User behind a request: the Gitea cookie, or the configured default. */
+  private userOf(request: IncomingMessage): string | undefined {
+    if (this.auth) return this.auth.principalOf(request)?.user;
+    return this.defaultUser;
+  }
+
   private async handleHttp(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     if (path === "/healthz") {
@@ -115,9 +137,22 @@ export class WebServer {
       response.end(JSON.stringify({ ok: true, role: "web" }));
       return;
     }
+    if (this.auth) {
+      if (await this.auth.handle(request, response)) return;
+    } else if (path === "/auth/me") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      response.end(JSON.stringify({ auth: false, user: this.defaultUser ?? null }));
+      return;
+    }
     const asset = resolveAsset(path);
     if (asset === undefined) {
       response.writeHead(404);
+      response.end();
+      return;
+    }
+    // The shell itself is behind the login; its static assets are inert.
+    if (this.auth && asset.file === "index.html" && this.auth.principalOf(request) === undefined) {
+      response.writeHead(302, { location: "/login", "cache-control": "no-store" });
       response.end();
       return;
     }
@@ -137,6 +172,12 @@ export class WebServer {
       socket.destroy();
       return;
     }
+    // Fail closed: no cookie, no conversation stream.
+    if (this.auth && this.auth.principalOf(request) === undefined) {
+      socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     this.wsServer.handleUpgrade(request, socket, head, (websocket) => {
       this.wsServer.emit("connection", websocket, request);
     });
@@ -146,6 +187,7 @@ export class WebServer {
 interface BrowserBridgeOptions {
   url: string;
   token?: string;
+  user?: string;
 }
 
 class BrowserBridge {
@@ -161,7 +203,9 @@ class BrowserBridge {
   constructor(browser: WebSocket, options: BrowserBridgeOptions) {
     this.browser = browser;
     this.host = new HostClient({
-      ...options,
+      url: options.url,
+      token: options.token,
+      ...(options.user === undefined ? {} : { headers: { [USER_HEADER]: options.user } }),
       onUnavailable: (error) => {
         this.send({ v: 1, type: "error", code: "host_unavailable", message: error.message });
         this.close();

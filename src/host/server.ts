@@ -10,20 +10,49 @@ import {
   type JsonValue,
   type ServerFrame,
 } from "../shared/protocol.js";
+import { normalizeUsername, USER_HEADER } from "../shared/identity.js";
 import type { PiSessionFactory } from "./pi-adapter.js";
 import { HostSession, HostSessionRegistry, SessionBusyError, type SessionSink } from "./session.js";
 import type { TransferServer } from "./transfer.js";
+
+/**
+ * Everything that is private to one Browser User inside the shared User VM:
+ * the Pi factory (its own cwd and session store) and the directory uploads
+ * land in. Pi's model account (agent dir / auth) is deliberately not part of
+ * this: the VM is logged in once and every user's Pi shares that login.
+ */
+export interface UserScope {
+  factory: PiSessionFactory;
+  /** Root for this user's inbox / downloads; the transfer server's workdir when omitted. */
+  workdir?: string;
+}
 
 export interface HostServerOptions {
   host?: string;
   port?: number;
   token?: string;
+  /** Factory for connections that carry no user identity (single-user / local smoke). */
   factory: PiSessionFactory;
+  /**
+   * Per-user isolation inside the one Host (ADR-0010). Called once per Gitea
+   * login name the Web Server forwards; the returned scope is cached. When
+   * omitted, every connection shares `factory`.
+   */
+  scopeForUser?: (user: string) => UserScope | Promise<UserScope>;
   eventBufferSize?: number;
   /** Stop idle Pi processes after this long; the conversation stays in Pi's session store. */
   idleTimeoutMs?: number;
   /** LocalSend v2 transfer endpoint on the User VM; browsers are told about it after `opened`. */
   transfer?: TransferServer;
+}
+
+/** A user's registry plus the bookkeeping the server keeps beside it. */
+interface UserSlot {
+  user: string | undefined;
+  workdir?: string;
+  factory: PiSessionFactory;
+  registry: HostSessionRegistry;
+  broadcastTimer?: ReturnType<typeof setTimeout>;
 }
 
 export interface HostAddress {
@@ -39,7 +68,11 @@ export class HostServer {
   private readonly host: string;
   private readonly port: number;
   private readonly token?: string;
-  private readonly registry: HostSessionRegistry;
+  private readonly factory: PiSessionFactory;
+  private readonly scopeForUser?: (user: string) => UserScope | Promise<UserScope>;
+  private readonly registryOptions: { eventBufferSize?: number; idleTimeoutMs?: number };
+  /** Key: normalised user name, or "" for identity-less connections. */
+  private readonly slots = new Map<string, Promise<UserSlot>>();
   private readonly transfer?: TransferServer;
   private readonly http: HttpServer;
   private readonly sockets = new Set<HostSocket>();
@@ -51,11 +84,12 @@ export class HostServer {
     this.port = options.port ?? 8788;
     this.token = options.token;
     this.transfer = options.transfer;
-    this.registry = new HostSessionRegistry({
-      factory: options.factory,
+    this.factory = options.factory;
+    this.scopeForUser = options.scopeForUser;
+    this.registryOptions = {
       eventBufferSize: options.eventBufferSize,
       ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
-    });
+    };
     this.http = createServer((request, response) => {
       if (request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -68,25 +102,46 @@ export class HostServer {
     this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
     this.http.on("upgrade", (request, socket, head) => this.handleUpgrade(request, socket, head));
     this.wsServer.on("connection", (socket, request) => {
-      const hostSocket = new HostSocket(socket, request, this.registry, this.transfer);
+      // The user name was validated during the upgrade; a connection without
+      // one belongs to the identity-less (single-user) slot.
+      const user = normalizeUsername(request.headers[USER_HEADER]);
+      const hostSocket = new HostSocket(socket, this.slotFor(user), this.transfer);
       this.sockets.add(hostSocket);
       hostSocket.onClose = () => this.sockets.delete(hostSocket);
     });
-    // Every browser's sidebar mirrors the same store: push the list whenever
-    // it changes instead of making each browser poll.
-    this.registry.onChange(() => void this.broadcastSessions());
   }
 
-  private broadcastTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * The registry for one user, created on first contact. Each user's sidebar
+   * mirrors only that user's store: list pushes stay inside the slot.
+   */
+  private slotFor(user: string | undefined): Promise<UserSlot> {
+    const key = user ?? "";
+    const existing = this.slots.get(key);
+    if (existing) return existing;
+    const created = (async (): Promise<UserSlot> => {
+      const scope: UserScope = user !== undefined && this.scopeForUser !== undefined
+        ? await this.scopeForUser(user)
+        : { factory: this.factory };
+      const registry = new HostSessionRegistry({ factory: scope.factory, ...this.registryOptions });
+      const slot: UserSlot = { user, factory: scope.factory, registry, ...(scope.workdir === undefined ? {} : { workdir: scope.workdir }) };
+      registry.onChange(() => this.broadcastSessions(slot));
+      return slot;
+    })();
+    this.slots.set(key, created);
+    created.catch(() => this.slots.delete(key));
+    return created;
+  }
 
-  private async broadcastSessions(): Promise<void> {
-    if (this.broadcastTimer !== undefined) return;
-    this.broadcastTimer = setTimeout(async () => {
-      this.broadcastTimer = undefined;
-      if (this.sockets.size === 0) return;
+  private broadcastSessions(slot: UserSlot): void {
+    if (slot.broadcastTimer !== undefined) return;
+    slot.broadcastTimer = setTimeout(async () => {
+      slot.broadcastTimer = undefined;
+      const targets = [...this.sockets].filter((socket) => socket.user === slot.user);
+      if (targets.length === 0) return;
       try {
-        const sessions = await this.registry.list();
-        for (const socket of this.sockets) socket.send({ v: 1, type: "sessions", sessions });
+        const sessions = await slot.registry.list();
+        for (const socket of targets) socket.send({ v: 1, type: "sessions", sessions });
       } catch {
         // Listing is best-effort; the browser can still ask explicitly.
       }
@@ -129,14 +184,24 @@ export class HostServer {
 
   /** Publish a Host-originated event (transfer progress, …) to a live Session's browsers. */
   announce(sessionId: string, event: JsonValue): void {
-    this.registry.get(sessionId)?.announce(event);
+    // Session ids are unique across users, so at most one slot knows it.
+    for (const pending of this.slots.values()) {
+      void pending.then((slot) => slot.registry.get(sessionId)?.announce(event)).catch(() => undefined);
+    }
   }
 
   async close(): Promise<void> {
     if (!this.started) return;
     for (const socket of this.sockets) socket.close();
     this.sockets.clear();
-    await this.registry.close();
+    const slots = await Promise.allSettled([...this.slots.values()]);
+    this.slots.clear();
+    for (const slot of slots) {
+      if (slot.status !== "fulfilled") continue;
+      if (slot.value.broadcastTimer !== undefined) clearTimeout(slot.value.broadcastTimer);
+      await slot.value.registry.close();
+      await slot.value.factory.close?.().catch(() => undefined);
+    }
     this.wsServer.close();
     await new Promise<void>((resolve, reject) => {
       this.http.close((error) => (error ? reject(error) : resolve()));
@@ -155,6 +220,14 @@ export class HostServer {
       socket.destroy();
       return;
     }
+    // A forwarded identity must be a safe directory segment; fail closed
+    // rather than mapping a strange name onto the wrong user's data.
+    const rawUser = request.headers[USER_HEADER];
+    if (rawUser !== undefined && normalizeUsername(rawUser) === undefined) {
+      socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     this.wsServer.handleUpgrade(request, socket, head, (websocket) => {
       this.wsServer.emit("connection", websocket, request);
     });
@@ -163,18 +236,32 @@ export class HostServer {
 
 class HostSocket implements SessionSink {
   private readonly socket: WebSocket;
-  private readonly registry: HostSessionRegistry;
+  private readonly slot: Promise<UserSlot>;
   private readonly transfer?: TransferServer;
+  /** Resolved from `slot` before the first frame is handled. */
+  private registry!: HostSessionRegistry;
+  private workdir?: string;
+  user: string | undefined;
   private session?: HostSession;
   private opened = false;
   private closed = false;
-  private messageQueue: Promise<void> = Promise.resolve();
+  private messageQueue: Promise<void>;
   onClose: () => void = () => undefined;
 
-  constructor(socket: WebSocket, _request: IncomingMessage, registry: HostSessionRegistry, transfer?: TransferServer) {
+  constructor(socket: WebSocket, slot: Promise<UserSlot>, transfer?: TransferServer) {
     this.socket = socket;
-    this.registry = registry;
+    this.slot = slot;
     this.transfer = transfer;
+    // Frames queue behind the slot so a user's very first connection cannot
+    // race its own registry creation.
+    this.messageQueue = this.slot.then((resolved) => {
+      this.user = resolved.user;
+      this.registry = resolved.registry;
+      this.workdir = resolved.workdir;
+    }).catch((error) => {
+      this.send({ v: 1, type: "error", code: "user_unavailable", message: error instanceof Error ? error.message : "User scope unavailable", fatal: true });
+      this.close();
+    });
     socket.on("message", (data) => {
       this.messageQueue = this.messageQueue.then(() => this.handleMessage(data)).catch(() => undefined);
     });
@@ -199,7 +286,7 @@ class HostSocket implements SessionSink {
   }
 
   private async handleMessage(data: RawData): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.registry === undefined) return;
     let frame: ClientFrame;
     try {
       frame = decodeClientFrame(rawDataToBytes(data));
@@ -348,7 +435,7 @@ class HostSocket implements SessionSink {
         sessionId: result.session.id,
         url: this.transfer.publicUrl(),
         scope: result.session.id,
-        token: this.transfer.issueToken(result.session.id),
+        token: this.transfer.issueToken(result.session.id, this.workdir),
         inbox: this.transfer.inboxFor(result.session.id).split("\\").join("/"),
         maxFileBytes: this.transfer.limits.maxFileBytes,
         maxBatchBytes: this.transfer.limits.maxBatchBytes,

@@ -14,7 +14,7 @@ This document records the resolved decisions from the design conversation. It di
 ## Runtime topology
 
 - The **Control Plane/Web VM** runs Debian and hosts the Web Server, browser-facing session routing, the central LLM Relay, and minimal usage/routing metadata.
-- Each internal user has one long-lived **User VM** running Linux Mint Xfce Edition. The User VM hosts the Agent Host, Pi processes, native transcripts, context, task files, worktrees, and uploaded files.
+- ~~Each internal user has one long-lived **User VM**~~ **Revised 2026-09-27 (ADR-0010):** the company grants one enterprise model account, so there is one shared long-lived **User VM** running Linux Mint Xfce Edition, logged in once. It hosts the Agent Host, every user's Pi processes, native transcripts, context, task files, worktrees, and uploaded files, each user in their own folders.
 - Picode does not create, destroy, snapshot, or repair VMs. The owner restores a VM snapshot manually when needed.
 - The Web Server and Agent Host are separate processes even when `npm start` runs both together for a local smoke test.
 
@@ -26,7 +26,7 @@ This document records the resolved decisions from the design conversation. It di
 
 ## Identity and credentials
 
-- Gitea is the sole human identity source for 0.1. The user signs in through Gitea OAuth; the Control Plane maps that identity to a fixed User VM.
+- Gitea is the sole human identity source for 0.1. The user signs in through Gitea OAuth; the Web Server admits only `PI_COFFEE_ALLOWED_USERS` and forwards the login name to the shared User VM's Host, which keeps that user's folders (ADR-0010).
 - Gitea is an internal collaboration/relay repository, not the final code archive and not internet-facing. Account permissions are managed by the owner.
 - No repository branch-protection policy is required; the owner protects privileged actions through account access.
 - The unique upstream LLM credential belongs on the Control Plane. The User VM must not receive it once the central Relay is enabled.

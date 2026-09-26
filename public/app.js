@@ -6,7 +6,8 @@ import {
   noteNode, relativeTime, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
 } from './render.js';
 
-const ACTIVE_KEY = 'pi-coffee.active.v2';
+const ACTIVE_KEY_BASE = 'pi-coffee.active.v2';
+let ACTIVE_KEY = ACTIVE_KEY_BASE;   // suffixed with the login name once /auth/me answers
 const $ = (selector) => document.querySelector(selector);
 const ui = {
   app: $('#app'), thread: $('#thread'), scroller: $('#scroller'), toBottom: $('#to-bottom'),
@@ -23,12 +24,14 @@ const ui = {
   spBar: $('#sp-bar'), spLegend: $('#sp-legend'), spCost: $('#sp-cost'), spCompact: $('#sp-compact'),
   uiModal: $('#ui-modal'), uiTitle: $('#ui-title'), uiText: $('#ui-text'), uiOptions: $('#ui-options'), uiInput: $('#ui-input'),
   uiEditor: $('#ui-editor'), uiMeta: $('#ui-meta'), uiOk: $('#ui-ok'), uiNo: $('#ui-no'), uiCancel: $('#ui-cancel'),
+  userBtn: $('#user-btn'), userName: $('#user-name'),
 };
 
 // ---------- state ----------
 let socket, reconnectTimer;
 let connected = false, opened = false, streaming = false;
-let activeId = localStorage.getItem(ACTIVE_KEY) || null;
+let activeId = null;           // restored per login in boot()
+let currentUser = null;        // Gitea login name, or null when the Web Server runs without login
 let pendingOpenId = null, queuedPrompt = null;
 let sessions = [], commands = [], models = null, statsCache = null;
 let entries = [];
@@ -417,7 +420,36 @@ function refreshComposer() {
   }
 }
 
+// Who am I? The Web Server answers from the Gitea cookie (ADR-0004). Without a
+// valid login the shell is useless, so go to the login page instead of
+// retrying a WebSocket that will only be refused.
+async function whoAmI() {
+  try {
+    const response = await fetch('/auth/me', { cache: 'no-store' });
+    if (response.status === 401) { location.href = '/login'; return false; }
+    if (!response.ok) return true;
+    const info = await response.json();
+    currentUser = info.user || null;
+    const key = currentUser ? ACTIVE_KEY_BASE + ':' + currentUser : ACTIVE_KEY_BASE;
+    if (key !== ACTIVE_KEY || activeId === null) { ACTIVE_KEY = key; activeId = localStorage.getItem(ACTIVE_KEY) || null; }
+    ui.userBtn.classList.toggle('hidden', !info.auth);
+    ui.userName.textContent = currentUser || '';
+    ui.userBtn.disabled = !info.auth;
+    return true;
+  } catch {
+    return true;   // the Web Server may be restarting; let the socket retry decide
+  }
+}
+ui.userBtn.addEventListener('click', () => {
+  if (!currentUser) return;
+  if (confirm('退出 PI Coffee 的登录？User VM 里正在运行的任务不会被打断。')) location.href = '/auth/logout';
+});
+
 function connect() {
+  clearTimeout(reconnectTimer);
+  whoAmI().then((ok) => { if (ok) connectSocket(); });
+}
+function connectSocket() {
   clearTimeout(reconnectTimer);
   if (socket) { socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null; try { socket.close(); } catch { /* ignore */ } }
   opened = false;

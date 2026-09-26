@@ -8,22 +8,24 @@
 └──────────────┬───────────────┘
                │ browser Frames
 ┌──────────────▼───────────────┐
-│ Web Server / Control Plane   │── Gitea OAuth + routing index
+│ Web Server / Control Plane   │── Gitea OAuth + allow-list (ADR-0004/0010)
 │ - static shell               │── LLM Relay → CPA
 │ - Browser Bridge             │── usage metadata
 └──────────────┬───────────────┘
-               │ Host Frames (private transport)
+               │ Host Frames (private transport) + login name header
 ┌──────────────▼───────────────┐
-│ Agent Host (User VM)         │
-│ - Session registry            │
+│ Agent Host (one shared VM)   │
+│ - Session registry per user   │
+│ - <workdir>/<user>, <sessions>/<user>
 │ - cursor/replay               │
-│ - original Pi RPC adapter     │
+│ - Pi RPC / Codex app-server   │
+│   adapter (PI_COFFEE_AGENT)   │
 │ - native transcript/context   │
 │ - Task files/inbox/worktree   │
 └──────────────────────────────┘
 ```
 
-The current MVP implements the Browser Bridge, Host Session registry, and Pi RPC adapter. The Gitea, Relay, and multi-user modules are 0.1 seams, not hidden assumptions in the MVP code.
+The current code implements the Browser Bridge, the Gitea login, the per-user Host Session registries, and the Pi RPC adapter. The two Browser Users share one User VM and one model login (ADR-0010); the Host keeps them apart by login name.
 
 ## Ownership rule
 
@@ -46,9 +48,9 @@ The Agent Host owns Session state and durable user content. The Control Plane ow
 | Web Server restart | User reconnects; Host remains the durable execution owner if its process is alive. |
 | Host process restart | 0.1 reopens native Pi session by `--session-id` and native transcript; MVP documents this as a gap. |
 | Relay outage | Host receives a structured model error; prompt transcript remains in the User VM. |
-| Gitea outage | Existing routed sessions continue; new login/routing waits for Gitea. |
+| Gitea outage | Existing cookies keep working until they expire; new logins wait for Gitea. |
 | User VM failure | Owner restores the VM snapshot manually; Control Plane marks Host unhealthy. |
 
 ## Deep module rule
 
-Keep Pi-specific knowledge behind `PiSessionFactory`/`PiSession`. Keep transport validation behind the protocol codec. Web code should not know how Pi starts, and Host code should not know how a browser renders text. This is the seam that lets later V5 capabilities be added one at a time.
+Keep agent-specific knowledge behind `PiSessionFactory`/`PiSession` (Pi RPC today, `codex app-server` since ADR-0011; `PI_COFFEE_AGENT` selects one per Host). Keep transport validation behind the protocol codec. Web code should not know how Pi starts, and Host code should not know how a browser renders text. This is the seam that lets later V5 capabilities be added one at a time.

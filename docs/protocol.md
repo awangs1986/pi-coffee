@@ -4,6 +4,13 @@ The Browser and Host use the same versioned JSON frame vocabulary. The Web Serve
 
 ## Connection sequence
 
+The browser reaches `/ws` only with a valid Gitea session cookie when the Web
+Server has Gitea login configured (otherwise the upgrade is refused with 401).
+The Web Server opens the private Host connection with `Authorization: Bearer
+<host token>` and, for a logged-in user, `x-pi-coffee-user: <gitea login>`;
+the Host resolves every frame on that connection inside that user's registry
+(ADR-0010). Frames themselves carry no user field.
+
 ```text
 Browser -> Web Server -> Host: {"v":1,"type":"list_sessions"}            (allowed before open)
 Host -> Web Server -> Browser: sessions
