@@ -79,7 +79,7 @@ Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`
 ## Server frames
 
 ```json
-{"v":1,"type":"sessions","sessions":[{"id":"…","name":"optional","createdAt":"…","updatedAt":"…","messageCount":6,"preview":"first user message","running":false}]}
+{"v":1,"type":"sessions","sessions":[{"id":"…","name":"optional","createdAt":"…","updatedAt":"…","messageCount":6,"preview":"first user message","running":false,"attention":"waiting | finished (optional)","source":"appServer | cli | … (optional)"}]}
 {"v":1,"type":"opened","sessionId":"…","cursor":0,"state":{"isStreaming":false,"messageCount":0}}
 {"v":1,"type":"history","sessionId":"…","leafId":"…","truncated":false,"entries":[
   {"kind":"user","id":"…","at":"…","text":"list files","imageCount":1},
@@ -91,7 +91,7 @@ Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`
 {"v":1,"type":"models","models":[{"provider":"cpa","id":"gpt-5.4-mini","contextWindow":200000,"reasoning":true}],"current":{"provider":"cpa","id":"gpt-5.4-mini"},"thinkingLevel":"medium","thinkingLevels":["off","low","medium","high"]}
 {"v":1,"type":"commands","commands":[{"name":"harness","description":"…","source":"extension"}]}
 {"v":1,"type":"extensions","sessionId":"…","extensions":[{"name":"harness/extension.js","kind":"extension","path":"…","origin":"configured","scope":"temporary","commands":[{"name":"harness","description":"…"}]}]}
-{"v":1,"type":"stats","sessionId":"…","stats":{"userMessages":3,"assistantMessages":3,"toolCalls":2,"tokens":{"input":1200,"output":340,"cacheRead":0,"cacheWrite":0,"total":1540},"cost":0.0042,"contextUsage":{"tokens":1540,"contextWindow":200000,"percent":0.77}}}
+{"v":1,"type":"stats","sessionId":"…","stats":{"userMessages":3,"assistantMessages":3,"toolCalls":2,"tokens":{"input":1200,"output":340,"cacheRead":0,"cacheWrite":0,"total":1540},"cost":0.0042,"contextUsage":{"tokens":1540,"contextWindow":200000,"percent":0.77},"rateLimits":{"fiveHour":{"usedPercent":42,"windowMinutes":300,"resetsAt":"…"},"weekly":{"usedPercent":61,"windowMinutes":10080,"resetsAt":"…"},"plan":"plus"}}}
 {"v":1,"type":"event","sessionId":"…","cursor":1,"event":{"type":"message_update"}}
 {"v":1,"type":"error","code":"busy","message":"…","requestId":"r-2"}
 ```
@@ -106,6 +106,12 @@ Agent event payloads are opaque JSON values at this seam. The browser renders `m
 
 - `tool_execution_update {toolCallId, toolName, partialResult}` — output of a still-running tool, accumulated so far (the card refreshes live).
 - `turn_diff {diff}` — the run's cumulative unified diff; shown as the 本轮改动 chip in the top bar.
+
+### Sidebar attention and native threads
+
+- `sessions[].attention` is the Host's answer to "does this conversation need me": `waiting` while an agent dialog is unanswered, `finished` when a run settled with no browser attached to that Session. It clears when a browser opens the Session. The shell sorts these first (需要你), then running conversations, then time buckets.
+- `sessions[].source` is where the conversation was started as the agent's own store records it (Codex: `appServer` for conversations from this page, `cli` / `exec` for the VM admin's terminal in the same working directory). The shell lists foreign sources under 本机终端会话. Opening one *takes it over*: the Host resumes the native thread. While another process is still driving a turn there, `opened.state.isStreaming` is `true`, prompts answer `busy`, and the Host polls the agent (default 3 s) until the turn ends, then publishes `agent_settled`.
+- `stats.rateLimits` are the model account's rolling usage windows (Codex ChatGPT login: `account/rateLimits/read`, refreshed by `account/rateLimits/updated`), classified by window length rather than slot name. Absent for API-key logins and for Pi. The account is shared by every user of the VM, so the numbers are the same for everyone.
 
 ### File transfer (ADR-0009)
 

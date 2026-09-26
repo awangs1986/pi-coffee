@@ -22,14 +22,21 @@ const pendingServerRequests = new Map();
 let nextServerId = 1000;
 const settings = new Map(); // threadId -> { approvalPolicy }
 const active = new Map();   // threadId -> { turnId, interrupted }
+// Account meters as `account/rateLimits/read` reports them (ChatGPT login);
+// FAKE_CODEX_NO_LIMITS mimics an API-key login that has none.
+const rateLimits = process.env.FAKE_CODEX_NO_LIMITS ? null : {
+  primary: { usedPercent: 42, windowDurationMins: 300, resetsAt: 1788265323 },
+  secondary: { usedPercent: 61, windowDurationMins: 10080, resetsAt: 1788765541 },
+  planType: "plus",
+};
 
 function threadView(thread, withTurns) {
   return {
     id: thread.id, sessionId: thread.id, forkedFromId: null, parentThreadId: null, preview: thread.preview ?? "",
     ephemeral: false, historyMode: "paginated", modelProvider: "openai", model: thread.model ?? "gpt-fake",
     reasoningEffort: thread.effort ?? null, createdAt: thread.createdAt, updatedAt: thread.updatedAt, recencyAt: thread.updatedAt,
-    status: { type: active.has(thread.id) ? "active" : "idle" }, path: null, cwd: thread.cwd, cliVersion: "fake", originator: "pi_coffee",
-    source: "vscode", threadSource: null, agentNickname: null, agentRole: null, gitInfo: null, name: thread.name ?? null,
+    status: { type: active.has(thread.id) || thread.activeExternally ? "active" : "idle" }, path: null, cwd: thread.cwd, cliVersion: "fake", originator: "pi_coffee",
+    source: thread.source ?? "appServer", threadSource: null, agentNickname: null, agentRole: null, gitInfo: null, name: thread.name ?? null,
     turns: withTurns ? thread.turns : [],
   };
 }
@@ -118,6 +125,11 @@ async function runTurn(thread, input, options) {
   turn.completedAt = now();
   active.delete(thread.id);
   save();
+  // Codex refreshes the account meters as the turn's usage lands, before the turn closes.
+  if (rateLimits) {
+    rateLimits.primary.usedPercent += 10;
+    notify("account/rateLimits/updated", { rateLimits });
+  }
   notify("turn/completed", { threadId: thread.id, turn: { ...turn, items: [] } });
 }
 
@@ -136,6 +148,10 @@ rl.on("line", (line) => {
   switch (method) {
     case "initialize": return reply({ userAgent: "fake", codexHome: home, platformFamily: "unix", platformOs: "linux" });
     case "initialized": return;
+    case "getAuthStatus": return reply({ authMethod: rateLimits ? "chatgpt" : "apiKey", requiresOpenaiAuth: true });
+    case "account/rateLimits/read":
+      if (!rateLimits) return fail("rate limits unavailable for this auth method");
+      return reply({ rateLimits });
     case "thread/list": {
       const all = Object.values(threads).filter((thread) => params.cwd === undefined || thread.cwd === params.cwd).map((thread) => threadView(thread, false));
       const limit = Math.max(1, params.limit ?? 25);
@@ -159,6 +175,11 @@ rl.on("line", (line) => {
     }
     case "thread/read": {
       const thread = threads[params.threadId];
+      // Another process (the "terminal") may have finished its turn meanwhile: pick up the flag from disk.
+      if (thread && existsSync(store)) {
+        const onDisk = JSON.parse(readFileSync(store, "utf8"))[thread.id];
+        if (onDisk) thread.activeExternally = onDisk.activeExternally;
+      }
       return thread ? reply({ thread: threadView(thread, params.includeTurns === true) }) : fail("no such thread");
     }
     case "thread/name/set": {

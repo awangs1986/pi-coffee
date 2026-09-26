@@ -16,6 +16,8 @@ class FakePiSession implements PiSession {
   readonly history: HistoryEntry[] = [];
   /** When set, prompt() stops after the first delta so the message stays in flight. */
   holdAfterDelta = false;
+  /** Simulates a turn driven by another process (terminal): state says streaming, no events arrive. */
+  externallyBusy = false;
 
   async prompt(text: string, _images?: ImageInput[]): Promise<void> {
     this.state = { ...this.state, isStreaming: true };
@@ -83,7 +85,7 @@ class FakePiSession implements PiSession {
   }
 
   async getState() {
-    return this.state;
+    return this.externallyBusy ? { ...this.state, isStreaming: true } : this.state;
   }
 
   onEvent(listener: (event: unknown) => void): () => void {
@@ -335,6 +337,80 @@ describe("Host WebSocket seam", () => {
     expect(await frames.next()).toMatchObject({ type: "opened", sessionId: "stored-1" });
     expect(await frames.next()).toMatchObject({ type: "history", sessionId: "stored-1" });
     expect(factory.sessions.has("stored-1")).toBe(true);
+    socket.close();
+  });
+
+  it("flags conversations that need the user: a pending dialog, or a run that finished with nobody watching (P0)", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory });
+    await server.start();
+    const port = server.address().port;
+    const socket = await connect(port);
+    const frames = new FrameQueue(socket);
+    socket.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await frames.next(); // history
+    const pi = factory.sessions.get(opened.sessionId)!;
+
+    // A dialog is waiting for an answer: the list says so while the browser is attached.
+    pi.holdAfterDelta = true;
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p1", text: "ask me" }));
+    for (let i = 0; i < 3; i++) await frames.next(); // ack, agent_start, delta
+    pi.askUser("ui-1");
+    await frames.next();
+    socket.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    let listed = await frames.nextSessions();
+    expect(listed.sessions.find((s) => s.id === opened.sessionId)).toMatchObject({ running: true, attention: "waiting" });
+
+    // The browser leaves; the run finishes unattended -> "finished" until someone opens it again.
+    socket.close();
+    await once(socket, "close");
+    pi.finish("ask me");
+    const other = await connect(port);
+    const otherFrames = new FrameQueue(other);
+    other.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    listed = await otherFrames.nextSessions();
+    expect(listed.sessions.find((s) => s.id === opened.sessionId)).toMatchObject({ running: false, attention: "finished" });
+
+    // Opening the conversation clears the flag.
+    other.send(encodeFrame({ v: 1, type: "open", sessionId: opened.sessionId }));
+    await otherFrames.next(); // opened
+    await otherFrames.next(); // history
+    other.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    listed = await otherFrames.nextSessions();
+    expect(listed.sessions.find((s) => s.id === opened.sessionId)?.attention).toBeUndefined();
+
+    // A run that finishes while a browser is attached is not "finished" for the list (the browser saw it).
+    other.send(encodeFrame({ v: 1, type: "prompt", requestId: "p2", text: "again" }));
+    pi.holdAfterDelta = false;
+    for (let i = 0; i < 5; i++) await otherFrames.next(); // ack, agent_start, delta, message_end, settled
+    other.send(encodeFrame({ v: 1, type: "list_sessions" }));
+    listed = await otherFrames.nextSessions();
+    expect(listed.sessions.find((s) => s.id === opened.sessionId)?.attention).toBeUndefined();
+    other.close();
+  });
+
+  it("watches a turn that another process is driving and settles the browser once it ends (P3 take-over)", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory, externalPollMs: 20 });
+    await server.start();
+    const socket = await connect(server.address().port);
+    const frames = new FrameQueue(socket);
+    // Pre-create the session "busy elsewhere": its state says streaming although nothing was prompted here.
+    const pi = await factory.create({ sessionId: "cli-thread" }) as FakePiSession;
+    pi.externallyBusy = true;
+    socket.send(encodeFrame({ v: 1, type: "open", sessionId: "cli-thread" }));
+    expect(await frames.next()).toMatchObject({ type: "opened", state: { isStreaming: true } });
+    await frames.next(); // history
+    // A prompt is refused while the terminal owns the turn.
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p1", text: "me too" }));
+    expect(await frames.next()).toMatchObject({ type: "error", code: "busy" });
+    // The terminal finishes; the Host notices without any event from the adapter and tells the browser.
+    pi.externallyBusy = false;
+    expect(await frames.next()).toMatchObject({ type: "event", event: { type: "agent_settled" } });
+    socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "p2", text: "now mine" }));
+    expect(await frames.next()).toMatchObject({ type: "ack", operation: "prompt" });
     socket.close();
   });
 

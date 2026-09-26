@@ -319,15 +319,4 @@ export function relativeTime(iso) {
   return new Date(t).toLocaleDateString();
 }
 
-export function timeGroup(iso) {
-  const t = new Date(iso);
-  if (!Number.isFinite(t.getTime())) return '更早';
-  const now = new Date();
-  const start = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((start(now) - start(t)) / 86400000);
-  if (days <= 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 7) return '最近 7 天';
-  if (days < 30) return '最近 30 天';
-  return '更早';
-}
+export { timeGroup } from './sidebar.js';

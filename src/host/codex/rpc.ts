@@ -39,6 +39,7 @@ export class CodexAppServer {
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (value: Json) => void; reject: (error: Error) => void }>();
   private readonly subscribers = new Map<string, Set<ThreadSubscriber>>();
+  private readonly globalListeners = new Set<(method: string, params: Obj) => void>();
   private exited = false;
   private stderrTail = "";
 
@@ -103,6 +104,12 @@ export class CodexAppServer {
     this.child?.stdin.write(`${JSON.stringify({ id, result })}\n`);
   }
 
+  /** Notifications that belong to no thread (account meters, …). */
+  subscribeGlobal(listener: (method: string, params: Obj) => void): () => void {
+    this.globalListeners.add(listener);
+    return () => { this.globalListeners.delete(listener); };
+  }
+
   subscribe(threadId: string, subscriber: ThreadSubscriber): () => void {
     let set = this.subscribers.get(threadId);
     if (!set) {
@@ -163,7 +170,12 @@ export class CodexAppServer {
     const threadId = typeof params.threadId === "string"
       ? params.threadId
       : typeof (params.thread as Obj | undefined)?.id === "string" ? String((params.thread as Obj).id) : undefined;
-    if (threadId === undefined) return;
+    if (threadId === undefined) {
+      for (const listener of this.globalListeners) {
+        try { listener(method, params); } catch { /* same rule: one bad listener must not break the stream */ }
+      }
+      return;
+    }
     for (const subscriber of this.subscribers.get(threadId) ?? []) {
       try { subscriber.notification(method, params); } catch { /* one bad listener must not break the stream */ }
     }

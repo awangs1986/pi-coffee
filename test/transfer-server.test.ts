@@ -1,5 +1,5 @@
 import { createHash, X509Certificate } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,6 +175,39 @@ describe("TransferServer (LocalSend v2)", () => {
     expect(await (await fetch(`${base}/download?scope=sess-a&token=${token}&fileId=out/a.txt`)).text()).toBe("alice");
     // The parent (another user's area, or the shared root) is out of reach.
     expect((await fetch(`${base}/download?scope=sess-a&token=${token}&fileId=${encodeURIComponent("../top.txt")}`)).status).toBe(403);
+  });
+
+  it("confines downloads to the real path of the root and refuses credential files by name (P4 / INV-T1..T3)", async () => {
+    const { base, token } = await start();
+    const outside = mkdtempSync(join(tmpdir(), "pi-coffee-outside-"));
+    try {
+      writeFileSync(join(outside, "secret.txt"), "not yours");
+      symlinkSync(join(outside, "secret.txt"), join(workdir, "link.txt"));
+      symlinkSync(outside, join(workdir, "linkdir"));
+      // A symlink inside the root that resolves outside it is refused, file or directory.
+      expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=link.txt`)).status).toBe(403);
+      expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=linkdir/secret.txt`)).status).toBe(403);
+      // Credential-shaped names never cross the wire, even when they sit inside the root.
+      for (const name of ["auth.json", ".credentials.json", ".env", ".env.local", "id_rsa", "server.pem", ".netrc"]) {
+        writeFileSync(join(workdir, name), "secret");
+        expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=${encodeURIComponent(name)}`)).status).toBe(403);
+      }
+      // Nested copies are refused as well; ordinary files still download.
+      mkdirSync(join(workdir, ".codex"), { recursive: true });
+      writeFileSync(join(workdir, ".codex", "auth.json"), "secret");
+      expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=.codex/auth.json`)).status).toBe(403);
+      writeFileSync(join(workdir, "report.md"), "fine");
+      expect(await (await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=report.md`)).text()).toBe("fine");
+      // The inbox listing hides them too.
+      const inbox = join(workdir, server!.inboxFor("sess-1"));
+      mkdirSync(inbox, { recursive: true });
+      writeFileSync(join(inbox, "auth.json"), "secret");
+      writeFileSync(join(inbox, "notes.txt"), "ok");
+      const listing = await (await fetch(`${base}/prepare-download?scope=sess-1&token=${token}`, { method: "POST" })).json() as { files: Record<string, { fileName: string }> };
+      expect(Object.values(listing.files).map((f) => f.fileName)).toEqual(["notes.txt"]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("speaks HTTPS with a certificate fingerprint when given TLS material (the optional secure route)", async () => {

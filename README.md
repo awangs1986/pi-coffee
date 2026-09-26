@@ -126,7 +126,7 @@ The upstream credential lives only in the Relay process on the server. Hosts
 in User VMs authenticate to the Relay with their own token and never see the
 upstream key. Nothing in this repository contains a credential.
 
-The frame contract is recorded in [`docs/protocol.md`](./docs/protocol.md).
+The frame contract is recorded in [`docs/protocol.md`](./docs/protocol.md); the rules tests cite by id live in [`docs/INVARIANTS.md`](./docs/INVARIANTS.md).
 
 The consolidated discussion backlog is [`BACKLOG.md`](./BACKLOG.md). It records the
 decisions, implementation status, dependencies, open engineering questions, and
