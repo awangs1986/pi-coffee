@@ -557,7 +557,7 @@ describe("Host WebSocket seam", () => {
       if (opened.type !== "opened") throw new Error("expected opened");
       await frames.next(); // history
       const info = await frames.next();
-      expect(info).toMatchObject({ type: "transfer", sessionId: opened.sessionId, scope: opened.sessionId, url: `http://127.0.0.1:${transfer.address().port}`, inbox: `.pi-coffee/inbox/${opened.sessionId}` });
+      expect(info).toMatchObject({ type: "transfer", sessionId: opened.sessionId, scope: expect.any(String), url: `http://127.0.0.1:${transfer.address().port}`, inbox: `.pi-coffee/inbox/${opened.sessionId}` });
       if (info.type !== "transfer") throw new Error("expected transfer");
 
       // Upload with the advertised token: the browser talks to the transfer
@@ -668,6 +668,55 @@ describe("Host WebSocket seam", () => {
 
       for (const { socket } of [alice, bob, bobAgain, anon]) socket.close();
     } finally {
+      await transfer.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps file grants and transfer events separate when users open the same session id", async () => {
+    const root = mkdtempSync(join(tmpdir(), "pi-coffee-host-collision-"));
+    const transfer = new TransferServer({ host: "127.0.0.1", port: 0, workdir: root, onEvent: (scope, event) => server?.announce(scope, event) });
+    await transfer.start();
+    server = new HostServer({
+      host: "127.0.0.1", port: 0, factory: new FakeFactory(), transfer, requireUser: true,
+      scopeForUser: (user) => ({ factory: new FakeFactory(), workdir: join(root, user) }),
+    });
+    await server.start();
+    try {
+      const openAs = async (user: string) => {
+        const socket = new WebSocket(`ws://127.0.0.1:${server!.address().port}/host`, { headers: { "x-pi-coffee-user": user } });
+        await once(socket, "open");
+        const frames = new FrameQueue(socket);
+        socket.send(encodeFrame({ v: 1, type: "open", sessionId: "same-session" }));
+        expect(await frames.next()).toMatchObject({ type: "opened" });
+        await frames.next();
+        const grant = await frames.next();
+        if (grant.type !== "transfer") throw new Error("expected transfer");
+        return { socket, frames, grant };
+      };
+      const alice = await openAs("alice");
+      const bob = await openAs("bob");
+      expect(alice.grant.scope).not.toBe(bob.grant.scope);
+      expect(alice.grant.token).not.toBe(bob.grant.token);
+      const base = `http://127.0.0.1:${transfer.address().port}/api/localsend/v2`;
+      expect((await fetch(`${base}/prepare-download?scope=${bob.grant.scope}&token=${alice.grant.token}`)).status).toBe(401);
+      const prepared = await fetch(`${base}/prepare-upload?scope=${alice.grant.scope}&token=${alice.grant.token}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ files: { a: { id: "a", fileName: "brief.md", size: 5 } } }),
+      });
+      const upload = await prepared.json() as { sessionId: string; files: Record<string, string> };
+      expect((await fetch(`${base}/upload?sessionId=${upload.sessionId}&fileId=a&token=${upload.files.a}`, { method: "POST", body: "hello" })).status).toBe(200);
+      let event = await alice.frames.next();
+      while (event.type === "event" && (event.event as { type?: string }).type === "transfer_progress") event = await alice.frames.next();
+      expect(event).toMatchObject({ type: "event", event: { type: "transfer_complete", path: ".pi-coffee/inbox/same-session/brief.md" } });
+      bob.socket.send(encodeFrame({ v: 1, type: "ping", nonce: "after-upload" }));
+      expect(await bob.frames.next()).toMatchObject({ type: "pong", nonce: "after-upload" });
+      expect(existsSync(join(root, "alice", ".pi-coffee", "inbox", "same-session", "brief.md"))).toBe(true);
+      expect(existsSync(join(root, "bob", ".pi-coffee", "inbox", "same-session", "brief.md"))).toBe(false);
+      alice.socket.close();
+      bob.socket.close();
+    } finally {
+      await server.close();
       await transfer.close();
       rmSync(root, { recursive: true, force: true });
     }

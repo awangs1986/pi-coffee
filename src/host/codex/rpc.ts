@@ -58,6 +58,7 @@ export class CodexAppServer {
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child = child;
+    child.stdin.on("error", (error) => this.onExit(`codex app-server input closed: ${error.message}`));
     child.stderr.on("data", (chunk: Buffer) => {
       this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-4000);
     });
@@ -88,7 +89,7 @@ export class CodexAppServer {
       child.stdin.write(`${JSON.stringify({ id, method, params })}\n`, (error) => {
         if (error) {
           this.pending.delete(id);
-          reject(error);
+          reject(new Error(`codex app-server input closed: ${error.message}`));
         }
       });
     });

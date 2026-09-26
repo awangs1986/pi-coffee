@@ -92,7 +92,10 @@ async function login(webUrl: string, code: string): Promise<{ status: number; co
   expect(authorize.searchParams.get("client_id")).toBe("coffee");
   expect(authorize.searchParams.get("redirect_uri")).toBe(`${webUrl}/auth/callback`);
   const state = authorize.searchParams.get("state")!;
-  const callback = await fetch(`${webUrl}/auth/callback?code=${code}&state=${state}`, { redirect: "manual" });
+  const callback = await fetch(`${webUrl}/auth/callback?code=${code}&state=${state}`, {
+    redirect: "manual",
+    headers: { cookie: start.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ") },
+  });
   const setCookie = callback.headers.get("set-cookie") ?? undefined;
   return { status: callback.status, cookie: setCookie?.split(";")[0], location: callback.headers.get("location") ?? undefined, body: await callback.text() };
 }
@@ -129,6 +132,44 @@ function reader(socket: WebSocket): (count: number) => Promise<ServerFrame[]> {
 }
 
 describe("Gitea login on the Web Server (ADR-0004 / ADR-0010)", () => {
+  it("accepts an OAuth callback only in the browser that started that login and only once", async () => {
+    const fake = await fakeGitea({ "code-alice": "alice" });
+    gitea = fake.server;
+    const auth = new GiteaAuth({ giteaUrl: fake.url, clientId: "coffee", clientSecret: "s3cret", allowedUsers: ["alice"] });
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: "ws://127.0.0.1:1/host", auth });
+    await web.start();
+    const webUrl = `http://127.0.0.1:${web.address().port}`;
+    const first = await fetch(`${webUrl}/auth/login`, { redirect: "manual" });
+    const other = await fetch(`${webUrl}/auth/login`, { redirect: "manual" });
+    const cookies = (response: Response) => response.headers.getSetCookie().map((value) => value.split(";")[0]).join("; ");
+    const state = new URL(first.headers.get("location")!).searchParams.get("state")!;
+    const callback = `${webUrl}/auth/callback?code=code-alice&state=${state}`;
+    for (const cookie of ["", cookies(other)]) {
+      const refused = await fetch(callback, { redirect: "manual", headers: { cookie } });
+      expect(refused.headers.get("location")).toContain("/login?error=");
+      expect(refused.headers.get("set-cookie")).toBeNull();
+    }
+    const accepted = await fetch(callback, { redirect: "manual", headers: { cookie: cookies(first) } });
+    expect(accepted.headers.get("location")).toBe("/");
+    expect(accepted.headers.get("set-cookie")).toContain("pi_coffee_session=");
+    const replay = await fetch(callback, { redirect: "manual", headers: { cookie: cookies(first) } });
+    expect(replay.headers.get("location")).toContain("/login?error=");
+  });
+
+  it("rejects malformed multibyte session signatures without disrupting HTTP or WebSocket login checks", async () => {
+    const auth = new GiteaAuth({ giteaUrl: "http://127.0.0.1", clientId: "coffee", clientSecret: "fixture", allowedUsers: ["alice"] });
+    web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: "ws://127.0.0.1:1/host", auth });
+    await web.start();
+    const webUrl = `http://127.0.0.1:${web.address().port}`;
+    const cookie = `pi_coffee_session=payload.${"é".repeat(43)}`;
+    const response = await fetch(`${webUrl}/auth/me`, { headers: { cookie }, signal: AbortSignal.timeout(1000) });
+    expect(response.status).toBe(401);
+    const refused = new WebSocket(`${webUrl.replace("http", "ws")}/ws`, { headers: { cookie } });
+    const [error] = await once(refused, "error") as [Error];
+    expect(error.message).toContain("401");
+    expect((await fetch(`${webUrl}/healthz`)).status).toBe(200);
+  });
+
   it("normalises login names into safe path segments and parses the allow-list", () => {
     expect(normalizeUsername("Alice")).toBe("alice");
     expect(normalizeUsername(" bob.smith-2_x ")).toBe("bob.smith-2_x");

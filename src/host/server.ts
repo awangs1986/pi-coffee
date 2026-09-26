@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server as HttpServer } from "node:http";
 import { URL } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
@@ -79,6 +80,7 @@ export class HostServer {
   private readonly registryOptions: { eventBufferSize?: number; idleTimeoutMs?: number };
   /** Key: normalised user name, or "" for identity-less connections. */
   private readonly slots = new Map<string, Promise<UserSlot>>();
+  private readonly transferTargets = new Map<string, { slot: Promise<UserSlot>; sessionId: string }>();
   private readonly transfer?: TransferServer;
   private readonly http: HttpServer;
   private readonly sockets = new Set<HostSocket>();
@@ -112,7 +114,10 @@ export class HostServer {
       // The user name was validated during the upgrade; a connection without
       // one belongs to the identity-less (single-user) slot.
       const user = normalizeUsername(request.headers[USER_HEADER]);
-      const hostSocket = new HostSocket(socket, this.slotFor(user), this.transfer);
+      const slot = this.slotFor(user);
+      const hostSocket = new HostSocket(socket, slot, this.transfer, (scope, sessionId) => {
+        this.transferTargets.set(scope, { slot, sessionId });
+      });
       this.sockets.add(hostSocket);
       hostSocket.onClose = () => this.sockets.delete(hostSocket);
     });
@@ -190,11 +195,9 @@ export class HostServer {
   }
 
   /** Publish a Host-originated event (transfer progress, …) to a live Session's browsers. */
-  announce(sessionId: string, event: JsonValue): void {
-    // Session ids are unique across users, so at most one slot knows it.
-    for (const pending of this.slots.values()) {
-      void pending.then((slot) => slot.registry.get(sessionId)?.announce(event)).catch(() => undefined);
-    }
+  announce(scope: string, event: JsonValue): void {
+    const target = this.transferTargets.get(scope);
+    if (target) void target.slot.then((slot) => slot.registry.get(target.sessionId)?.announce(event)).catch(() => undefined);
   }
 
   async close(): Promise<void> {
@@ -203,6 +206,7 @@ export class HostServer {
     this.sockets.clear();
     const slots = await Promise.allSettled([...this.slots.values()]);
     this.slots.clear();
+    this.transferTargets.clear();
     for (const slot of slots) {
       if (slot.status !== "fulfilled") continue;
       if (slot.value.broadcastTimer !== undefined) clearTimeout(slot.value.broadcastTimer);
@@ -255,7 +259,7 @@ class HostSocket implements SessionSink {
   private messageQueue: Promise<void>;
   onClose: () => void = () => undefined;
 
-  constructor(socket: WebSocket, slot: Promise<UserSlot>, transfer?: TransferServer) {
+  constructor(socket: WebSocket, slot: Promise<UserSlot>, transfer?: TransferServer, private readonly registerTransfer?: (scope: string, sessionId: string) => void) {
     this.socket = socket;
     this.slot = slot;
     this.transfer = transfer;
@@ -436,14 +440,17 @@ class HostSocket implements SessionSink {
     });
     this.send(boundedHistoryFrame(result.session.id, result.history.entries, result.history.leafId));
     if (this.transfer) {
+      const scope = createHash("sha256").update(JSON.stringify([this.user ?? null, result.session.id])).digest("hex");
+      const token = this.transfer.issueToken(scope, this.workdir, result.session.id);
+      this.registerTransfer?.(scope, result.session.id);
       this.send({
         v: 1,
         type: "transfer",
         sessionId: result.session.id,
         url: this.transfer.publicUrl(),
-        scope: result.session.id,
-        token: this.transfer.issueToken(result.session.id, this.workdir),
-        inbox: this.transfer.inboxFor(result.session.id).split("\\").join("/"),
+        scope,
+        token,
+        inbox: this.transfer.inboxFor(scope).split("\\").join("/"),
         maxFileBytes: this.transfer.limits.maxFileBytes,
         maxBatchBytes: this.transfer.limits.maxBatchBytes,
       });

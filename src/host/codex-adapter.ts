@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type {
   CommandInfo,
   ExtensionInfo,
@@ -161,11 +161,16 @@ export class CodexSessionFactory implements PiSessionFactory {
       approvalPolicy: this.options.approvalPolicy ?? "never",
       ...(this.options.model === undefined ? {} : { model: this.options.model }),
     };
-    // Resume first: `thread/list` omits threads that have not spoken yet, and a
-    // failed lookup must never fork a user's conversation into a fresh thread.
+    // Check metadata before resuming: a caller-supplied UUID may name another
+    // user's thread in the shared native store. Listing by cwd is not authorization.
     let response: Obj | undefined;
     if (UUID_LIKE.test(known)) {
-      response = await server.request("thread/resume", { threadId: known, ...common }).then((result) => result as Obj, () => undefined);
+      const owned = await this.ownsThread(server, known).catch((error) => {
+        if (mapping.has(options.sessionId)) throw error;
+        return undefined; // A newly generated Host id has no native thread yet.
+      });
+      if (owned === false) throw new Error("No such conversation");
+      if (owned) response = await server.request("thread/resume", { threadId: known, ...common }) as Obj;
     }
     if (!response) {
       response = await server.request("thread/start", { ...common, threadSource: null }) as Obj;
@@ -232,12 +237,19 @@ export class CodexSessionFactory implements PiSessionFactory {
     const threadId = mapping.get(sessionId) ?? sessionId;
     try {
       const server = await this.connection();
+      if (!(await this.ownsThread(server, threadId))) return false;
       await server.request("thread/delete", { threadId });
     } catch {
       return false;
     }
     if (mapping.delete(sessionId)) await writeFile(this.mappingFile, JSON.stringify(Object.fromEntries(mapping), null, 2)).catch(() => undefined);
     return true;
+  }
+
+  private async ownsThread(server: CodexAppServer, threadId: string): Promise<boolean> {
+    const result = await server.request("thread/read", { threadId, includeTurns: false }) as Obj;
+    const thread = result.thread as Obj | undefined;
+    return typeof thread?.cwd === "string" && resolve(thread.cwd) === resolve(this.options.cwd);
   }
 
   /** Stop the user's app-server; sessions resume from Codex's rollouts next time. */
