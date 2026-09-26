@@ -62,6 +62,7 @@
               <div class="stats-note">占用与用量由 User VM 中的 Pi 统计；Pi 不区分系统提示 / 工具定义 / 对话三段。</div>
             </div>
           </div>
+          <button class="chip-btn hidden" id="turn-diff" type="button" title="本轮改动的完整 diff"></button>
           <div class="topbar-meta" id="session-meta"></div>
         </header>
 
@@ -138,6 +139,21 @@
         </div>
         <div class="plugins-body" id="plugins-body"></div>
         <div class="stats-note">列表来自当前对话的 Pi 进程（User VM 内）实际加载的内容；扩展按注册命令的源文件分组，PI Coffee 通过 <code>--extension</code> 传入的扩展即使没有命令也会显示。</div>
+      </div>
+    </div>
+
+    <!-- Cumulative diff of the current / last run -->
+    <div class="modal-backdrop hidden" id="diff-modal">
+      <div class="modal plugins" role="dialog" aria-modal="true" aria-labelledby="diff-title">
+        <div class="plugins-head">
+          <h2 id="diff-title">本轮改动</h2>
+          <span class="plugins-sub" id="diff-sub"></span>
+          <button type="button" class="btn small" id="diff-copy">复制 diff</button>
+          <button type="button" class="icon-btn" id="diff-close" aria-label="关闭">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="plugins-body diff-body" id="diff-body"></div>
       </div>
     </div>
 

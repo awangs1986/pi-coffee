@@ -397,3 +397,8 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
   .sidebar-head .icon-btn { display: grid; }
   .topbar-meta { display: none; }
 }
+
+/* ---------- 本轮改动 ---------- */
+.diff-body .diff { max-height: none; }
+.diff-body .diff-row.meta { font-weight: 600; color: var(--text-2); margin-top: 10px; }
+#turn-diff { white-space: nowrap; }

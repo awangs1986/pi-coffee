@@ -79,6 +79,10 @@ async function runTurn(thread, input, options) {
       const decision = await askApproval(thread.id, turnId, item.id, command);
       approved = decision === "accept" || decision === "acceptForSession";
     }
+    if (approved) {
+      notify("item/commandExecution/outputDelta", { threadId: thread.id, turnId, itemId: item.id, delta: "ran: " });
+      notify("item/commandExecution/outputDelta", { threadId: thread.id, turnId, itemId: item.id, delta: `${command}\n` });
+    }
     const done = { ...item, status: approved ? "completed" : "declined", aggregatedOutput: approved ? `ran: ${command}\n` : null, exitCode: approved ? 0 : null, durationMs: 5 };
     turn.items.push(done);
     notify("item/completed", { item: done, threadId: thread.id, turnId, completedAtMs: Date.now() });
@@ -90,6 +94,7 @@ async function runTurn(thread, input, options) {
     const done = { ...item, status: "completed" };
     turn.items.push(done);
     notify("item/completed", { item: done, threadId: thread.id, turnId, completedAtMs: Date.now() });
+    notify("turn/diff/updated", { threadId: thread.id, turnId, diff: `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-old\n+new\n` });
   }
 
   await new Promise((resolve) => setTimeout(resolve, 20));

@@ -272,6 +272,8 @@ class CodexSession implements PiSession {
   /** agentMessage items that streamed deltas; the completed item must not be re-emitted as text. */
   private readonly streamedItems = new Set<string>();
   private readonly toolNames = new Map<string, string>();
+  /** Command output streamed so far per item, so the browser can show it live. */
+  private readonly toolOutput = new Map<string, string>();
   private readonly followUps: Array<{ text: string; images?: ImageInput[] }> = [];
   private readonly pendingApprovals = new Map<string, PendingServerRequest>();
   private stopped = false;
@@ -503,6 +505,23 @@ class CodexSession implements PiSession {
       case "item/reasoning/summaryTextDelta":
         this.emit({ type: "message_update", assistantMessageEvent: { type: "thinking_delta", delta: String(params.delta ?? "") } });
         return;
+      case "item/commandExecution/outputDelta": {
+        const itemId = typeof params.itemId === "string" ? params.itemId : undefined;
+        if (itemId === undefined) return;
+        const text = (this.toolOutput.get(itemId) ?? "") + String(params.delta ?? "");
+        this.toolOutput.set(itemId, text);
+        this.emit({
+          type: "tool_execution_update",
+          toolCallId: itemId,
+          toolName: this.toolNames.get(itemId) ?? "bash",
+          partialResult: { content: [{ type: "text", text }] },
+        });
+        return;
+      }
+      case "turn/diff/updated":
+        // The turn's cumulative unified diff: what this run has changed so far.
+        this.emit({ type: "turn_diff", diff: typeof params.diff === "string" ? params.diff : "" });
+        return;
       case "item/started":
         this.onItemStarted(params.item as Obj);
         return;
@@ -536,6 +555,7 @@ class CodexSession implements PiSession {
         this.streaming = false;
         this.streamedItems.clear();
         this.toolNames.clear();
+        this.toolOutput.clear();
         this.emit({ type: "agent_settled" });
         const next = this.followUps.shift();
         if (next) {
@@ -591,6 +611,7 @@ class CodexSession implements PiSession {
           this.emit({ type: "tool_execution_start", toolCallId: item.id, toolName: tool.name, args: tool.args });
         }
         this.toolNames.delete(item.id);
+        this.toolOutput.delete(item.id);
         const outcome = toolResultOf(item);
         this.emit({ type: "tool_execution_end", toolCallId: item.id, toolName: tool.name, result: outcome.result, isError: outcome.isError });
       }

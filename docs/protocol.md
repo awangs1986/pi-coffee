@@ -102,7 +102,10 @@ Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`
 
 `history.entries` follows the active branch of Pi's entry tree (leaf → root); abandoned branches are omitted, compactions and branch switches appear as notes so the user sees the whole past conversation rather than the model's current context. The frame is bounded by `MAX_FRAME_BYTES`: when a conversation does not fit, the newest entries are kept and `truncated` is `true` — the rest stays in the User VM's session file. Tool results are capped at 4000 characters. Session-file paths never appear in any frame.
 
-Pi event payloads are opaque JSON values at this seam. The browser renders `message_update` → `text_delta`, tool execution start/end, `message_end` errors, `extension_ui_request` notifications and visible custom messages.
+Agent event payloads are opaque JSON values at this seam. The browser renders `message_update` → `text_delta`, tool execution start/update/end, `message_end` errors, `extension_ui_request` notifications and visible custom messages. Two events extend Pi's vocabulary and are emitted by the Codex adapter (ADR-0011); the browser ignores them when absent:
+
+- `tool_execution_update {toolCallId, toolName, partialResult}` — output of a still-running tool, accumulated so far (the card refreshes live).
+- `turn_diff {diff}` — the run's cumulative unified diff; shown as the 本轮改动 chip in the top bar.
 
 ### File transfer (ADR-0009)
 
