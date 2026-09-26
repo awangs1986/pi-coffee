@@ -231,6 +231,11 @@ describe("Codex app-server adapter", () => {
 
     const models = await session.getModels();
     expect(models.models.map((m) => m.id)).toEqual(["gpt-fake", "gpt-fake-mini"]);
+    // A model configured outside the catalog (custom provider) is still offered and current.
+    await session.setModel("codex", "gpt-custom-terra");
+    const custom = await session.getModels();
+    expect(custom.current).toEqual({ provider: "codex", id: "gpt-custom-terra" });
+    expect(custom.models[0]).toEqual({ provider: "codex", id: "gpt-custom-terra" });
     expect(models.current).toEqual({ provider: "codex", id: "gpt-fake" });
     await session.setModel("codex", "gpt-fake-mini");
     expect((await session.getModels()).current?.id).toBe("gpt-fake-mini");

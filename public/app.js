@@ -29,6 +29,7 @@ const ui = {
 
 // ---------- state ----------
 let socket, reconnectTimer;
+let retryNote;
 let connected = false, opened = false, streaming = false;
 let activeId = null;           // restored per login in boot()
 let currentUser = null;        // Gitea login name, or null when the Web Server runs without login
@@ -569,7 +570,7 @@ function handleFrame(frame, ws) {
 
 function handleEvent(event) {
   const type = event.type;
-  if (type === 'agent_start') { setStreaming(true); showThinking(true); currentAssistant = undefined; return; }
+  if (type === 'agent_start') { setStreaming(true); showThinking(true); currentAssistant = undefined; retryNote = undefined; return; }
   const delta = event.assistantMessageEvent;
   if (delta && delta.type === 'thinking_delta') { showThinking(true); return; }
   if (delta && delta.type === 'text_delta') {
@@ -610,7 +611,12 @@ function handleEvent(event) {
     if (text.trim()) { currentAssistant = undefined; showThinking(false); pushNote(text.slice(0, 8000)); }
     return;
   }
-  if (type === 'auto_retry_start') { pushNote('上游暂时不可用，Pi 正在重试（' + event.attempt + '/' + event.maxAttempts + '）…'); return; }
+  if (type === 'auto_retry_start') {
+    // One note per turn, updated in place: Codex can retry many times in a row.
+    const text = '上游暂时不可用，正在重试（' + event.attempt + '/' + event.maxAttempts + '）…';
+    if (retryNote && retryNote.node.isConnected) { retryNote.text = text; retryNote.node.textContent = text; } else retryNote = pushNote(text);
+    return;
+  }
   if (type === 'compaction_end') { pushNote('已压缩上下文。'); send({ v: 1, type: 'get_stats' }); return; }
   if (type === 'agent_settled') {
     setStreaming(false);

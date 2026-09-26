@@ -389,19 +389,27 @@ class CodexSession implements PiSession {
   async getModels(): Promise<PiModels> {
     const result = await this.server.request("model/list", {}) as Obj;
     const data = Array.isArray(result.data) ? (result.data as Obj[]) : [];
-    const current = data.find((model) => model.model === this.model || model.id === this.model) ?? data.find((model) => model.isDefault === true);
+    // The configured model wins even when the catalog does not list it (custom provider);
+    // only an unconfigured session falls back to Codex's default.
+    const current = this.model === undefined
+      ? data.find((model) => model.isDefault === true)
+      : data.find((model) => model.model === this.model || model.id === this.model);
     const efforts = (model: Obj | undefined) => Array.isArray(model?.supportedReasoningEfforts)
       ? (model!.supportedReasoningEfforts as Obj[]).map((option) => String(option.reasoningEffort))
       : [];
     const currentId = typeof current?.model === "string" ? current.model : this.model;
     const levels = efforts(current);
     const level = this.effort ?? (typeof current?.defaultReasoningEffort === "string" ? current.defaultReasoningEffort : levels[0] ?? "medium");
+    const choices = data.filter((model) => model.hidden !== true).map((model) => ({
+      provider: "codex",
+      id: String(model.model ?? model.id),
+      ...(efforts(model).length > 0 ? { reasoning: true } : {}),
+    }));
+    // A custom model_provider (config.toml) can name models the built-in
+    // catalog does not know; the configured one must still be selectable.
+    if (currentId !== undefined && !choices.some((choice) => choice.id === currentId)) choices.unshift({ provider: "codex", id: currentId });
     return {
-      models: data.filter((model) => model.hidden !== true).map((model) => ({
-        provider: "codex",
-        id: String(model.model ?? model.id),
-        ...(efforts(model).length > 0 ? { reasoning: true } : {}),
-      })),
+      models: choices,
       current: currentId === undefined ? null : { provider: "codex", id: currentId },
       thinkingLevel: level,
       thinkingLevels: levels,
