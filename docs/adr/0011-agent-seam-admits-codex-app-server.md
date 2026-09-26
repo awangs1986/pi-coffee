@@ -15,19 +15,21 @@ Server, or the Host session lifetime depends on Pi specifically: they depend on
 
 - **Codex is a second implementation of the existing seam, not a second product.**
   `src/host/codex-adapter.ts` implements `PiSessionFactory`/`PiSession` on top of
-  `codex app-server` (JSON-RPC over stdio). The Host, Web Server, browser, protocol codec and
+  `codex app-server` (JSON-RPC over stdio; the transport lives in `src/host/codex/rpc.ts`,
+  the pure shape translations in `src/host/codex/translate.ts`). The Host, Web Server, browser, protocol codec and
   per-user registries are unchanged; `PI_COFFEE_AGENT=codex` picks the factory in `main.ts`.
 - **One `codex app-server` process per user, sharing one `CODEX_HOME`.** The admin logs
   Codex in once (`codex login` or an API key in `CODEX_HOME`). Each Gitea user gets their own
   app-server child, started in `<WORKDIR>/<user>`, so a crash or stall for one user never
   reaches the other; every child reads the same credentials and writes rollouts to the same
-  `CODEX_HOME/sessions`. Sessions of user A are listed only from A's cwd (`thread/list {cwd}`)
+  `CODEX_HOME/sessions`. The process is stopped again after `PI_COFFEE_IDLE_TIMEOUT_MS`
+  once that user has no open session, and started on the next request. Sessions of user A are listed only from A's cwd (`thread/list {cwd}`)
   and the Host still keys everything by login name, so the other user's threads stay out of
   sight exactly as with Pi. **No occupancy lock or turn-taking gate is added**: the two
   users' sessions run concurrently against the one login.
 - **Codex thread ids are the session ids.** Codex mints UUIDv7 thread ids itself; a
   PI Coffee session id that predates its thread is remembered in
-  `<cwd>/.pi-coffee/codex-threads.json` and every later call (resume, rename, delete, list)
+  `<SESSION_DIR>/<user>/codex-threads.json` (bookkeeping stays out of the agent's cwd) and every later call (resume, rename, delete, list)
   is translated through that file. Codex's own rollout files remain the durable conversation
   store (ADR-0008); nothing is copied to the Web Server.
 - **Event translation is one-way and lossy on purpose.** `turn/started`→`agent_start`,

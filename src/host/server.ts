@@ -39,6 +39,11 @@ export interface HostServerOptions {
    * omitted, every connection shares `factory`.
    */
   scopeForUser?: (user: string) => UserScope | Promise<UserScope>;
+  /**
+   * Refuse connections that carry no user identity. Multi-user deployments
+   * set this so a misconfigured Web Server cannot open the shared root scope.
+   */
+  requireUser?: boolean;
   eventBufferSize?: number;
   /** Stop idle Pi processes after this long; the conversation stays in Pi's session store. */
   idleTimeoutMs?: number;
@@ -70,6 +75,7 @@ export class HostServer {
   private readonly token?: string;
   private readonly factory: PiSessionFactory;
   private readonly scopeForUser?: (user: string) => UserScope | Promise<UserScope>;
+  private readonly requireUser: boolean;
   private readonly registryOptions: { eventBufferSize?: number; idleTimeoutMs?: number };
   /** Key: normalised user name, or "" for identity-less connections. */
   private readonly slots = new Map<string, Promise<UserSlot>>();
@@ -86,6 +92,7 @@ export class HostServer {
     this.transfer = options.transfer;
     this.factory = options.factory;
     this.scopeForUser = options.scopeForUser;
+    this.requireUser = options.requireUser === true;
     this.registryOptions = {
       eventBufferSize: options.eventBufferSize,
       ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
@@ -223,7 +230,7 @@ export class HostServer {
     // A forwarded identity must be a safe directory segment; fail closed
     // rather than mapping a strange name onto the wrong user's data.
     const rawUser = request.headers[USER_HEADER];
-    if (rawUser !== undefined && normalizeUsername(rawUser) === undefined) {
+    if ((rawUser !== undefined && normalizeUsername(rawUser) === undefined) || (rawUser === undefined && this.requireUser)) {
       socket.write("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;

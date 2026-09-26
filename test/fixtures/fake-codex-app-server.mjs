@@ -132,8 +132,11 @@ rl.on("line", (line) => {
     case "initialize": return reply({ userAgent: "fake", codexHome: home, platformFamily: "unix", platformOs: "linux" });
     case "initialized": return;
     case "thread/list": {
-      const data = Object.values(threads).filter((thread) => params.cwd === undefined || thread.cwd === params.cwd).map((thread) => threadView(thread, false));
-      return reply({ data, nextCursor: null, backwardsCursor: null });
+      const all = Object.values(threads).filter((thread) => params.cwd === undefined || thread.cwd === params.cwd).map((thread) => threadView(thread, false));
+      const limit = Math.max(1, params.limit ?? 25);
+      const offset = params.cursor ? Number(params.cursor) : 0;
+      const data = all.slice(offset, offset + limit);
+      return reply({ data, nextCursor: offset + limit < all.length ? String(offset + limit) : null, backwardsCursor: null });
     }
     case "thread/start": {
       const thread = { id: randomUUID(), cwd: params.cwd, createdAt: now(), updatedAt: now(), turns: [], model: params.model ?? "gpt-fake" };

@@ -21,7 +21,9 @@ export interface GiteaAuthOptions {
   /**
    * Public origin browsers use for the Web Server, e.g. `http://coffee.internal:3000`.
    * The OAuth redirect URI is `<publicUrl>/auth/callback`; it must match the
-   * Gitea OAuth2 application exactly. Derived from the request when omitted.
+   * Gitea OAuth2 application exactly. Derived from the request's `Host` header
+   * (never from `X-Forwarded-*`) when omitted — acceptable for local smoke
+   * only; `main.ts` requires it in deployment.
    */
   publicUrl?: string;
   /** HMAC key for the session cookie; a random one (logins lost on restart) when omitted. */
@@ -113,7 +115,14 @@ export class GiteaAuth {
         await this.finishLogin(request, response, url);
         return true;
       case "/auth/logout":
-        response.writeHead(303, { "set-cookie": this.cookie("", 0, request), location: "/login" });
+        // Only a POST clears the cookie, so a cross-site link cannot log people out.
+        if (request.method === "POST") {
+          response.writeHead(303, { "set-cookie": this.cookie("", 0, request), location: "/login", "cache-control": "no-store" });
+        } else {
+          response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+          response.end(page("退出登录", `<p>退出 PI Coffee 的登录？User VM 里正在运行的任务不会被打断。</p><form method="post" action="/auth/logout"><button class="btn" type="submit">退出</button></form>`));
+          return true;
+        }
         response.end();
         return true;
       case "/auth/me": {
@@ -217,11 +226,8 @@ export class GiteaAuth {
 
   private origin(request: IncomingMessage): string {
     if (this.publicUrl !== undefined) return this.publicUrl;
-    const forwardedProto = firstHeader(request.headers["x-forwarded-proto"]);
     const encrypted = (request.socket as { encrypted?: boolean }).encrypted === true;
-    const scheme = forwardedProto ?? (encrypted ? "https" : "http");
-    const host = firstHeader(request.headers["x-forwarded-host"]) ?? request.headers.host ?? "localhost";
-    return `${scheme}://${host}`;
+    return `${encrypted ? "https" : "http"}://${request.headers.host ?? "localhost"}`;
   }
 
   private cookie(value: string, maxAgeSeconds: number, request: IncomingMessage): string {
@@ -244,12 +250,6 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
-function firstHeader(value: string | string[] | undefined): string | undefined {
-  const raw = Array.isArray(value) ? value[0] : value;
-  const first = raw?.split(",")[0]?.trim();
-  return first === undefined || first.length === 0 ? undefined : first;
-}
-
 function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
@@ -259,6 +259,6 @@ function page(title: string, body: string): string {
 <style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#fafafa;color:#1f2937;display:flex;min-height:100vh;margin:0;align-items:center;justify-content:center}
 main{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:32px 36px;max-width:420px;box-shadow:0 1px 2px rgba(0,0,0,.04)}h1{font-size:20px;margin:0 0 12px}
 .brand{display:inline-flex;align-items:center;gap:8px;font-weight:600;margin-bottom:16px}.mark{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#111827;color:#fff;font-size:15px}
-p{line-height:1.6;margin:0 0 14px;font-size:14.5px}.btn{display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:9px 16px;border-radius:9px;font-size:14px}.err{color:#b91c1c}code{background:#f3f4f6;padding:1px 5px;border-radius:5px}</style></head>
+p{line-height:1.6;margin:0 0 14px;font-size:14.5px}.btn{display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:9px 16px;border-radius:9px;font-size:14px;border:0;cursor:pointer;font-family:inherit}.err{color:#b91c1c}code{background:#f3f4f6;padding:1px 5px;border-radius:5px}</style></head>
 <body><main><div class="brand"><span class="mark">π</span>PI Coffee</div><h1>${escapeHtml(title)}</h1>${body}</main></body></html>`;
 }

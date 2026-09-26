@@ -673,6 +673,18 @@ describe("Host WebSocket seam", () => {
     }
   });
 
+  it("with requireUser, an identity-less connection is refused at the upgrade", async () => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory, requireUser: true, scopeForUser: () => ({ factory }) });
+    await server.start();
+    const anon = new WebSocket(`ws://127.0.0.1:${server.address().port}/host`);
+    const [error] = await once(anon, "error") as [Error];
+    expect(error.message).toContain("400");
+    const named = new WebSocket(`ws://127.0.0.1:${server.address().port}/host`, { headers: { "x-pi-coffee-user": "alice" } });
+    await once(named, "open");
+    named.close();
+  });
+
   it("refuses to listen on a non-loopback address without a transport token", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "0.0.0.0", factory });

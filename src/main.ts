@@ -94,10 +94,14 @@ async function run(selectedRole: Role): Promise<void> {
   const codexApproval = envString("PI_COFFEE_CODEX_APPROVAL", "never");
   if (!["read-only", "workspace-write", "danger-full-access"].includes(codexSandbox)) throw new Error("PI_COFFEE_CODEX_SANDBOX must be read-only, workspace-write or danger-full-access");
   if (!["never", "on-request", "untrusted"].includes(codexApproval)) throw new Error("PI_COFFEE_CODEX_APPROVAL must be never, on-request or untrusted");
+  const idleTimeoutMs = envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000);
   const factoryFor = (cwd: string, sessionDir: string | undefined, perUser: boolean): PiSessionFactory => {
     if (agent === "codex") {
       return new CodexSessionFactory({
         cwd,
+        // The id map is session bookkeeping: keep it out of the directory the agent edits.
+        mappingFile: join(sessionDir ?? join(cwd, ".pi-coffee"), "codex-threads.json"),
+        idleTimeoutMs,
         cliPath: process.env.PI_COFFEE_CODEX_BIN?.trim() || undefined,
         codexHome: process.env.PI_COFFEE_CODEX_HOME?.trim() || undefined,
         model: process.env.PI_COFFEE_MODEL?.trim() || undefined,
@@ -127,7 +131,8 @@ async function run(selectedRole: Role): Promise<void> {
     port: envNumber("PI_COFFEE_HOST_PORT", 8788),
     token: process.env.PI_COFFEE_HOST_TOKEN,
     eventBufferSize: envNumber("PI_COFFEE_EVENT_BUFFER", 256),
-    idleTimeoutMs: envNumber("PI_COFFEE_IDLE_TIMEOUT_MS", 10 * 60 * 1000),
+    idleTimeoutMs,
+    requireUser: envFlag("PI_COFFEE_REQUIRE_USER"),
     transfer,
     factory: factoryFor(workdir, sessionRoot, false),
     scopeForUser,
@@ -150,12 +155,16 @@ async function run(selectedRole: Role): Promise<void> {
     if (allowedUsers.length === 0) throw new Error("PI_COFFEE_ALLOWED_USERS must list at least one Gitea login when Gitea login is enabled");
     const cookieSecret = process.env.PI_COFFEE_COOKIE_SECRET?.trim();
     if (!cookieSecret) console.warn("PI_COFFEE_COOKIE_SECRET is not set: everyone must log in again after each Web Server restart");
+    // The OAuth redirect URI and the cookie's Secure flag derive from this; it
+    // must not come from whatever Host header a client sends.
+    const publicUrl = process.env.PI_COFFEE_PUBLIC_URL?.trim();
+    if (!publicUrl || !/^https?:\/\//.test(publicUrl)) throw new Error("PI_COFFEE_PUBLIC_URL (http(s)://host[:port] browsers use) is required when Gitea login is enabled");
     auth = new GiteaAuth({
       giteaUrl,
       clientId: giteaClientId,
       clientSecret: giteaClientSecret,
       allowedUsers,
-      publicUrl: process.env.PI_COFFEE_PUBLIC_URL?.trim() || undefined,
+      publicUrl,
       cookieSecret,
     });
   }
@@ -210,6 +219,10 @@ function loadTls(certVar: string, keyVar: string): { cert: Buffer; key: Buffer }
   if (!certPath && !keyPath) return undefined;
   if (!certPath || !keyPath) throw new Error(`${certVar} and ${keyVar} must be set together`);
   return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
+}
+
+function envFlag(name: string): boolean {
+  return ["1", "on", "true", "yes"].includes((process.env[name] ?? "").trim().toLowerCase());
 }
 
 function envList(name: string, separator = ","): string[] {

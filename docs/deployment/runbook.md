@@ -109,8 +109,11 @@ shell shows the login name in the sidebar foot (click it to log out). A Gitea
 user not in `PI_COFFEE_ALLOWED_USERS` sees a 403 page after approving. On the
 VM, `~/work/<login>/` and `~/.pi-coffee/sessions/<login>/` appear on that
 user's first connection. Adding a colleague is one edit to
-`PI_COFFEE_ALLOWED_USERS` and a Web Server restart; removing a name logs that
-person out immediately.
+`PI_COFFEE_ALLOWED_USERS` and a Web Server restart; removing a name plus the
+same restart logs that person out immediately (the list is read at start).
+Emergency revocation of every browser at once: change `PI_COFFEE_COOKIE_SECRET`
+and restart the Web Server. Set `PI_COFFEE_REQUIRE_USER=1` in `host.env` so the
+Host refuses any connection that arrives without a login name.
 
 ## User VM: Agent Host + original Pi
 
@@ -267,9 +270,11 @@ PI_COFFEE_MODEL=<codex model id>
 ```
 
 Restart the Host. Each Gitea user still works in `<WORKDIR>/<user>`; the Host starts one
-`codex app-server` per user on demand and lists only that user's threads. Conversations are
+`codex app-server` per user on demand, lists only that user's threads and stops that
+process again after `PI_COFFEE_IDLE_TIMEOUT_MS` with no open session. Conversations are
 Codex's own rollouts under `CODEX_HOME/sessions`; PI Coffee ids that were created before
-their thread are kept in `<WORKDIR>/<user>/.pi-coffee/codex-threads.json`. Smoke test:
+their thread are kept in `<SESSION_DIR>/<user>/codex-threads.json` (outside the directory
+the agent edits). Smoke test:
 `PI_COFFEE_AGENT=codex PI_COFFEE_CODEX_HOME=/home/<owner>/.codex npm run start:host` and open
 a new session in the browser; the startup log prints `agent=codex`.
 
