@@ -169,6 +169,15 @@ rl.on("line", (line) => {
       reply({});
       return notify("thread/deleted", { threadId: params.threadId });
     }
+    case "thread/turns/list": {
+      const thread = threads[params.threadId];
+      if (!thread) return fail("no such thread");
+      const limit = Math.max(1, params.limit ?? 25);
+      const offset = params.cursor ? Number(params.cursor) : 0;
+      const ordered = params.sortDirection === "desc" ? [...thread.turns].reverse() : thread.turns;
+      const data = ordered.slice(offset, offset + limit).map((turn) => ({ ...turn, items: params.itemsView === "full" ? turn.items : [] }));
+      return reply({ data, nextCursor: offset + limit < ordered.length ? String(offset + limit) : null, backwardsCursor: null });
+    }
     case "thread/unsubscribe": return reply({});
     case "thread/compact/start": {
       reply({});

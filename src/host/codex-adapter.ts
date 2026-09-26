@@ -101,6 +101,13 @@ export class CodexSessionFactory implements PiSessionFactory {
     });
     await server.start(this.options.clientName ?? "pi_coffee", this.options.clientVersion ?? "0.1.0");
     this.server = server;
+    // The VM admin logs Codex in, not the users: say so loudly when nobody has.
+    void server.request("getAuthStatus", {}).then((status) => {
+      const method = (status as Obj | null)?.authMethod;
+      if (method === null || method === undefined) {
+        console.warn(`[codex] ${this.options.cwd}: no Codex login in ${this.options.codexHome ?? "~/.codex"}; run \`codex login\` as the VM owner or set an API key`);
+      }
+    }).catch(() => undefined);
     return server;
   }
 
@@ -348,10 +355,27 @@ class CodexSession implements PiSession {
     };
   }
 
+  /**
+   * Full history via the paginated `thread/turns/list` (oldest first, items
+   * loaded); `thread/read {includeTurns}` still works but is deprecated.
+   */
   async getHistory(): Promise<PiHistory> {
-    const result = await this.server.request("thread/read", { threadId: this.threadId, includeTurns: true }) as Obj;
-    const thread = result.thread as Obj;
-    const turns = Array.isArray(thread.turns) ? (thread.turns as Obj[]) : [];
+    const turns: Obj[] = [];
+    let cursor: Json | undefined;
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const result = await this.server.request("thread/turns/list", {
+        threadId: this.threadId,
+        limit: LIST_PAGE_SIZE,
+        sortDirection: "asc",
+        itemsView: "full",
+        ...(cursor === undefined ? {} : { cursor }),
+      }) as Obj;
+      const data = Array.isArray(result.data) ? (result.data as Obj[]) : [];
+      turns.push(...data);
+      const next = result.nextCursor;
+      if (data.length === 0 || next === null || next === undefined || next === cursor) break;
+      cursor = next;
+    }
     this.messageCount = countMessages(turns);
     const entries = projectTurns(turns);
     return { entries, leafId: entries.at(-1)?.id ?? null };
