@@ -1,6 +1,8 @@
 # Context-handoff implementation
 
-Implements SPEC revision 3 as a new Pi package. The Coffee import remains unchanged
+Implements SPEC revision 4 as a new Pi package. Revision 4 changes are summarized in
+[Revision 4 changes](#revision-4-changes-2026-09-26); where older paragraphs below
+disagree, that section governs. The Coffee import remains unchanged
 and is not linked by the package entry. Supported and tested runtime: Pi 0.87.1,
 Node 22.23.2, Linux, persistent local session storage outside the workspace.
 
@@ -80,8 +82,8 @@ Rejected or omitted-at-ingress media is not recreated by the plugin.
 | Compact evidence index | 8 KiB plus coverage/discovery metadata |
 | Installed Handoff summary | 24 KiB |
 | Synthesis deadline / automatic synthesis retries | Default 120 seconds with reasoning, 60 seconds off; configurable 100–300,000 ms / zero |
-| Project inventory / file bytes | 1,024 paths / 8 MiB |
-| Project text / individual inline file | 32 KiB / 8 KiB |
+| Project fingerprint | Per-file hashes up to 1,024 paths (8 MiB content, size/mtime beyond); larger Git repositories: HEAD + status + changed files |
+| Project inline text / individual file | 32 KiB / 8 KiB, mentioned paths first; never blocks Handoff |
 | Each read-only Git operation | 3 seconds |
 | Recovery search page / read / total result | 8 matches / 4 KiB / 8 KiB |
 | Request headroom | 8,192 units reserved beyond a conservative UTF-8 byte estimate of summary, retained messages, instructions and tools |
@@ -116,7 +118,7 @@ settlement. No delegation subsystem is included.
 Queued new input invalidates preparation and remains in Pi's queue exactly once.
 Cancellation is checked throughout synthesis and before commit. A new user message
 also invalidates a pending continuation. Routine success requires no attention;
-failures produce a bounded visible status without a fourth native fallback.
+failures produce a bounded visible status and, per revision 4, one native summary for that boundary.
 
 ## Persistence and recovery
 
@@ -247,3 +249,61 @@ the old order. Source validation does not prove that semantic interpretation; a
 misapplied receipt could release an obligation incorrectly. The guard is scoped
 workflow reliability, not a security boundary. Branch history scanning adds work
 per tool call; large-history latency has not been benchmarked in this follow-up.
+
+
+## Revision 4 changes (2026-09-26)
+
+**Failure classes.** `session_before_compact` distinguishes a *deferral* from a
+*fallback*. Deferrals cancel the compaction and retry Handoff at a later boundary:
+cancellation, `ConfigError` (invalid flags), blocked recovery, unsettled running
+tools or reported delegated work, and new input before or during preparation. Every
+other preparation error returns no replacement, so Pi performs one native summary.
+The visible notice reads `Handoff failed: <reason>. Used one native compaction
+instead; Handoff will retry at the next boundary.` A repair failure reports both
+the first validation error and the repair error. Native entry persistence failure
+still blocks execution.
+
+**Project snapshot** (`project.ts`). `projectSnapshot(cwd, hints)` never throws for
+size. Inline selection: paths mentioned in original conversation text (most recent
+mention first), then recently modified files (changed/untracked only above 1,024
+paths), within 32 KiB including a `project:inventory` source. The fingerprint does
+not depend on hints, so the before/after comparison is stable. On this repository
+(71 files) the snapshot takes ~35 ms; a synthetic 3,001-file Git repository took
+~40 ms with only mentioned and changed files inline.
+
+**Owner excerpts** (`task-state.ts`). `selectSources` keeps the inventory and
+admits inline project files within a third of the budget. If all owner messages
+do not fit the remainder, a binary search finds the largest uniform cap; longer
+messages keep 60% head / 40% tail with an `[EXCERPT: …]` marker. The result lists
+`excerptedOwnerMessages`; the installed summary adds their anchors under
+`coverage`. `validate` still receives full originals.
+
+**Structured steps** (`grounding.ts`, `order-guard.ts`, `state-repair.ts`). See
+SPEC revision 4 §3. The synthesis prompt describes `action`/`target`; the order
+guard installs from those fields only; the field patch reopens only read-only
+evidence steps. The previous English regular expressions, combined-search
+splitting and omitted-search rejection were removed.
+
+**Robustness fixes (2026-09-26).**
+
+- *Commit confirmation* (`journal.ts`). `hasCommit` streams the session file in
+  1 MiB chunks. Only lines beginning with Pi's `{"type":"compaction"` prefix
+  are buffered (up to 8 MiB per line) and parsed; other lines are skipped without
+  retention. Malformed or torn lines are ignored. The session file has no total
+  size limit here because it keeps growing after Handoff. The 8 MiB integrity
+  budget still applies to `historyFingerprint` during preparation, which now
+  checks the file size before reading it.
+- *Incremental order guard* (`order-guard.ts`). Pi entries are append-only, and
+  the active branch is the parent path of the leaf. The guard caches its replay
+  state with the session ID, cwd and leaf ID. When the new leaf descends from
+  the cached leaf, only the new entries are observed. Any other leaf (tree
+  navigation, session switch, fork, cwd change) triggers a full replay. The live
+  `tool_call` decision does not keep its bookkeeping; the call is recorded when
+  its assistant message is replayed, which matches restart behavior.
+- *Exact evidence search* (`evidence.ts`). Search is an exact, case-sensitive
+  substring match on the original text, as documented. The preview offset
+  therefore refers to the same string, and the preview window is widened by one
+  code unit rather than splitting a UTF-16 surrogate pair. When no original user
+  message matches, the result carries a hint that search is exact and
+  case-sensitive. (The query always matches its own tool call, so a zero total
+  cannot be the trigger.)

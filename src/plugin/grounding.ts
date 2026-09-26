@@ -51,9 +51,19 @@ interface BoundQuote {
   hash: string;
   timestamp: string;
 }
+/**
+ * Structured step action. The program enforces evidence ordering from these
+ * fields, never from the natural-language step text or the user's wording.
+ */
+export type StepAction = "search_evidence" | "read_evidence" | "write" | "other";
+export const STEP_ACTIONS: readonly StepAction[] = ["search_evidence", "read_evidence", "write", "other"];
+export const READ_ONLY_ACTIONS: readonly StepAction[] = ["search_evidence", "read_evidence"];
 export interface ProcedureStep {
   id: string;
   text: string;
+  action: StepAction;
+  /** search_evidence: exact query; write: workspace path; otherwise optional. */
+  target?: string;
   phase: "before_handoff" | "after_handoff" | "anytime";
   status: "pending" | "completed" | "uncertain";
   authorization: BoundQuote;
@@ -80,6 +90,20 @@ export function procedureSteps(value: unknown, originals: Source[], status: stri
         !Array.isArray(step.completion) || step.completion.length > 4)
       throw new Error("Invalid procedure step");
     ids.add(step.id);
+    // Legacy steps without an action are unstructured and receive no ordering guard.
+    const action: StepAction = step.action === undefined ? "other" : step.action;
+    if (!STEP_ACTIONS.includes(action) ||
+        (step.target !== undefined && !shortText(step.target, 256)))
+      throw new Error("Invalid procedure step action");
+    if ((action === "search_evidence" || action === "write") && step.target === undefined)
+      throw new Error(`A ${action} step requires a target`);
+    if (step.target !== undefined && action !== "other") {
+      // Source-bound: a guarded query or path must occur in the authorizing
+      // original user message. This is lexical and language-independent.
+      const owner = originals.find((s) => s.id === step.authorization?.source);
+      if (!owner || owner.role !== "user" || !owner.text.includes(step.target))
+        throw new Error("Step target must occur in its original user authorization");
+    }
     if (step.status === "completed" && (step.phase === "after_handoff" || !step.completion.length))
       throw new Error("A post-Handoff step cannot be completed by pre-Handoff evidence");
     if (step.status !== "completed" && step.completion.length)
@@ -87,7 +111,9 @@ export function procedureSteps(value: unknown, originals: Source[], status: stri
     if (step.phase === "before_handoff" && step.status !== "completed")
       throw new Error("Required pre-Handoff work remains unfinished");
     return {
-      id: step.id, text: step.text, phase: step.phase, status: step.status,
+      id: step.id, text: step.text, action,
+      ...(step.target !== undefined ? { target: step.target } : {}),
+      phase: step.phase, status: step.status,
       authorization: bind(step.authorization, "user"),
       completion: step.completion.map((ref: any) => bind(ref, "toolResult")),
     };

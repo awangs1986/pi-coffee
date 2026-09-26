@@ -54,6 +54,8 @@ export function registerOrderGuard(pi: ExtensionAPI) {
   let exactValuesBySource = new Map<string, string[]>();
   let protectedPaths: string[] = [];
   let newerInput = false;
+  let readRequired = true;
+  let evidenceFirst = true;
   let cwd = "";
   const searchCalls = new Map<string, string>();
   const readCalls = new Map<string, { marker: string; anchor: string }>();
@@ -62,39 +64,34 @@ export function registerOrderGuard(pi: ExtensionAPI) {
     exactValuesBySource = new Map();
     protectedPaths = [];
     newerInput = false;
+    readRequired = true;
+    evidenceFirst = true;
     searchCalls.clear();
     readCalls.clear();
   };
+  // Obligations come only from structured step fields (action/target) of the
+  // committed Task State. Step text and user wording are never parsed.
   const install = (entry: any) => {
     clear();
     const state = (entry.details as any)?.plugin === "pi-handoff"
       ? (entry.details as any).state : undefined;
-    const pending = state?.status === "active"
-      ? state.steps?.filter((step: any) => step.status === "pending") : undefined;
-    if (!Array.isArray(pending) || pending.length < 2) return;
-    const searches: any[] = [];
-    for (const step of pending) {
-      if (!/^search\s+handoff_evidence\b/i.test(step.text)) break;
-      searches.push(step);
-    }
-    const read = pending[searches.length];
-    if (!searches.length || !read || read.phase !== "after_handoff" ||
-        !/^read\b.*\b(anchor|original)\b/i.test(read.text) ||
-        !read.authorization?.source) return;
-    const markers: string[] = [];
-    for (const search of searches) {
-      if (search.phase !== "after_handoff" || !search.authorization?.source) return;
-      const match = /^search\s+handoff_evidence\s+for\s+([A-Z0-9][A-Z0-9._:-]+)\.?$/i.exec(search.text);
-      if (!match || markers.includes(match[1])) return;
-      markers.push(match[1]);
-    }
+    const pending: any[] = state?.status === "active" && Array.isArray(state.steps)
+      ? state.steps.filter((step: any) => step.status === "pending") : [];
+    const searches = pending.filter((step) => step.action === "search_evidence" &&
+      step.phase === "after_handoff" && typeof step.target === "string" &&
+      step.authorization?.source);
+    if (!searches.length) return;
+    const markers = [...new Set(searches.map((step) => step.target as string))];
+    readRequired = pending.some((step) => step.action === "read_evidence" &&
+      step.phase === "after_handoff");
+    // Evidence steps lead the pending work: hold all other tools during
+    // automatic continuation. Otherwise protect only the guarded writes.
+    evidenceFirst = ["search_evidence", "read_evidence"].includes(pending[0]?.action);
     required = markers.map(marker => ({ marker, anchors:new Set(), read:false,
       needsWiderRead:false, ranges:new Map() }));
-    for (const step of pending) {
-      const match = /^write\s+([\w./-]+)(?:\s|$)/i.exec(step.text);
-      if (match && step.authorization?.quote?.includes(match[1]))
-        protectedPaths.push(resolve(cwd,match[1]));
-    }
+    for (const step of pending)
+      if (step.action === "write" && typeof step.target === "string")
+        protectedPaths.push(resolve(cwd, step.target));
     for (const value of state.exactValues ?? []) {
       if (typeof value.source !== "string" || typeof value.value !== "string") continue;
       const values = exactValuesBySource.get(value.source) ?? [];
@@ -111,7 +108,7 @@ export function registerOrderGuard(pi: ExtensionAPI) {
     if (operation === "search") {
       const query = String(input.query ?? "");
       const matches = required.filter(item => query.includes(item.marker));
-      if (matches.length !== 1 && newerInput) return;
+      if (matches.length !== 1 && (newerInput || !evidenceFirst)) return;
       if (matches.length !== 1)
         return {block:true,reason:"Handoff requires one original-evidence marker per search before answering."};
       searchCalls.set(event.toolCallId, matches[0].marker);
@@ -120,7 +117,7 @@ export function registerOrderGuard(pi: ExtensionAPI) {
     if (operation === "read") {
       const anchor = String(input.anchor ?? "");
       const item = required.find(item => !item.read && item.anchors.has(anchor));
-      if (!item && newerInput) return;
+      if (!item && (newerInput || !evidenceFirst)) return;
       if (!item)
         return {block:true,reason:"Handoff requires a fresh post-Handoff search result before reading an original user anchor."};
       readCalls.set(event.toolCallId, {marker:item.marker,anchor});
@@ -128,8 +125,9 @@ export function registerOrderGuard(pi: ExtensionAPI) {
     }
     // A new user turn can start unrelated work. Keep the prior deliverable's
     // evidence prerequisite without making it a lock on the whole workspace.
-    if (newerInput && !(["write","edit"].includes(event.toolName) &&
-        typeof input.path === "string" && protectedPaths.includes(resolve(cwd,input.path))))
+    const protectedWrite = ["write","edit"].includes(event.toolName) &&
+      typeof input.path === "string" && protectedPaths.includes(resolve(cwd,input.path));
+    if ((newerInput || !evidenceFirst) && !protectedWrite)
       return;
     const missing = required.filter(item => !item.read);
     const rangeHint = missing.some(item => item.needsWiderRead)
@@ -137,7 +135,8 @@ export function registerOrderGuard(pi: ExtensionAPI) {
       : "";
     const updateHint = newerInput
       ? " If the latest user explicitly replaced this requirement, record that instruction with handoff_reconcile. A generic continue does not replace it." : "";
-    return {block:true,reason:`Handoff requires verified original reads for ${missing.map(item => item.marker).join(', ')} before other tools.${rangeHint}${updateHint}`};
+    const need = readRequired ? "verified original reads" : "post-Handoff original searches";
+    return {block:true,reason:`Handoff requires ${need} for ${missing.map(item => item.marker).join(', ')} before other tools.${rangeHint}${updateHint}`};
   };
   const afterResult = (event: any) => {
     const searched = searchCalls.get(event.toolCallId);
@@ -153,6 +152,10 @@ export function registerOrderGuard(pi: ExtensionAPI) {
       for (const match of value.matches)
         if (match.role === "user" && typeof match.anchor === "string")
           item?.anchors.add(match.anchor);
+      if (item && !readRequired && item.anchors.size) {
+        item.read = true;
+        if (required.every(item => item.read)) clear();
+      }
     }
     if (reading && value?.anchor === reading.anchor &&
         value?.role === "user" && value?.integrity === "verified" &&
@@ -194,51 +197,87 @@ export function registerOrderGuard(pi: ExtensionAPI) {
       if (required.every(item => item.read)) clear();
     }
   };
-  const replay = (ctx: ExtensionContext) => {
-    // Replay observations, never operations. Keep completed/replaced source IDs
-    // across later boundaries so historical one-time searches cannot revive.
-    const retiredSources = new Set<string>();
-    let boundary: any, latestUser: any;
-    let obligationSources: string[] = [];
-    cwd = ctx.cwd;
-    clear();
-    for (const entry of ctx.sessionManager.getBranch() as any[]) {
-      if (entry.type === "compaction" && entry.details?.plugin === "pi-handoff") {
-        boundary = entry; latestUser = undefined;
-        install(entry);
-        obligationSources = required.length
-          ? (entry.details.state.steps ?? []).map((step: any) => step.authorization?.source)
-              .filter((source: unknown): source is string => typeof source === "string")
-          : [];
-        continue;
-      }
-      if (!boundary) continue;
-      if (validReconciliation(entry, boundary, latestUser)) {
-        for (const source of obligationSources) retiredSources.add(source);
-        clear();
-        continue;
-      }
-      if (entry.type !== "message") continue;
-      const message = entry.message;
-      if (message.role === "user") {newerInput = true; latestUser = entry;}
-      else if (message.role === "assistant" && Array.isArray(message.content)) {
-        for (const call of message.content) {
-          if (call.type === "toolCall") beforeCall({
-            toolName:call.name,toolCallId:call.id,input:call.arguments,
-          });
-        }
-      } else if (message.role === "toolResult") {
-        const hadObligations = required.length > 0;
-        afterResult(message);
-        if (hadObligations && !required.length)
-          for (const source of obligationSources) retiredSources.add(source);
-      }
+  // Replay observations, never operations. Keep completed/replaced source IDs
+  // across later boundaries so historical one-time searches cannot revive.
+  // Pi entries are append-only and the branch is the parent path of the leaf,
+  // so a leaf that descends from the last replayed leaf needs only its new
+  // entries. Any other leaf (tree navigation, new session, cwd) replays fully.
+  let retiredSources = new Set<string>();
+  let boundary: any, latestUser: any;
+  let obligationSources: string[] = [];
+  let replayed: { session: string; cwd: string; leaf: string | null } | undefined;
+  const observe = (entry: any) => {
+    if (entry.type === "compaction" && entry.details?.plugin === "pi-handoff") {
+      boundary = entry; latestUser = undefined;
+      install(entry);
+      obligationSources = required.length
+        ? (entry.details.state.steps ?? []).map((step: any) => step.authorization?.source)
+            .filter((source: unknown): source is string => typeof source === "string")
+        : [];
+      return;
     }
-    return retiredSources;
+    if (!boundary) return;
+    if (validReconciliation(entry, boundary, latestUser)) {
+      for (const source of obligationSources) retiredSources.add(source);
+      clear();
+      return;
+    }
+    if (entry.type !== "message") return;
+    const message = entry.message;
+    if (message.role === "user") {newerInput = true; latestUser = entry;}
+    else if (message.role === "assistant" && Array.isArray(message.content)) {
+      for (const call of message.content) {
+        if (call.type === "toolCall") beforeCall({
+          toolName:call.name,toolCallId:call.id,input:call.arguments,
+        });
+      }
+    } else if (message.role === "toolResult") {
+      const hadObligations = required.length > 0;
+      afterResult(message);
+      if (hadObligations && !required.length)
+        for (const source of obligationSources) retiredSources.add(source);
+    }
+  };
+  const appended = (ctx: ExtensionContext, session: string, leaf: string | null) => {
+    if (!replayed || replayed.session !== session || replayed.cwd !== ctx.cwd) return;
+    const fresh: any[] = [];
+    let id = leaf;
+    while (id !== null && id !== replayed.leaf) {
+      const entry = ctx.sessionManager.getEntry(id) as any;
+      if (!entry) return;
+      fresh.push(entry);
+      id = entry.parentId ?? null;
+    }
+    return id === replayed.leaf ? fresh.reverse() : undefined;
+  };
+  const replay = (ctx: ExtensionContext) => {
+    const session = ctx.sessionManager.getSessionId();
+    const leaf = ctx.sessionManager.getLeafId();
+    let entries = appended(ctx, session, leaf);
+    if (!entries) {
+      retiredSources = new Set();
+      boundary = latestUser = undefined;
+      obligationSources = [];
+      cwd = ctx.cwd;
+      clear();
+      entries = ctx.sessionManager.getBranch() as any[];
+    }
+    for (const entry of entries) observe(entry);
+    replayed = { session, cwd: ctx.cwd, leaf };
+    return new Set(retiredSources);
   };
   pi.on("tool_call", (event, ctx) => {
     replay(ctx);
-    return beforeCall(event);
+    // Decide on the live call without keeping its bookkeeping: the call is
+    // recorded when its assistant message is replayed, exactly as on restart.
+    const searches = new Map(searchCalls), reads = new Map(readCalls);
+    try {
+      return beforeCall(event);
+    } finally {
+      searchCalls.clear(); readCalls.clear();
+      for (const [key, value] of searches) searchCalls.set(key, value);
+      for (const [key, value] of reads) readCalls.set(key, value);
+    }
   });
   return replay;
 }

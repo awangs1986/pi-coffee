@@ -1,5 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+/** Invalid owner configuration: never silently replaced by native recovery. */
+export class ConfigError extends Error {}
+
 export function registerPolicy(pi: ExtensionAPI) {
   for (const [name, description] of Object.entries({
     "handoff-native-limit": "Native successes before Handoff owns the next boundary (default 3)",
@@ -9,7 +12,7 @@ export function registerPolicy(pi: ExtensionAPI) {
   const integer = (name: string, fallback: number, min: number, max: number) => {
     const raw = pi.getFlag(name) ?? String(fallback), n = Number(raw);
     if (!/^\d+$/.test(String(raw)) || !Number.isSafeInteger(n) || n < min || n > max)
-      throw new Error(`${name} must be an integer between ${min} and ${max}`);
+      throw new ConfigError(`${name} must be an integer between ${min} and ${max}`);
     return n;
   };
   return {

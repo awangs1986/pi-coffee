@@ -393,3 +393,36 @@ suite after this scorer update passed **66 tests in 6 files** (78.67 seconds).
 A fresh full paired live comparison was subsequently completed; see the latest
 rerun section in `conflictqa-derived-evaluation-2026-09-25.md`. Earlier scores
 remain unchanged.
+
+## Revision 4 acceptance (2026-09-26)
+
+Scope: owner decisions in SPEC revision 4 (visible native fallback, budget
+degradation, structured step actions) and the drift-probe question bank.
+
+**Recorded result:** `npm run check` passed: TypeScript build and **77 tests in
+7 files** (~94 seconds): 51 Pi conversation cases, 4 unchanged historical packet
+cases, 15 evaluator cases and 7 drift-probe fixture/scorer cases.
+
+| Change | Conversation evidence |
+| --- | --- |
+| Visible native fallback | Invalid state, unrepairable patch, tool-authority promotion, missing next-action authorization, deadline, stalled provider, headroom, journal storage failure and history/project change each produce exactly one native compaction plus a `Handoff failed … Used one native compaction` notice; the next boundary installs Handoff. Cancellation, invalid flags, unsettled delegated work, arriving input and corrupt journal still cancel. |
+| Project budget degradation | 1,100-file workspace hands off; the mentioned file is inline, unmentioned files are absent from synthesis input and listed by the inventory. |
+| Owner excerpting | ~216 KB owner message hands off; synthesis input ≤ 96 KiB with an `[EXCERPT: …]` marker; a quotation from the omitted middle validates against the full original; the omitted middle is read through the installed coverage anchor. |
+| Structured steps | Chinese instruction with `search_evidence`/`read_evidence`/`write` steps blocks a premature write, then allows it after search and verified read; a search target absent from the authorizing message is rejected. Existing guard, restart, paged-read and reconcile cases pass with structured fields. |
+
+Removed cases: "does not install a Task State that omits an explicitly required
+post-Handoff search" and "installs one evidence search per marker when the pending
+action combines two searches". They tested English lexical recognition, which
+revision 4 removed by owner decision. Omitted or misclassified steps are now
+measured by evaluation rather than detected by the program.
+
+No real-model run was made for revision 4. Earlier live results remain historical
+evidence for revision 3 behavior.
+
+Robustness follow-up (same day):
+
+| Change | Conversation evidence |
+| --- | --- |
+| Streaming commit confirmation | After a committed Handoff, a 9 MiB malformed line and a torn trailing line are appended; reopening confirms the commit without an error and accepts the next prompt. The previous implementation blocked recovery here. |
+| Incremental order guard | After search, verified read and write, an extension command navigates back to the Handoff entry; the next write to the protected path is blocked again. A mutation that kept stale state on branch change failed this case. |
+| Exact search | A differently cased query returns no user match and the exact-and-case-sensitive hint; the exact query matches, and a preview beginning next to an emoji does not start with a lone surrogate. |

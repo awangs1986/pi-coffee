@@ -40,6 +40,13 @@ npm pack
 - Source-bound evidence ordering is reconstructed from committed branch history.
   Latest user replacements can release old ordering through a quoted, persisted
   `handoff_reconcile` receipt; unrelated new tasks remain usable.
+- If Handoff preparation fails, the failure is shown and that boundary uses one
+  native compaction; the next boundary retries Handoff. Cancellation, invalid
+  flags, unsettled work and newly arriving input cancel the boundary instead.
+- Large workspaces and long pasted messages degrade (mentioned files inline,
+  long owner messages excerpted with recoverable anchors) rather than stopping.
+- Evidence-order checks use structured step fields (`action`/`target`), not the
+  wording or language of the instruction.
 - Preparation, retrieval and continuation have explicit budgets and failure states.
   Third-party asynchronous tools require the documented settlement event.
 - Scripted-provider acceptance demonstrates orchestration and source integrity.
@@ -47,7 +54,7 @@ npm pack
 
 ## Project documents
 
-- [Specification](SPEC.md): authoritative revision 3.
+- [Specification](SPEC.md): authoritative revision 4.
 - [Implementation and budgets](docs/plugin-design.md).
 - [Acceptance and TDD evidence](docs/plugin-acceptance.md).
 - [Domain vocabulary](CONTEXT.md).
@@ -56,6 +63,7 @@ npm pack
   [ConFiQA-derived live pilot](docs/confiqa-derived-pilot-2026-09-25.md).
 - [ConflictQA-derived complete-conversation comparison](docs/conflictqa-derived-evaluation-2026-09-25.md).
 - [Frozen-request diagnostic tests and product direction](docs/diagnostic-replay-2026-09-25.md).
+- [Drift probe question bank (designed, not yet run)](docs/drift-probe-design.md).
 - [Parent issue](http://192.168.100.1:3000/awangs/Context-handoff/issues/1).
 
 The old `src/context`, integration snapshots and four packet tests are historical
@@ -75,8 +83,8 @@ inherits Pi's current thinking strength, including `high`. Without budget flags,
 reasoning uses up to 16,384 output tokens / 120 seconds and thinking-off uses
 4,096 / 60 seconds. Model/context limits can reduce the output cap. A higher cap
 allows reasoning room; it does not enlarge the concise installed task state.
-Failed generation preserves previous context and reports the specific reason.
-There is no full-generation retry. A parsed but invalid state may receive one
+Failed generation reports the specific reason and uses one native compaction for
+that boundary. There is no full-generation retry. A parsed but invalid state may receive one
 restricted field patch within the same deadline, followed by complete validation.
 See [repair and ordering limits](docs/plugin-design.md#bounded-state-repair-and-durable-evidence-ordering).
 

@@ -1,6 +1,7 @@
 # Context-handoff
 
-Revision 3 — 2026-09-25. Status: implemented on the implementation branch; see docs/plugin-acceptance.md for bounded engineering evidence and remaining semantic limits.
+Revision 4 — 2026-09-26. Status: implemented on the implementation branch; see docs/plugin-acceptance.md for bounded engineering evidence and remaining semantic limits.
+Revision 4 adds three owner decisions (visible native fallback, budget degradation instead of stopping, structured step actions); see [Revision 4 owner decisions](#revision-4-owner-decisions-2026-09-26). Where they conflict with earlier text, revision 4 governs.
 This revision implements the owner's four requested corrections: configurable cadence, concise model state with program-owned evidence, model-aware generation, and automatic conversation acceptance. Revision 1's adaptation/import plan remains superseded.
 Tracking: [Issue #1](http://192.168.100.1:3000/awangs/Context-handoff/issues/1) (`ready-for-agent`).
 
@@ -114,7 +115,7 @@ claimed, and three compactions is a policy choice rather than a proven safe boun
 
 15. **Safe transition.** Prepare an immutable snapshot, validate its lineage/resources, durably establish the replacement context and then continue. Settle active tools and delegated work first; unknown action status is not permission to replay. New input, cancellation or changed project state during preparation must be reconciled before commit. Preserve tool-call/result pairing and provider-specific constraints in every outgoing request.
 
-16. **Recovery and failure.** Restart from the last unambiguous committed state. Do not claim success on cancellation, missing source, storage failure or uncertain commit. Prevent duplicate context installation and continuation. If safe recovery cannot fit the budget or resolve ambiguity, expose a concise error and stop automatic work. Do not secretly use a fourth native summary to conceal a failed Handoff or loop oversized requests.
+16. **Recovery and failure.** Restart from the last unambiguous committed state. Do not claim success on cancellation, missing source, storage failure or uncertain commit. Prevent duplicate context installation and continuation. If safe recovery cannot fit the budget or resolve ambiguity, expose a concise error and stop automatic work. Do not secretly use a fourth native summary to conceal a failed Handoff or loop oversized requests. *(Revision 4: a failed Handoff preparation now uses one visible native summary instead of stopping; see below.)*
 
 17. **User experience.** Routine successful transitions produce no new conversation, confirmation flow, handoff ceremony or request to continue. Internal diagnostics may record bounded metadata for inspection. Errors requiring user action are surfaced; silent failure does not satisfy the requirement for an unobtrusive transition.
 
@@ -251,7 +252,7 @@ general superiority claim.
    entire result. Truncation, provider failure and invalid JSON receive no retry.
    The patch inherits reasoning, shares the preparation deadline, uses at most
    8192 output tokens, and obeys the 96 KiB/context input budgets.
-3. Normalize the supported source-quoted two-marker search into two ordered
+3. *(Removed in revision 4; superseded by structured step actions.)* Normalize the supported source-quoted two-marker search into two ordered
    searches. Recognized explicit after-Handoff searches in an active task cannot
    be silently omitted or satisfied by earlier results. This is bounded lexical
    recognition, not general natural-language procedure verification.
@@ -277,3 +278,79 @@ general superiority claim.
    a requirement remains model interpretation. These changes do not prove
    general fidelity superiority, semantic completeness or resistance to a model
    deliberately misusing the reconciliation tool.
+
+
+## Revision 4 owner decisions (2026-09-26)
+
+The owner confirmed the cadence rationale: a small number of native summaries
+has acceptable distortion; serious drift appears after repeated compactions.
+Handoff therefore bounds the number of consecutive native summaries rather than
+replacing every compaction. Three changes follow.
+
+### 1. Visible native fallback instead of a stalled conversation
+
+A Handoff preparation failure (provider failure, deadline, truncation, invalid or
+unrepairable Task State, unknown tool settlement state, context headroom, storage
+of the preparation journal, history/project change during preparation) uses **one
+native summary compaction** for that boundary. The failure is reported visibly
+(`Handoff failed: … Used one native compaction instead`). The native success counts
+normally, so the next boundary retries Handoff. The failure is never presented as
+a successful Handoff.
+
+The compaction is still cancelled (no native summary) for owner decisions and
+transient conditions: cancellation, invalid configuration flags, blocked recovery
+state (corrupt journal), unsettled running tools or reported delegated work, and
+new user input arriving before or during preparation. Those boundaries retry
+Handoff later. Persistence failure of the native Handoff entry itself remains a
+blocking recovery state.
+
+### 2. Budget degradation instead of stopping
+
+- **Project observation.** Workspace size never blocks Handoff. Inline text is
+  bounded to 32 KiB (8 KiB per file) and prioritizes paths mentioned in the
+  conversation (most recent first), then recently modified files (changed or
+  untracked files only in repositories over 1,024 paths). Every snapshot includes
+  a `project:inventory` source listing file count, fingerprint scope and paths
+  without inline text; those files are explicitly unverified. The change
+  fingerprint hashes all files for inventories up to 1,024 paths (content within
+  8 MiB, size/mtime beyond); larger Git repositories use HEAD, working-tree status
+  and hashes of changed/untracked files. Non-Git inventories are bounded and
+  labelled partial when truncated.
+- **Owner messages.** All original user messages remain mandatory. When they do
+  not fit the preparation budget, long messages are excerpted with one uniform
+  cap (head and tail kept, the omitted middle marked with its byte count). The
+  synthesis input and installed summary list excerpted messages with recoverable
+  anchors. Validation of quotes, exact values and step authorization always uses
+  the full original. Preparation fails (and falls back) only if even 256-byte
+  excerpts cannot fit.
+
+### 3. Structured step actions instead of lexical recognition
+
+Steps carry `action` (`search_evidence`, `read_evidence`, `write`, `other`) and an
+optional `target`. `search_evidence` requires one exact query; `write` requires a
+workspace path. A guarded target must occur literally in the authorizing original
+user message. The evidence-order guard is installed only from these fields: pending
+`after_handoff` searches define markers; a pending `after_handoff` read requires
+verified original reads; pending writes are protected. When an evidence step is
+the first pending step, other tools are held during automatic continuation;
+otherwise only protected writes are held. Legacy steps without `action` normalize
+to `other` and receive no guard.
+
+The field patch may reopen a completed step only if its action is read-only
+(`search_evidence`/`read_evidence`). Removed: regular-expression recognition of
+English step text and user instructions (`Search handoff_evidence for …`, "after
+the fourth context maintenance boundary"), automatic splitting of combined
+searches, and the check that rejected a state omitting a lexically recognized
+post-Handoff search. An omitted or misclassified step is now a model
+interpretation error that evaluation must measure; it is not detected by the
+program. This removes evaluation-specific wording from product behavior and makes
+the guard independent of the user's language.
+
+### 4. Exact evidence search
+
+Original-evidence search is an exact, case-sensitive substring match, consistent
+with decision 10 (exact lexical indexes) and with the evidence-order guard, which
+compares markers exactly. A differently cased query returns no user match and a
+hint to retry with the exact spelling. Commit confirmation at startup tolerates
+torn trailing lines and does not impose a total session-size limit; the 8 MiB
+budget applies to preparation and evidence recovery only.

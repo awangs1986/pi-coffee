@@ -1,4 +1,4 @@
-import { registerPolicy } from "./config.js";
+import { registerPolicy, ConfigError } from "./config.js";
 import {
   load,
   save,
@@ -18,12 +18,20 @@ import {
   selectSources,
   evidenceIndex,
 } from "./task-state.js";
-import { atomicizeSearch, missingTimedSearch, omittedTimedSearch, repairTaskState } from "./state-repair.js";
+import { repairTaskState } from "./state-repair.js";
 import { registerOrderGuard } from "./order-guard.js";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+
+/**
+ * A transient condition (settling work, arriving input) or an owner decision
+ * (cancellation, invalid configuration). The compaction is cancelled and the
+ * next boundary retries. Every other preparation failure falls back to one
+ * native summary compaction with a visible warning.
+ */
+class Deferral extends Error {}
 
 export default function handoff(pi: ExtensionAPI) {
   registerEvidence(pi);
@@ -34,8 +42,8 @@ export default function handoff(pi: ExtensionAPI) {
   let recoveryBlocked = false;
   let unsafePersistence = false;
   let currentContext: ExtensionContext | undefined;
-  const report = (error: unknown) => {
-    const message = `Handoff stopped: ${String(error).slice(0, 500)}`;
+  const report = (error: unknown, prefix = "Handoff stopped") => {
+    const message = `${prefix}: ${String(error).slice(0, 500)}`;
     if (unsafePersistence) {
       currentContext?.ui.notify(message, "error");
       return;
@@ -154,7 +162,7 @@ export default function handoff(pi: ExtensionAPI) {
       });
   });
   const assertSettled = (entries: any[]) => {
-    if (activeTools.size) throw new Error("Tools have not settled");
+    if (activeTools.size) throw new Deferral("Tools have not settled; Handoff deferred");
     const work = new Map<string, any>();
     const known = new Set([
       "read",
@@ -172,7 +180,7 @@ export default function handoff(pi: ExtensionAPI) {
         known.add(e.data.tool);
       }
     if ([...work.values()].some((d) => d.status !== "settled"))
-      throw new Error("Delegated work has not settled");
+      throw new Deferral("Delegated work has not settled; Handoff deferred");
     for (const e of entries)
       if (
         e.type === "message" &&
@@ -205,19 +213,20 @@ export default function handoff(pi: ExtensionAPI) {
       }
     try {
       if (count < policy.nativeLimit()) return;
-      if (recoveryBlocked) throw new Error("Handoff recovery required");
       assertSettled(ctx.sessionManager.getBranch());
       const epoch = inputEpoch,
         leaf = ctx.sessionManager.getLeafId(),
         model = ctx.model,
         tools = JSON.stringify(pi.getActiveTools());
       if (ctx.hasPendingMessages())
-        throw new Error("New input is waiting; Handoff deferred");
+        throw new Deferral("New input is waiting; Handoff deferred");
       if (!ctx.model) throw new Error("Selected model unavailable");
       const generation = policy.generation(ctx.model);
       const history = historyFingerprint(ctx);
-      const project = projectSnapshot(ctx.cwd);
-      const originals = [...sources(event.branchEntries), ...project.sources];
+      const conversation = sources(event.branchEntries);
+      const hints = conversation.map((source) => source.text);
+      const project = projectSnapshot(ctx.cwd, hints);
+      const originals = [...conversation, ...project.sources];
       const selection = selectSources(
         originals,
         Math.min(
@@ -226,7 +235,6 @@ export default function handoff(pi: ExtensionAPI) {
         ),
       );
       const retiredOrders = retiredOrderSources(ctx);
-      const timingOriginals = originals.filter(source => !retiredOrders.has(source.id));
       const input = JSON.stringify({
         retiredEvidenceOrderSources: [...retiredOrders],
         coverage: selection.coverage,
@@ -235,6 +243,7 @@ export default function handoff(pi: ExtensionAPI) {
           revision: project.revision,
           observedAt: project.observedAt,
           verification: project.verification,
+          inventory: project.inventory,
         },
       });
       if (
@@ -270,30 +279,28 @@ export default function handoff(pi: ExtensionAPI) {
           .map((c) => c.text)
           .join(""),
       );
-      atomicizeSearch(generated, originals);
-      if (omittedTimedSearch(generated, timingOriginals))
-        throw Error("Required post-Handoff evidence search omitted from Task State");
       let state;
       try {
         state = validate(structuredClone(generated), originals);
-        if (missingTimedSearch(generated, timingOriginals))
-          throw Error("Required post-Handoff evidence search was marked complete before Handoff");
       } catch (error) {
-        state = await repairTaskState(generated, originals, error, ctx, generation, signal, timingOriginals);
+        try {
+          state = await repairTaskState(generated, originals, error, ctx, generation, signal);
+        } catch (repairError) {
+          if (signal.aborted) throw repairError;
+          throw new Error(`${error instanceof Error ? error.message : String(error)}; field repair failed: ${repairError instanceof Error ? repairError.message : String(repairError)}`);
+        }
       }
       signal.throwIfAborted();
       assertSettled(ctx.sessionManager.getBranch());
+      if (inputEpoch !== epoch || ctx.hasPendingMessages())
+        throw new Deferral("New input arrived during Handoff; pending input retained");
       if (
-        inputEpoch !== epoch ||
-        ctx.hasPendingMessages() ||
         ctx.sessionManager.getLeafId() !== leaf ||
         ctx.model !== model ||
         pi.getThinkingLevel() !== generation.thinking ||
         JSON.stringify(pi.getActiveTools()) !== tools
       )
-        throw new Error(
-          "Conversation changed during Handoff; pending input retained",
-        );
+        throw new Error("Conversation changed during Handoff");
       if (historyFingerprint(ctx) !== history)
         throw new Error("Original history changed during Handoff");
       if (projectSnapshot(ctx.cwd).fingerprint !== project.fingerprint)
@@ -309,6 +316,15 @@ export default function handoff(pi: ExtensionAPI) {
           recovery: "Read current workspace files for current facts. Search handoff_evidence for recorded historical project snapshots.",
         },
         state,
+        ...(selection.truncated.length ? {
+          coverage: {
+            excerptedOwnerMessages: selection.truncated.slice(0, 16).map(({ id, originalBytes }) => ({
+              anchor: `${ctx.sessionManager.getSessionId()}/${id}/${originals.find(o => o.id === id)!.hash}`,
+              bytes: originalBytes,
+            })),
+            note: "These original user messages were excerpted during preparation. Read them with handoff_evidence_read before relying on details absent from this state.",
+          },
+        } : {}),
         provenance:
           "Source identities verified by program; supplied quotations checked literally. Claim meanings remain model interpretations.",
         evidence: evidenceIndex(
@@ -366,8 +382,15 @@ export default function handoff(pi: ExtensionAPI) {
         },
       };
     } catch (error) {
-      report(error);
-      return { cancel: true };
+      if (event.signal.aborted || recoveryBlocked || error instanceof Deferral || error instanceof ConfigError) {
+        report(error);
+        return { cancel: true };
+      }
+      // Owner policy (2026-09-26): a few native summaries are acceptable, a
+      // stalled conversation is not. Use one native compaction now and retry
+      // Handoff at the next boundary. The failure stays visible.
+      report(`${String(error).slice(0, 400)}. Used one native compaction instead; Handoff will retry at the next boundary.`, "Handoff failed");
+      return;
     }
   });
   pi.on("session_compact_failed", (event, ctx) => {
