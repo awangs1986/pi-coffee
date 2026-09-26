@@ -57,14 +57,15 @@ Settings:
 | `PI_COFFEE_HOST_BIND` / `PI_COFFEE_HOST_PORT` | `127.0.0.1` / `8788` | host | private Host transport bind |
 | `PI_COFFEE_HOST_TOKEN` | unset | web, host | shared Host bearer token; **required** when the Host is not on loopback |
 | `PI_COFFEE_GITEA_URL` / `PI_COFFEE_GITEA_CLIENT_ID` / `PI_COFFEE_GITEA_CLIENT_SECRET` | unset | web | Gitea OAuth2 application (ADR-0010). Setting any of them turns the login on; the shell and `/ws` then require a Gitea session cookie |
-| `PI_COFFEE_ALLOWED_USERS` | unset | web | comma-separated Gitea login names admitted; **required** with Gitea login. Removing a name logs that person out |
-| `PI_COFFEE_PUBLIC_URL` | derived from the request | web | origin browsers use; the OAuth redirect URI is `<PUBLIC_URL>/auth/callback` and must match the Gitea app |
-| `PI_COFFEE_COOKIE_SECRET` | random per start | web | HMAC key for the session cookie; set it so logins survive a Web Server restart |
+| `PI_COFFEE_ALLOWED_USERS` | unset | web | comma-separated Gitea login names admitted; **required** with Gitea login. Removing a name (and restarting the Web Server) logs that person out |
+| `PI_COFFEE_PUBLIC_URL` | unset | web | origin browsers use; **required** with Gitea login (never derived from request headers). The OAuth redirect URI is `<PUBLIC_URL>/auth/callback` and must match the Gitea app |
+| `PI_COFFEE_COOKIE_SECRET` | random per start | web | HMAC key for the session cookie; set it so logins survive a Web Server restart. Rotating it invalidates every cookie at once |
 | `PI_COFFEE_DEFAULT_USER` | unset | web | identity forwarded to the Host when Gitea login is off (local smoke of the per-user layout) |
+| `PI_COFFEE_REQUIRE_USER` | off | host | refuse Host connections without a forwarded user name; set it on every multi-user deployment |
 | `PI_COFFEE_WORKDIR` | current directory | host | Pi working directory root; a logged-in user `alice` works in `<WORKDIR>/alice` |
 | `PI_COFFEE_AGENT_DIR` | Pi default | host | Pi config directory (`models.json`, provider login) — shared by every user in the VM |
 | `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory root — the durable conversation store the sidebar and history are served from; per user under `<SESSION_DIR>/<user>` |
-| `PI_COFFEE_IDLE_TIMEOUT_MS` | `600000` | host | stop a Pi process with no browser attached and nothing running; conversations resume from the store |
+| `PI_COFFEE_IDLE_TIMEOUT_MS` | `600000` | host | stop a Pi process (or, under Codex, a user's `codex app-server` once all their sessions are closed) after this long with no browser attached and nothing running; conversations resume from the store |
 | `PI_COFFEE_TRANSFER_BIND` / `PI_COFFEE_TRANSFER_PORT` | `0.0.0.0` / `53317` | host | LocalSend v2 file transfer served on the User VM's LAN interface; `off` disables |
 | `PI_COFFEE_TRANSFER_ADVERTISE` | first LAN IPv4 | host | address browsers use to reach the transfer port |
 | `PI_COFFEE_MAX_FILE_BYTES` / `PI_COFFEE_MAX_BATCH_BYTES` | 256 MiB / 1 GiB | host | upload limits |

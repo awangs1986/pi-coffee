@@ -108,6 +108,36 @@ describe("Codex app-server adapter", () => {
     expect(state.messageCount).toBe(2);
   });
 
+  it("follows thread/list cursors so old conversations stay in the sidebar", async () => {
+    const b = setup();
+    const factory = b.factory();
+    // Fake pages at the adapter's page size; 3 pages worth of empty threads plus one that spoke.
+    const total = 250;
+    for (let i = 0; i < total; i += 1) await (await factory.create({ sessionId: `p-${i}` })).stop();
+    expect((await factory.list()).length).toBe(total);
+  }, 30000);
+
+  it("rejects list() when the app-server is gone instead of pretending the store is empty", async () => {
+    const b = setup();
+    writeFileSync(b.cliPath, "#!/bin/sh\nexit 3\n");
+    const factory = b.factory();
+    await expect(factory.list()).rejects.toThrow(/codex app-server/);
+  });
+
+  it("stops the app-server once every session has been closed for the idle period", async () => {
+    const b = setup();
+    const factory = new CodexSessionFactory({ cwd: b.cwd, cliPath: b.cliPath, codexHome: b.codexHome, idleTimeoutMs: 50 });
+    b.factories.push(factory);
+    const session = await factory.create({ sessionId: "idle-1" });
+    expect(factory.serverRunning).toBe(true);
+    await session.stop();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(factory.serverRunning).toBe(false);
+    // Next use starts a fresh server transparently.
+    expect((await factory.list()).map((entry) => entry.id)).toEqual(["idle-1"]);
+    expect(factory.serverRunning).toBe(true);
+  });
+
   it("lists only threads of its own working directory", async () => {
     const b = setup();
     const alice = b.factory();

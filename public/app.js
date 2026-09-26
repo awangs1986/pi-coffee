@@ -442,7 +442,12 @@ async function whoAmI() {
 }
 ui.userBtn.addEventListener('click', () => {
   if (!currentUser) return;
-  if (confirm('退出 PI Coffee 的登录？User VM 里正在运行的任务不会被打断。')) location.href = '/auth/logout';
+  if (!confirm('退出 PI Coffee 的登录？User VM 里正在运行的任务不会被打断。')) return;
+  const form = document.createElement('form');
+  form.method = 'post';
+  form.action = '/auth/logout';
+  document.body.appendChild(form);
+  form.submit();
 });
 
 function connect() {

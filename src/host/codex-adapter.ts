@@ -1,11 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
 import type {
   CommandInfo,
   ExtensionInfo,
-  HistoryEntry,
   ImageInput,
   JsonValue,
   SessionState,
@@ -20,6 +17,10 @@ import {
   type PiSessionFactory,
   type PiSessionListing,
 } from "./pi-adapter.js";
+import { CodexAppServer, type Json, type Obj, type PendingServerRequest } from "./codex/rpc.js";
+import { countMessages, projectTurns, toIso, toolCallOf, toolResultOf, toUserInput } from "./codex/translate.js";
+
+export { projectTurns } from "./codex/translate.js";
 
 /**
  * Codex CLI behind the same seam as the original Pi (ADR-0011).
@@ -34,8 +35,7 @@ import {
  *
  * Login is Codex's own (`codex login` once in the VM, credentials in
  * `CODEX_HOME`); every user's server process shares it.
- */
-export interface CodexSessionFactoryOptions {
+ */export interface CodexSessionFactoryOptions {
   /** The user's working directory; also the `thread/list` filter. */
   cwd: string;
   /** `codex` executable; `codex` on PATH by default. */
@@ -51,26 +51,19 @@ export interface CodexSessionFactoryOptions {
   /** Extra `codex app-server` arguments (e.g. `-c key=value`). */
   args?: string[];
   env?: Record<string, string>;
-  /** Where PI Coffee session ids that predate their Codex thread are remembered. */
+  /** Where PI Coffee session ids that predate their Codex thread are remembered (keep it beside the session store, not in the agent's cwd). */
   mappingFile?: string;
+  /** Stop the user's app-server after this long with no open session; 0 keeps it for the Host's lifetime. */
+  idleTimeoutMs?: number;
   clientName?: string;
   clientVersion?: string;
 }
 
-interface RpcError { code?: number; message: string }
-
-type Json = JsonValue;
-type Obj = { [key: string]: Json };
-
-/** A server-initiated request we owe an answer to (approvals). */
-interface PendingServerRequest {
-  id: Json;
-  method: string;
-  params: Obj;
-}
-
-/** Codex thread ids are UUIDs; anything else is a PI Coffee id that still needs a thread. */
 const UUID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const LIST_PAGE_SIZE = 100;
+/** Safety stop for a server that keeps handing out cursors (10k threads). */
+const MAX_LIST_PAGES = 100;
 
 export class CodexSessionFactory implements PiSessionFactory {
   private readonly options: CodexSessionFactoryOptions;
@@ -78,13 +71,21 @@ export class CodexSessionFactory implements PiSessionFactory {
   private readonly mappingFile: string;
   /** PI Coffee session id → Codex thread id, for conversations the Host named before Codex did. */
   private mapping?: Map<string, string>;
+  private readonly live = new Set<CodexSession>();
+  private idleTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: CodexSessionFactoryOptions) {
     this.options = options;
     this.mappingFile = options.mappingFile ?? join(options.cwd, ".pi-coffee", "codex-threads.json");
   }
 
+  /** Whether this user's app-server process is currently up (diagnostics and tests). */
+  get serverRunning(): boolean {
+    return this.server?.alive === true;
+  }
+
   private async connection(): Promise<CodexAppServer> {
+    this.cancelIdleStop();
     if (this.server && this.server.alive) return this.server;
     const args = ["app-server", ...(this.options.args ?? [])];
     const env: Record<string, string | undefined> = {
@@ -121,16 +122,26 @@ export class CodexSessionFactory implements PiSessionFactory {
     await writeFile(this.mappingFile, JSON.stringify(Object.fromEntries(mapping), null, 2));
   }
 
-  /** Threads recorded under this user's cwd, newest first. */
+  /** Every thread recorded under this user's cwd, following `nextCursor` to the end. */
   private async threads(): Promise<Obj[]> {
     const server = await this.connection();
-    const result = await server.request("thread/list", {
-      cwd: this.options.cwd,
-      limit: 200,
-      sortKey: "updated_at",
-      sourceKinds: ["appServer", "vscode", "cli", "exec"],
-    }) as Obj;
-    return Array.isArray(result.data) ? (result.data as Obj[]) : [];
+    const threads: Obj[] = [];
+    let cursor: Json | undefined;
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const result = await server.request("thread/list", {
+        cwd: this.options.cwd,
+        limit: LIST_PAGE_SIZE,
+        sortKey: "updated_at",
+        sourceKinds: ["appServer", "vscode", "cli", "exec"],
+        ...(cursor === undefined ? {} : { cursor }),
+      }) as Obj;
+      const data = Array.isArray(result.data) ? (result.data as Obj[]) : [];
+      threads.push(...data);
+      const next = result.nextCursor;
+      if (data.length === 0 || next === null || next === undefined || next === cursor) break;
+      cursor = next;
+    }
+    return threads;
   }
 
   async create(options: { sessionId: string }): Promise<PiSession> {
@@ -161,16 +172,31 @@ export class CodexSessionFactory implements PiSessionFactory {
       approvalPolicy: this.options.approvalPolicy ?? "never",
     });
     session.absorbThread(thread);
+    this.live.add(session);
+    session.onStop = () => this.release(session);
     return session;
   }
 
+  private release(session: CodexSession): void {
+    this.live.delete(session);
+    if (this.live.size > 0 || !this.options.idleTimeoutMs) return;
+    this.cancelIdleStop();
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined;
+      if (this.live.size === 0) void this.close();
+    }, this.options.idleTimeoutMs);
+    this.idleTimer.unref?.();
+  }
+
+  private cancelIdleStop(): void {
+    if (this.idleTimer === undefined) return;
+    clearTimeout(this.idleTimer);
+    this.idleTimer = undefined;
+  }
+
+  /** Rejects when Codex cannot answer: an empty sidebar must mean "no conversations", not "app-server down". */
   async list(): Promise<PiSessionListing[]> {
-    let threads: Obj[];
-    try {
-      threads = await this.threads();
-    } catch {
-      return [];
-    }
+    const threads = await this.threads();
     const mapping = await this.loadMapping();
     const reverse = new Map<string, string>();
     for (const [sessionId, threadId] of mapping) reverse.set(threadId, sessionId);
@@ -185,7 +211,8 @@ export class CodexSessionFactory implements PiSessionFactory {
           ...(name === undefined ? {} : { name }),
           createdAt: toIso(thread.createdAt),
           updatedAt: toIso(thread.updatedAt),
-          // thread/list carries no counts; a preview means the user has spoken.
+          // thread/list carries no message counts; the sidebar only needs
+          // "empty or not", so this is 0 / 1, never a real count.
           messageCount: preview.length > 0 ? 1 : 0,
           preview,
         };
@@ -208,8 +235,10 @@ export class CodexSessionFactory implements PiSessionFactory {
 
   /** Stop the user's app-server; sessions resume from Codex's rollouts next time. */
   async close(): Promise<void> {
-    await this.server?.stop();
+    this.cancelIdleStop();
+    const server = this.server;
     this.server = undefined;
+    await server?.stop();
   }
 }
 
@@ -222,6 +251,8 @@ interface CodexSessionSettings {
 class CodexSession implements PiSession {
   private readonly server: CodexAppServer;
   readonly threadId: string;
+  /** Set by the factory so it can count open sessions. */
+  onStop?: () => void;
   private readonly listeners = new Set<(event: unknown) => void>();
   private readonly unsubscribe: () => void;
   private model?: string;
@@ -403,9 +434,7 @@ class CodexSession implements PiSession {
     if (!pending) return;
     this.pendingApprovals.delete(response.id);
     const approved = response.confirmed === true && response.cancelled !== true;
-    const legacy = pending.method === "execCommandApproval" || pending.method === "applyPatchApproval";
-    const decision = legacy ? (approved ? "approved" : "denied") : (approved ? "accept" : "decline");
-    this.server.respond(pending.id, { decision });
+    this.server.respond(pending.id, { decision: decisionFor(pending.method, approved) });
   }
 
   async stop(): Promise<void> {
@@ -414,13 +443,13 @@ class CodexSession implements PiSession {
     this.unsubscribe();
     // Decline whatever Codex is still waiting on so its turn can end.
     for (const pending of this.pendingApprovals.values()) {
-      const legacy = pending.method === "execCommandApproval" || pending.method === "applyPatchApproval";
-      this.server.respond(pending.id, { decision: legacy ? "denied" : "decline" });
+      this.server.respond(pending.id, { decision: decisionFor(pending.method, false) });
     }
     this.pendingApprovals.clear();
     if (this.server.alive) {
       await this.server.request("thread/unsubscribe", { threadId: this.threadId }).catch(() => undefined);
     }
+    this.onStop?.();
   }
 
   // ---- Codex → Pi event translation -----------------------------------
@@ -517,7 +546,7 @@ class CodexSession implements PiSession {
       }
       case "plan": {
         const text = typeof item.text === "string" ? item.text : "";
-        if (text.trim().length > 0) this.emit({ type: "message_end", message: { role: "custom", display: true, content: [{ type: "text", text: `计划：\n${text}` }] } });
+        if (text.trim().length > 0) this.emit({ type: "message_end", message: { role: "custom", display: true, content: [{ type: "text", text }] } });
         return;
       }
       case "contextCompaction":
@@ -579,336 +608,12 @@ class CodexSession implements PiSession {
   }
 }
 
-// ---- JSON-RPC over stdio ---------------------------------------------------
-
-interface ThreadSubscriber {
-  notification: (method: string, params: Obj) => void;
-  /** Return true when handled; unhandled server requests are declined generically. */
-  request: (request: PendingServerRequest) => boolean;
-  exit: () => void;
-}
-
-interface CodexAppServerOptions {
-  cliPath: string;
-  args: string[];
-  cwd: string;
-  env: Record<string, string>;
-}
-
-/** One `codex app-server` child; requests are multiplexed by id, events routed by threadId. */
-export class CodexAppServer {
-  private readonly options: CodexAppServerOptions;
-  private child?: ChildProcessWithoutNullStreams;
-  private nextId = 1;
-  private readonly pending = new Map<number, { resolve: (value: Json) => void; reject: (error: Error) => void }>();
-  private readonly subscribers = new Map<string, Set<ThreadSubscriber>>();
-  private exited = false;
-  private stderrTail = "";
-
-  constructor(options: CodexAppServerOptions) {
-    this.options = options;
-  }
-
-  get alive(): boolean {
-    return this.child !== undefined && !this.exited;
-  }
-
-  async start(clientName: string, clientVersion: string): Promise<void> {
-    await mkdir(this.options.cwd, { recursive: true });
-    const child = spawn(this.options.cliPath, this.options.args, {
-      cwd: this.options.cwd,
-      env: this.options.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    this.child = child;
-    child.stderr.on("data", (chunk: Buffer) => {
-      this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-4000);
-    });
-    const lines = createInterface({ input: child.stdout });
-    lines.on("line", (line) => this.onLine(line));
-    const exit = new Promise<never>((_, reject) => {
-      child.once("error", (error) => { this.onExit(`codex app-server failed to start: ${error.message}`); reject(error); });
-      child.once("exit", (code, signal) => {
-        const reason = `codex app-server exited (${signal ?? code}): ${this.stderrTail.trim().split("\n").at(-1) ?? ""}`;
-        this.onExit(reason);
-        reject(new Error(reason));
-      });
-    });
-    exit.catch(() => undefined);
-    await Promise.race([
-      this.request("initialize", { clientInfo: { name: clientName, title: "PI Coffee", version: clientVersion } }),
-      exit,
-    ]);
-    this.notify("initialized", {});
-  }
-
-  request(method: string, params: Json): Promise<Json> {
-    const child = this.child;
-    if (!child || this.exited) return Promise.reject(new Error("codex app-server is not running"));
-    const id = this.nextId++;
-    return new Promise<Json>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      child.stdin.write(`${JSON.stringify({ id, method, params })}\n`, (error) => {
-        if (error) {
-          this.pending.delete(id);
-          reject(error);
-        }
-      });
-    });
-  }
-
-  notify(method: string, params: Json): void {
-    this.child?.stdin.write(`${JSON.stringify({ method, params })}\n`);
-  }
-
-  respond(id: Json, result: Json): void {
-    this.child?.stdin.write(`${JSON.stringify({ id, result })}\n`);
-  }
-
-  subscribe(threadId: string, subscriber: ThreadSubscriber): () => void {
-    let set = this.subscribers.get(threadId);
-    if (!set) {
-      set = new Set();
-      this.subscribers.set(threadId, set);
-    }
-    set.add(subscriber);
-    return () => {
-      set!.delete(subscriber);
-      if (set!.size === 0) this.subscribers.delete(threadId);
-    };
-  }
-
-  async stop(): Promise<void> {
-    const child = this.child;
-    if (!child || this.exited) return;
-    const gone = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    child.stdin.end();
-    const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
-    child.kill("SIGTERM");
-    await gone;
-    clearTimeout(timer);
-  }
-
-  private onLine(line: string): void {
-    let message: Obj;
-    try {
-      const parsed = JSON.parse(line) as Json;
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return;
-      message = parsed;
-    } catch {
-      return; // Codex writes only JSON to stdout; anything else is noise.
-    }
-    const id = message.id;
-    if (typeof message.method === "string") {
-      const params = (typeof message.params === "object" && message.params !== null && !Array.isArray(message.params) ? message.params : {}) as Obj;
-      if (id === undefined || id === null) {
-        this.dispatchNotification(message.method, params);
-      } else {
-        this.dispatchServerRequest({ id, method: message.method, params });
-      }
-      return;
-    }
-    if (typeof id === "number") {
-      const waiter = this.pending.get(id);
-      if (!waiter) return;
-      this.pending.delete(id);
-      if (message.error !== undefined && message.error !== null) {
-        const error = message.error as Partial<RpcError>;
-        waiter.reject(new Error(typeof error.message === "string" ? error.message : "Codex RPC error"));
-      } else {
-        waiter.resolve(message.result ?? null);
-      }
-    }
-  }
-
-  private dispatchNotification(method: string, params: Obj): void {
-    const threadId = typeof params.threadId === "string"
-      ? params.threadId
-      : typeof (params.thread as Obj | undefined)?.id === "string" ? String((params.thread as Obj).id) : undefined;
-    if (threadId === undefined) return;
-    for (const subscriber of this.subscribers.get(threadId) ?? []) {
-      try { subscriber.notification(method, params); } catch { /* one bad listener must not break the stream */ }
-    }
-  }
-
-  private dispatchServerRequest(request: PendingServerRequest): void {
-    const threadId = typeof request.params.threadId === "string" ? request.params.threadId : undefined;
-    const handled = [...(threadId === undefined ? [] : this.subscribers.get(threadId) ?? [])].some((subscriber) => {
-      try { return subscriber.request(request); } catch { return false; }
-    });
-    if (handled) return;
-    // Nobody can answer: refuse rather than hang Codex.
-    const legacy = request.method === "execCommandApproval" || request.method === "applyPatchApproval";
-    if (request.method.endsWith("requestApproval") || legacy) {
-      this.respond(request.id, { decision: legacy ? "denied" : "decline" });
-    } else if (request.method === "item/tool/requestUserInput") {
-      this.respond(request.id, { answers: {} });
-    } else {
-      this.child?.stdin.write(`${JSON.stringify({ id: request.id, error: { code: -32601, message: `PI Coffee cannot answer ${request.method}` } })}\n`);
-    }
-  }
-
-  private onExit(reason = "codex app-server exited"): void {
-    if (this.exited) return;
-    this.exited = true;
-    for (const waiter of this.pending.values()) waiter.reject(new Error(reason));
-    this.pending.clear();
-    for (const set of this.subscribers.values()) for (const subscriber of set) {
-      try { subscriber.exit(); } catch { /* ignore */ }
-    }
-  }
-}
-
-// ---- projections -----------------------------------------------------------
-
-function toUserInput(text: string, images?: ImageInput[]): Json[] {
-  const input: Json[] = [{ type: "text", text, text_elements: [] }];
-  for (const image of images ?? []) {
-    input.push({ type: "image", url: `data:${image.mimeType};base64,${image.data}` });
-  }
-  return input;
-}
-
-function toIso(value: Json | undefined): string {
-  return typeof value === "number" && Number.isFinite(value) ? new Date(value * 1000).toISOString() : new Date(0).toISOString();
-}
-
-function countMessages(turns: Obj[]): number {
-  let count = 0;
-  for (const turn of turns) {
-    for (const item of Array.isArray(turn.items) ? (turn.items as Obj[]) : []) {
-      if (item.type === "userMessage" || item.type === "agentMessage") count += 1;
-    }
-  }
-  return count;
-}
-
-/** Map a Codex item to the tool name/args the shell knows how to summarise. */
-function toolCallOf(item: Obj): { name: string; args: Obj } | undefined {
-  switch (item.type) {
-    case "commandExecution":
-      return { name: "bash", args: { command: String(item.command ?? ""), ...(typeof item.cwd === "string" ? { cwd: item.cwd } : {}) } };
-    case "fileChange": {
-      const changes = Array.isArray(item.changes) ? (item.changes as Obj[]) : [];
-      const paths = changes.map((change) => String(change.path ?? "")).filter((path) => path.length > 0);
-      return { name: "edit", args: { path: paths.join(", ") } };
-    }
-    case "mcpToolCall":
-      return { name: `${String(item.server ?? "mcp")}.${String(item.tool ?? "tool")}`, args: asObj(item.arguments) };
-    case "dynamicToolCall":
-      return { name: String(item.tool ?? "tool"), args: asObj(item.arguments) };
-    case "webSearch":
-      return { name: "web_search", args: { query: String(item.query ?? "") } };
-    case "imageView":
-      return { name: "read", args: { path: String(item.path ?? "") } };
-    case "collabAgentToolCall":
-      return { name: "subagent", args: { tool: String(item.tool ?? ""), ...(typeof item.prompt === "string" ? { prompt: item.prompt } : {}) } };
-    default:
-      return undefined;
-  }
-}
-
-function toolResultOf(item: Obj): { result: Json; isError: boolean } {
-  const text = (value: string) => ({ content: [{ type: "text", text: value }] });
-  switch (item.type) {
-    case "commandExecution": {
-      const output = typeof item.aggregatedOutput === "string" ? item.aggregatedOutput : "";
-      const exitCode = typeof item.exitCode === "number" ? item.exitCode : undefined;
-      const failed = item.status === "failed" || item.status === "declined" || (exitCode !== undefined && exitCode !== 0);
-      const suffix = exitCode !== undefined && exitCode !== 0 ? `\n[exit ${exitCode}]` : item.status === "declined" ? "\n[declined]" : "";
-      return { result: text(`${output}${suffix}`), isError: failed };
-    }
-    case "fileChange": {
-      const changes = Array.isArray(item.changes) ? (item.changes as Obj[]) : [];
-      const patch = changes.map((change) => {
-        const path = String(change.path ?? "");
-        const diff = typeof change.diff === "string" ? change.diff : "";
-        return diff.startsWith("---") || diff.startsWith("diff ") ? diff : `--- a/${path}\n+++ b/${path}\n${diff}`;
-      }).join("\n");
-      const failed = item.status === "failed" || item.status === "declined";
-      return {
-        result: { content: [{ type: "text", text: failed ? `修改未应用（${String(item.status)}）` : `已修改 ${changes.length} 个文件` }], details: { patch } },
-        isError: failed,
-      };
-    }
-    case "mcpToolCall": {
-      const error = item.error as Obj | null | undefined;
-      if (error && typeof error.message === "string") return { result: text(error.message), isError: true };
-      return { result: text(stringify(item.result)), isError: item.status === "failed" };
-    }
-    case "dynamicToolCall": {
-      const parts = Array.isArray(item.contentItems) ? (item.contentItems as Obj[]) : [];
-      const joined = parts.map((part) => (typeof part.text === "string" ? part.text : stringify(part))).join("\n");
-      return { result: text(joined), isError: item.success === false || item.status === "failed" };
-    }
-    case "webSearch":
-      return { result: text(stringify(item.action ?? item)), isError: false };
-    default:
-      return { result: text(stringify(item)), isError: false };
-  }
-}
-
-/** Completed Codex turns → the shell's history entries. */
-export function projectTurns(turns: Obj[]): HistoryEntry[] {
-  const entries: HistoryEntry[] = [];
-  for (const turn of turns) {
-    const at = typeof turn.startedAt === "number" ? toIso(turn.startedAt) : undefined;
-    for (const item of Array.isArray(turn.items) ? (turn.items as Obj[]) : []) {
-      const id = String(item.id ?? `${entries.length}`);
-      const stamp = at === undefined ? {} : { at };
-      switch (item.type) {
-        case "userMessage": {
-          const content = Array.isArray(item.content) ? (item.content as Obj[]) : [];
-          const text = content.filter((part) => part.type === "text").map((part) => String(part.text ?? "")).join("\n");
-          const imageCount = content.filter((part) => part.type === "image" || part.type === "localImage").length;
-          entries.push({ kind: "user", id, ...stamp, text, ...(imageCount > 0 ? { imageCount } : {}) });
-          break;
-        }
-        case "agentMessage":
-          entries.push({ kind: "assistant", id, ...stamp, text: String(item.text ?? "") });
-          break;
-        case "plan": {
-          const text = String(item.text ?? "");
-          if (text.trim()) entries.push({ kind: "note", id, ...stamp, text: `计划：\n${text}` });
-          break;
-        }
-        case "contextCompaction":
-          entries.push({ kind: "note", id, ...stamp, text: "已压缩上下文。" });
-          break;
-        default: {
-          const tool = toolCallOf(item);
-          if (!tool) break;
-          const outcome = toolResultOf(item);
-          const result = outcome.result as Obj;
-          const content = Array.isArray(result.content) ? (result.content as Obj[]) : [];
-          const details = result.details as Obj | undefined;
-          entries.push({
-            kind: "tool",
-            id,
-            ...stamp,
-            name: tool.name,
-            args: tool.args,
-            result: content.map((part) => String(part.text ?? "")).join("\n"),
-            ...(outcome.isError ? { isError: true } : {}),
-            ...(typeof details?.patch === "string" && details.patch.length > 0 ? { diff: details.patch } : {}),
-          });
-        }
-      }
-    }
-    if (turn.status === "failed") {
-      const error = turn.error as Obj | null | undefined;
-      entries.push({ kind: "note", id: `${String(turn.id)}-error`, ...(at === undefined ? {} : { at }), text: `模型调用失败：${typeof error?.message === "string" ? error.message : "未知错误"}` });
-    }
-  }
-  return entries;
-}
-
-function asObj(value: Json | undefined): Obj {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : { value: value ?? null };
-}
-
-function stringify(value: Json | undefined): string {
-  if (value === undefined || value === null) return "";
-  if (typeof value === "string") return value;
-  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+/**
+ * Approval answers differ between the current requestApproval requests
+ * and the legacy execCommandApproval / applyPatchApproval ones.
+ */
+function decisionFor(method: string, approved: boolean): string {
+  const legacy = method === "execCommandApproval" || method === "applyPatchApproval";
+  if (legacy) return approved ? "approved" : "denied";
+  return approved ? "accept" : "decline";
 }

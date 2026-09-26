@@ -218,8 +218,11 @@ describe("Gitea login on the Web Server (ADR-0004 / ADR-0010)", () => {
     expect(decodeServerFrame(aliceList)).toMatchObject({ type: "sessions", sessions: [{ id: aliceOpened.sessionId }] });
     expect([...perUser.keys()]).toEqual(["alice", "bob"]);
 
-    // Logout clears the cookie.
-    const logout = await fetch(`${webUrl}/auth/logout`, { headers: { cookie: alice.cookie! }, redirect: "manual" });
+    // Logout: a GET only shows the confirmation (no cross-site logout); POST clears the cookie.
+    const logoutPage = await fetch(`${webUrl}/auth/logout`, { headers: { cookie: alice.cookie! }, redirect: "manual" });
+    expect(logoutPage.status).toBe(200);
+    expect(logoutPage.headers.get("set-cookie")).toBeNull();
+    const logout = await fetch(`${webUrl}/auth/logout`, { method: "POST", headers: { cookie: alice.cookie! }, redirect: "manual" });
     expect(logout.status).toBe(303);
     expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
 
