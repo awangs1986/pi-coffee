@@ -3,7 +3,8 @@
 // local value is which conversation this browser last displayed.
 import {
   activityGroup, assistantNode, el, fillToolCard, formatBytes, installCopyHandlers,
-  noteNode, relativeTime, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
+  noteNode, patchSummary, relativeTime, renderPatchText, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
+  copyText,
 } from './render.js';
 
 const ACTIVE_KEY_BASE = 'pi-coffee.active.v2';
@@ -13,6 +14,7 @@ const ui = {
   app: $('#app'), thread: $('#thread'), scroller: $('#scroller'), toBottom: $('#to-bottom'),
   prompt: $('#prompt'), send: $('#send'), stop: $('#stop'), status: $('#status'), dot: $('#dot'),
   title: $('#title'), topbarState: $('#topbar-state'), stats: $('#stats'), sessionMeta: $('#session-meta'),
+  turnDiffBtn: $('#turn-diff'), diffModal: $('#diff-modal'), diffBody: $('#diff-body'), diffSub: $('#diff-sub'), diffClose: $('#diff-close'), diffCopy: $('#diff-copy'),
   sessionList: $('#session-list'), search: $('#search'), queue: $('#queue'), slash: $('#slash'),
   attachments: $('#attachments'), attach: $('#attach'), file: $('#file'), hint: $('#hint'),
   model: $('#model'), thinking: $('#thinking'), modeWrap: $('#mode-wrap'), mode: $('#mode'),
@@ -30,6 +32,9 @@ const ui = {
 // ---------- state ----------
 let socket, reconnectTimer;
 let retryNote;
+let turnDiff = '';            // cumulative unified diff of the current / last run (agents that report it)
+let finishedWhileHidden = false;
+const pendingToolFills = new Set();
 let connected = false, opened = false, streaming = false;
 let activeId = null;           // restored per login in boot()
 let currentUser = null;        // Gitea login name, or null when the Web Server runs without login
@@ -296,8 +301,8 @@ function renderHeader() {
   ui.title.textContent = title;
   ui.title.disabled = !activeId;
   ui.sessionMeta.textContent = activeId ? activeId.slice(0, 8) : '';
-  document.title = (activeId && title !== '新对话' ? title + ' · ' : '') + 'PI Coffee';
-  ui.topbarState.innerHTML = streaming ? '<span class="dot busy"></span>Pi 正在工作…' : '';
+  document.title = (finishedWhileHidden ? '✅ ' : '') + (activeId && title !== '新对话' ? title + ' · ' : '') + 'PI Coffee';
+  ui.topbarState.innerHTML = streaming ? '<span class="dot busy"></span>正在工作…' : '';
   renderStats();
 }
 function fmtTokens(n) {
@@ -513,6 +518,7 @@ function handleFrame(frame, ws) {
       resetThread();
       clearExtensionUi();
       resetTransfers();
+      setTurnDiff('');
       streaming = false;
       setStreaming(Boolean(frame.state && frame.state.isStreaming));
       renderHeader();
@@ -570,7 +576,17 @@ function handleFrame(frame, ws) {
 
 function handleEvent(event) {
   const type = event.type;
-  if (type === 'agent_start') { setStreaming(true); showThinking(true); currentAssistant = undefined; retryNote = undefined; return; }
+  if (type === 'agent_start') { setStreaming(true); showThinking(true); currentAssistant = undefined; retryNote = undefined; setTurnDiff(''); return; }
+  if (type === 'tool_execution_update') {
+    // Live output of a running command: refresh the card at most once per frame.
+    const entry = event.toolCallId && openTools.get(event.toolCallId);
+    if (!entry || entry.done) return;
+    entry.result = toolResultText(event.partialResult);
+    if (!pendingToolFills.size) requestAnimationFrame(flushToolFills);
+    pendingToolFills.add(entry);
+    return;
+  }
+  if (type === 'turn_diff') { setTurnDiff(typeof event.diff === 'string' ? event.diff : ''); return; }
   const delta = event.assistantMessageEvent;
   if (delta && delta.type === 'thinking_delta') { showThinking(true); return; }
   if (delta && delta.type === 'text_delta') {
@@ -620,6 +636,7 @@ function handleEvent(event) {
   if (type === 'compaction_end') { pushNote('已压缩上下文。'); send({ v: 1, type: 'get_stats' }); return; }
   if (type === 'agent_settled') {
     setStreaming(false);
+    notifyFinished();
     for (const entry of openTools.values()) { entry.done = true; fillToolCard(entry.node, entry); }
     openTools.clear();
     renderQueue({ steering: [], followUp: [] });
@@ -628,6 +645,60 @@ function handleEvent(event) {
     send({ v: 1, type: 'get_stats' });
   }
 }
+function flushToolFills() {
+  for (const entry of pendingToolFills) {
+    const wasScrolled = nearBottom();
+    fillToolCard(entry.node, entry);
+    if (!entry.node.open && !entry.node.dataset.userToggled) entry.node.open = true;   // show output as it arrives
+    const out = entry.node.querySelector('.tool-out');
+    if (out) out.scrollTop = out.scrollHeight;
+    if (wasScrolled) scrollToEnd();
+  }
+  pendingToolFills.clear();
+}
+ui.thread.addEventListener('toggle', (event) => { if (event.target.classList?.contains('tool')) event.target.dataset.userToggled = '1'; }, true);
+
+// ---------- 本轮改动 (cumulative turn diff) ----------
+function setTurnDiff(diff) {
+  turnDiff = diff || '';
+  const summary = patchSummary(turnDiff);
+  const show = turnDiff.trim().length > 0;
+  ui.turnDiffBtn.classList.toggle('hidden', !show);
+  if (show) ui.turnDiffBtn.textContent = '本轮改动 ' + summary.files + ' 个文件 +' + summary.add + ' −' + summary.del;
+  if (!show) closeDiffModal();
+}
+function openDiffModal() {
+  if (!turnDiff.trim()) return;
+  const summary = patchSummary(turnDiff);
+  ui.diffSub.textContent = summary.files + ' 个文件 · +' + summary.add + ' −' + summary.del;
+  ui.diffBody.innerHTML = renderPatchText(turnDiff);
+  ui.diffModal.classList.remove('hidden');
+}
+function closeDiffModal() { ui.diffModal.classList.add('hidden'); }
+ui.turnDiffBtn.addEventListener('click', openDiffModal);
+ui.diffClose.addEventListener('click', closeDiffModal);
+ui.diffModal.addEventListener('click', (e) => { if (e.target === ui.diffModal) closeDiffModal(); });
+ui.diffCopy.addEventListener('click', async () => { if (await copyText(turnDiff)) toast('已复制 diff'); });
+
+// ---------- finished-while-away notification ----------
+function notifyFinished() {
+  if (!document.hidden) return;
+  finishedWhileHidden = true;
+  renderHeader();
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    const session = sessions.find((s) => s.id === activeId);
+    try {
+      const n = new Notification('PI Coffee · 这一轮完成了', { body: session ? sessionTitle(session) : '对话', tag: 'pi-coffee-' + activeId });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch { /* notifications unavailable */ }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && finishedWhileHidden) { finishedWhileHidden = false; renderHeader(); } });
+function requestNotifyPermission() {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+  Notification.requestPermission().catch(() => undefined);
+}
+
 function customMessageText(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
@@ -1165,6 +1236,7 @@ $('#composer').addEventListener('submit', (event) => {
 });
 function submitPrompt(text, images) {
   const mode = streaming ? ui.mode.value : 'prompt';
+  requestNotifyPermission();   // first prompt is the moment the user has context for the browser's ask
   const files = completedUploads().map((u) => ({ name: u.name, size: u.size, path: u.path, href: downloadUrl(u.path) }));
   // Files are already on the User VM's disk; the model gets their paths, not their bytes.
   const wireText = files.length

@@ -162,6 +162,11 @@ describe("Codex app-server adapter", () => {
     expect(start).toMatchObject({ toolName: "bash", args: { command: "ls -la" } });
     expect(end).toMatchObject({ toolName: "bash", isError: false });
     expect(JSON.stringify(end?.result)).toContain("ran: ls -la");
+    // Output streamed while the command ran, accumulated per call.
+    const updates = rec.events.filter((event) => event.type === "tool_execution_update");
+    expect(updates.length).toBe(2);
+    expect(updates[1]).toMatchObject({ toolCallId: start?.toolCallId, toolName: "bash" });
+    expect(JSON.stringify(updates[1]?.partialResult)).toContain("ran: ls -la");
 
     const rec2 = recorder(session);
     await session.prompt("edit src/x.ts");
@@ -169,6 +174,9 @@ describe("Codex app-server adapter", () => {
     const edit = rec2.events.find((event) => event.type === "tool_execution_end");
     expect(edit).toMatchObject({ toolName: "edit", isError: false });
     expect(JSON.stringify(edit?.result)).toContain("+new");
+    // The turn's cumulative diff is surfaced for the "本轮改动" view.
+    const diff = rec2.events.find((event) => event.type === "turn_diff");
+    expect(String(diff?.diff)).toContain("+++ b/src/x.ts");
   });
 
   it("surfaces a failed turn as an assistant error and settles", async () => {

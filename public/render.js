@@ -135,7 +135,7 @@ function renderDiffOps(ops) {
   }).join('') + '</div>';
 }
 
-function renderPatchText(patch) {
+export function renderPatchText(patch) {
   const lines = String(patch).split('\n');
   let add = 0, del = 0;
   const rows = lines.map((line) => {
@@ -178,6 +178,17 @@ export function toolBodyHtml(name, args, resultText, done, details) {
   }
   if (!resultText) return done ? '<div class="tool-empty">（无输出）</div>' : '<div class="tool-empty">运行中…</div>';
   return '<pre class="tool-out">' + esc(resultText) + '</pre>';
+}
+
+/** Files touched and +/- counts of a unified diff, for the "本轮改动" chip. */
+export function patchSummary(patch) {
+  let files = 0, add = 0, del = 0;
+  for (const line of String(patch || '').split('\n')) {
+    if (line.startsWith('+++ ')) files++;
+    else if (line.startsWith('+') && !line.startsWith('+++')) add++;
+    else if (line.startsWith('-') && !line.startsWith('---')) del++;
+  }
+  return { files, add, del };
 }
 
 // ---------- DOM builders ----------
