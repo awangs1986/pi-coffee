@@ -177,6 +177,8 @@ rl.on("line", (line) => {
     case "thread/turns/list": {
       const thread = threads[params.threadId];
       if (!thread) return fail("no such thread");
+      // Native Codex 0.156.1 materializes history only after the first user turn.
+      if (thread.turns.length === 0) return fail(`thread ${thread.id} is not materialized yet; thread/turns/list is unavailable before first user message`);
       const limit = Math.max(1, params.limit ?? 25);
       const offset = params.cursor ? Number(params.cursor) : 0;
       const ordered = params.sortDirection === "desc" ? [...thread.turns].reverse() : thread.turns;

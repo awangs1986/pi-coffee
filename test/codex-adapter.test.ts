@@ -117,6 +117,22 @@ describe("Codex app-server adapter", () => {
     expect((await factory.list()).length).toBe(total);
   }, 30000);
 
+  it("opens a new conversation before native history exists and reads the first completed turn afterwards", async () => {
+    const b = setup();
+    const session = await b.factory().create({ sessionId: "new-empty" });
+    expect(await session.getHistory()).toEqual({ entries: [], leafId: null });
+    const rec = recorder(session);
+    await session.prompt("first message");
+    await rec.until(settled);
+    expect((await session.getHistory()).entries).toEqual([
+      expect.objectContaining({ kind: "user", text: "first message" }),
+      expect.objectContaining({ kind: "assistant", text: "echo: first message" }),
+    ]);
+    // Losing the native process must still report a failure, not empty history.
+    await b.factories[0].close();
+    await expect(session.getHistory()).rejects.toThrow(/not running/);
+  });
+
   it("rejects list() when the app-server is gone instead of pretending the store is empty", async () => {
     const b = setup();
     writeFileSync(b.cliPath, "#!/bin/sh\nexit 3\n");
