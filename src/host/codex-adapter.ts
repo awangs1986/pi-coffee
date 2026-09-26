@@ -383,6 +383,15 @@ class CodexSession implements PiSession {
         sortDirection: "asc",
         itemsView: "full",
         ...(cursor === undefined ? {} : { cursor }),
+      }).catch((error: unknown) => {
+        // A freshly started native thread has no persisted history until its
+        // first user turn. Only this explicit native response means empty;
+        // transport/store errors and later-page failures must still surface.
+        const unmaterialized = `thread ${this.threadId} is not materialized yet; thread/turns/list is unavailable before first user message`;
+        if (page === 0 && error instanceof Error && error.message === unmaterialized) {
+          return { data: [], nextCursor: null };
+        }
+        throw error;
       }) as Obj;
       const data = Array.isArray(result.data) ? (result.data as Obj[]) : [];
       turns.push(...data);
