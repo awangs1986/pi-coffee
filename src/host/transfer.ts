@@ -70,6 +70,7 @@ export class TransferServer {
   private readonly onEvent?: (scope: string, event: JsonValue) => void;
   private readonly http: HttpServer;
   private readonly tokens = new Map<string, string>();        // scope -> token
+  private readonly roots = new Map<string, string>();         // scope -> per-user root (ADR-0010)
   private readonly uploads = new Map<string, UploadSession>(); // upload session id -> session
   private readonly fingerprint: string;
   private readonly secure: boolean;
@@ -126,8 +127,13 @@ export class TransferServer {
     return `${this.secure ? "https" : "http"}://${host}:${this.address().port}`;
   }
 
-  /** The token a browser presents for this scope (Session); stable while the Host runs. */
-  issueToken(scope: string): string {
+  /**
+   * The token a browser presents for this scope (Session); stable while the
+   * Host runs. `root` pins the scope to one user's directory in the shared
+   * User VM: its inbox lives under it and downloads cannot leave it.
+   */
+  issueToken(scope: string, root?: string): string {
+    if (root !== undefined) this.roots.set(scope, resolve(root));
     const existing = this.tokens.get(scope);
     if (existing) return existing;
     const token = randomBytes(24).toString("hex");
@@ -135,8 +141,14 @@ export class TransferServer {
     return token;
   }
 
+  /** Inbox path relative to the scope's root (what Pi sees from its cwd). */
   inboxFor(scope: string): string {
     return join(INBOX_DIR, safeScope(scope));
+  }
+
+  /** Absolute directory that `fileId`s of this scope are relative to. */
+  rootOf(scope: string): string {
+    return this.roots.get(scope) ?? this.workdir;
   }
 
   get limits(): { maxFileBytes: number; maxBatchBytes: number } {
@@ -222,7 +234,8 @@ export class TransferServer {
     const files = isRecord(body) && isRecord(body.files) ? body.files : null;
     if (!files || Object.keys(files).length === 0) { sendJson(response, 400, { message: "Invalid body: files" }); return; }
 
-    const targetDir = join(this.workdir, this.inboxFor(scope));
+    const root = this.rootOf(scope);
+    const targetDir = join(root, this.inboxFor(scope));
     await mkdir(targetDir, { recursive: true });
     const session: UploadSession = { id: randomUUID(), scope, files: new Map(), createdAt: Date.now() };
     const usedNames = new Set(await readdir(targetDir).catch(() => [] as string[]));
@@ -271,7 +284,7 @@ export class TransferServer {
     let received = 0;
     let lastProgress = 0;
     const scope = session.scope;
-    const relativeFinal = relative(this.workdir, file.finalPath).split(sep).join("/");
+    const relativeFinal = relative(this.rootOf(scope), file.finalPath).split(sep).join("/");
     const fail = async (status: number, message: string) => {
       file.state = "failed";
       await rm(file.partPath, { force: true }).catch(() => undefined);
@@ -352,14 +365,15 @@ export class TransferServer {
   private async prepareDownload(response: ServerResponse, url: URL): Promise<void> {
     const scope = this.scopeOf(url);
     if (scope === null) { sendJson(response, 401, { message: "Invalid scope token" }); return; }
-    const dir = join(this.workdir, this.inboxFor(scope));
+    const root = this.rootOf(scope);
+    const dir = join(root, this.inboxFor(scope));
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     const files: Record<string, JsonValue> = {};
     for (const entry of entries) {
       if (!entry.isFile() || entry.name.startsWith(".")) continue;
       const full = join(dir, entry.name);
       const info = await stat(full);
-      const id = relative(this.workdir, full).split(sep).join("/");
+      const id = relative(root, full).split(sep).join("/");
       files[id] = { id, fileName: entry.name, size: info.size, fileType: mimeFor(entry.name), modified: info.mtime.toISOString() };
     }
     sendJson(response, 200, { info: this.info(), sessionId: scope, files });
@@ -371,8 +385,9 @@ export class TransferServer {
     if (scope === null) { sendJson(response, 401, { message: "Invalid scope token" }); return; }
     const fileId = url.searchParams.get("fileId");
     if (!fileId) { sendJson(response, 400, { message: "Missing fileId" }); return; }
-    const full = resolve(this.workdir, fileId);
-    if (full !== this.workdir && !full.startsWith(this.workdir + sep)) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
+    const root = this.rootOf(scope);
+    const full = resolve(root, fileId);
+    if (full !== root && !full.startsWith(root + sep)) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
     const info = await stat(full).catch(() => null);
     if (!info || !info.isFile()) { sendJson(response, 404, { message: "Not found" }); return; }
     response.writeHead(200, {

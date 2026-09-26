@@ -80,6 +80,38 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8789/v1/models   # 401
 journalctl -u pi-coffee-relay -n 20 --no-pager   # one JSON metadata line per request, no bodies
 ```
 
+### Gitea login (one shared User VM, ADR-0010)
+
+Both colleagues share one User VM and one enterprise model login; Gitea tells
+the Web Server who is who, and the Host keeps their conversations and files in
+separate folders.
+
+1. In Gitea, as the PI Coffee owner: *Settings → Applications → Manage OAuth2
+   Applications → Create*. Name `PI Coffee`, redirect URI
+   `http://SERVER_IP:3000/auth/callback` (exactly the origin users type, plus
+   `/auth/callback`), confidential client. Copy the client id and secret.
+2. In `/etc/pi-coffee/web.env` set `PI_COFFEE_GITEA_URL`,
+   `PI_COFFEE_GITEA_CLIENT_ID`, `PI_COFFEE_GITEA_CLIENT_SECRET`,
+   `PI_COFFEE_ALLOWED_USERS=alice,bob`, `PI_COFFEE_PUBLIC_URL=http://SERVER_IP:3000`
+   and a fresh `PI_COFFEE_COOKIE_SECRET` (`openssl rand -hex 32`).
+3. `sudo systemctl restart pi-coffee-web`.
+
+Checks:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://127.0.0.1:3000/        # 302 → /login
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/auth/me                 # 401 without a cookie
+curl -s -o /dev/null -w '%{redirect_url}\n' http://127.0.0.1:3000/auth/login           # Gitea /login/oauth/authorize?...
+```
+
+From a browser: open the page, click *用 Gitea 登录*, approve in Gitea, and the
+shell shows the login name in the sidebar foot (click it to log out). A Gitea
+user not in `PI_COFFEE_ALLOWED_USERS` sees a 403 page after approving. On the
+VM, `~/work/<login>/` and `~/.pi-coffee/sessions/<login>/` appear on that
+user's first connection. Adding a colleague is one edit to
+`PI_COFFEE_ALLOWED_USERS` and a Web Server restart; removing a name logs that
+person out immediately.
+
 ## User VM: Agent Host + original Pi
 
 Run as the VM owner (the account whose shell and files Pi should use):
@@ -110,8 +142,9 @@ File transfer listens on `PI_COFFEE_TRANSFER_BIND:PI_COFFEE_TRANSFER_PORT`
 (default `0.0.0.0:53317`). The Host advertises the address browsers should use
 as its first non-internal IPv4; set `PI_COFFEE_TRANSFER_ADVERTISE=<ip or name>`
 when the VM has several interfaces or sits behind a port forward. Uploaded
-files go to `<PI_COFFEE_WORKDIR>/.pi-coffee/inbox/<session>/`, where Pi's
-tools read them. Check from a browser-side machine:
+files go to `<PI_COFFEE_WORKDIR>/<login>/.pi-coffee/inbox/<session>/` (the
+user's own Pi cwd, so Pi's tools read them by that relative path); downloads
+are confined to that user's folder. Check from a browser-side machine:
 
 ```bash
 curl -s http://USER_VM:53317/api/localsend/v2/info     # LocalSend device description
@@ -220,6 +253,26 @@ PI_COFFEE_RELAY_TOKEN=t1 PI_COFFEE_AGENT_DIR=… PI_COFFEE_PROVIDER=cpa PI_COFFE
 npm run start:web
 node scripts/smoke-real-model.mjs ws://127.0.0.1:3000/ws
 ```
+
+### Running Codex CLI instead of Pi (ADR-0011)
+
+The VM admin logs Codex in once as the VM owner user (`codex login`, or put the API key in
+`~/.codex/auth.json` / `OPENAI_API_KEY` in `host.env`). Then in `host.env`:
+
+```
+PI_COFFEE_AGENT=codex
+PI_COFFEE_CODEX_BIN=/usr/local/bin/codex
+PI_COFFEE_CODEX_HOME=/home/<owner>/.codex
+PI_COFFEE_MODEL=<codex model id>
+```
+
+Restart the Host. Each Gitea user still works in `<WORKDIR>/<user>`; the Host starts one
+`codex app-server` per user on demand and lists only that user's threads. Conversations are
+Codex's own rollouts under `CODEX_HOME/sessions`; PI Coffee ids that were created before
+their thread are kept in `<WORKDIR>/<user>/.pi-coffee/codex-threads.json`. Smoke test:
+`PI_COFFEE_AGENT=codex PI_COFFEE_CODEX_HOME=/home/<owner>/.codex npm run start:host` and open
+a new session in the browser; the startup log prints `agent=codex`.
+
 
 For search-only testing, configure `PI_COFFEE_SERPER_KEY` and optionally
 `PI_COFFEE_SERPER_ENDPOINT` on the Relay, then use the Web Host with

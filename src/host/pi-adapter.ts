@@ -66,6 +66,8 @@ export interface PiSessionFactory {
   list(): Promise<PiSessionListing[]>;
   /** Remove a conversation from the durable store. Resolves false when unknown. */
   delete(sessionId: string): Promise<boolean>;
+  /** Release anything the factory itself holds (e.g. a shared agent server process). */
+  close?(): Promise<void>;
 }
 
 export interface RpcPiSessionFactoryOptions {

@@ -581,6 +581,98 @@ describe("Host WebSocket seam", () => {
     }
   });
 
+  it("keeps two Browser Users apart inside one Host: own store, own list pushes, own inbox root (ADR-0010)", async () => {
+    const shared = new FakeFactory();
+    const perUser = new Map<string, FakeFactory>();
+    const root = mkdtempSync(join(tmpdir(), "pi-coffee-host-users-"));
+    const transfer = new TransferServer({ host: "127.0.0.1", port: 0, workdir: root, advertiseHost: "127.0.0.1", onEvent: (scope, event) => server?.announce(scope, event) });
+    await transfer.start();
+    const scopes: string[] = [];
+    server = new HostServer({
+      port: 0, host: "127.0.0.1", factory: shared, transfer,
+      scopeForUser: (user) => {
+        scopes.push(user);
+        let factory = perUser.get(user);
+        if (!factory) { factory = new FakeFactory(); perUser.set(user, factory); }
+        return { factory, workdir: join(root, user) };
+      },
+    });
+    await server.start();
+    const connectAs = async (user?: string) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${server!.address().port}/host`, user === undefined ? undefined : { headers: { "x-pi-coffee-user": user } });
+      await once(socket, "open");
+      return { socket, frames: new FrameQueue(socket) };
+    };
+    try {
+      const alice = await connectAs("Alice");          // header case is not identity
+      const bob = await connectAs("bob");
+      const bobAgain = await connectAs("bob");
+
+      alice.socket.send(encodeFrame({ v: 1, type: "open" }));
+      const aliceOpened = await alice.frames.next();
+      if (aliceOpened.type !== "opened") throw new Error("expected opened");
+      await alice.frames.next(); // history
+      const aliceTransfer = await alice.frames.next();
+      if (aliceTransfer.type !== "transfer") throw new Error("expected transfer");
+      alice.socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "a1", text: "alice secret" }));
+      let frame = await alice.frames.next();
+      while (!(frame.type === "event" && (frame.event as { type?: string }).type === "agent_settled")) frame = await alice.frames.next();
+
+      // Alice's conversation is in Alice's factory only, and the push went to Alice only.
+      expect(scopes).toEqual(["alice", "bob"]);
+      expect(perUser.get("alice")!.sessions.has(aliceOpened.sessionId)).toBe(true);
+      expect(perUser.get("bob")!.sessions.size).toBe(0);
+      expect(shared.sessions.size).toBe(0);
+      const alicePush = await alice.frames.nextSessions();
+      expect(alicePush.sessions.map((item) => item.id)).toEqual([aliceOpened.sessionId]);
+
+      bob.socket.send(encodeFrame({ v: 1, type: "list_sessions" }));
+      expect((await bob.frames.nextSessions()).sessions).toEqual([]);
+      // Bob cannot delete or attach to Alice's conversation by id.
+      bob.socket.send(encodeFrame({ v: 1, type: "delete_session", sessionId: aliceOpened.sessionId }));
+      expect(await bob.frames.next()).toMatchObject({ type: "error", code: "unknown_session" });
+      expect(perUser.get("alice")!.sessions.has(aliceOpened.sessionId)).toBe(true);
+
+      // Bob's own work reaches Bob's other browser but never Alice.
+      bob.socket.send(encodeFrame({ v: 1, type: "open" }));
+      const bobOpened = await bob.frames.next();
+      if (bobOpened.type !== "opened") throw new Error("expected opened");
+      await bob.frames.next(); await bob.frames.next(); // history, transfer
+      bob.socket.send(encodeFrame({ v: 1, type: "prompt", requestId: "b1", text: "bob secret" }));
+      const bobPush = await bobAgain.frames.nextSessions();
+      expect(bobPush.sessions.map((item) => item.id)).toEqual([bobOpened.sessionId]);
+      alice.socket.send(encodeFrame({ v: 1, type: "list_sessions" }));
+      expect((await alice.frames.nextSessions()).sessions.map((item) => item.id)).toEqual([aliceOpened.sessionId]);
+
+      // Uploads for Alice's Session land under Alice's directory.
+      const prepared = await fetch(`${aliceTransfer.url}/api/localsend/v2/prepare-upload?scope=${aliceTransfer.scope}&token=${aliceTransfer.token}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ files: { a: { id: "a", fileName: "brief.md", size: 5 } } }),
+      });
+      const { sessionId, files } = await prepared.json() as { sessionId: string; files: Record<string, string> };
+      expect((await fetch(`${aliceTransfer.url}/api/localsend/v2/upload?sessionId=${sessionId}&fileId=a&token=${files.a}`, { method: "POST", body: "hello" })).status).toBe(200);
+      expect(existsSync(join(root, "alice", ".pi-coffee", "inbox", aliceOpened.sessionId, "brief.md"))).toBe(true);
+      expect(existsSync(join(root, ".pi-coffee"))).toBe(false);
+
+      // No identity → the shared (single-user) factory, unchanged behaviour.
+      const anon = await connectAs();
+      anon.socket.send(encodeFrame({ v: 1, type: "open" }));
+      const anonOpened = await anon.frames.next();
+      if (anonOpened.type !== "opened") throw new Error("expected opened");
+      expect(shared.sessions.has(anonOpened.sessionId)).toBe(true);
+
+      // A name that is not a safe path segment is refused at the upgrade.
+      const bad = new WebSocket(`ws://127.0.0.1:${server.address().port}/host`, { headers: { "x-pi-coffee-user": "../etc" } });
+      const [error] = await once(bad, "error") as [Error];
+      expect(error.message).toContain("400");
+
+      for (const { socket } of [alice, bob, bobAgain, anon]) socket.close();
+    } finally {
+      await transfer.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses to listen on a non-loopback address without a transport token", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "0.0.0.0", factory });

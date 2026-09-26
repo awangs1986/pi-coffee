@@ -39,9 +39,12 @@ npm start
 - Host: `ws://127.0.0.1:8788/host`
 - Relay: `http://127.0.0.1:8789/v1`
 
-The MVP deployment is split across two machines: `npm run start:host` in the
-User VM (original Pi runs there, as the VM owner), `npm run start:web` and
-`npm run start:relay` on the server. systemd units and env templates are in
+The deployment is split across two machines: `npm run start:host` in the
+**one shared** User VM (original Pi runs there, as the VM owner, logged in to
+the one enterprise model account), `npm run start:web` and `npm run start:relay`
+on the server. The Web Server logs each colleague in through Gitea OAuth and the
+Host keeps their conversations and files in separate folders
+([ADR-0010](./docs/adr/0010-one-shared-user-vm-with-gitea-identity-and-per-user-folders.md)). systemd units and env templates are in
 [`deploy/`](./deploy/README.md); the procedure is in
 [`docs/deployment/runbook.md`](./docs/deployment/runbook.md).
 
@@ -53,16 +56,28 @@ Settings:
 | `PI_COFFEE_HOST_URL` | local Host URL | web | Web→Host WebSocket URL |
 | `PI_COFFEE_HOST_BIND` / `PI_COFFEE_HOST_PORT` | `127.0.0.1` / `8788` | host | private Host transport bind |
 | `PI_COFFEE_HOST_TOKEN` | unset | web, host | shared Host bearer token; **required** when the Host is not on loopback |
-| `PI_COFFEE_WORKDIR` | current directory | host | Pi working directory |
-| `PI_COFFEE_AGENT_DIR` | Pi default | host | Pi config directory (`models.json`) |
-| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory — the durable conversation store the sidebar and history are served from |
+| `PI_COFFEE_GITEA_URL` / `PI_COFFEE_GITEA_CLIENT_ID` / `PI_COFFEE_GITEA_CLIENT_SECRET` | unset | web | Gitea OAuth2 application (ADR-0010). Setting any of them turns the login on; the shell and `/ws` then require a Gitea session cookie |
+| `PI_COFFEE_ALLOWED_USERS` | unset | web | comma-separated Gitea login names admitted; **required** with Gitea login. Removing a name logs that person out |
+| `PI_COFFEE_PUBLIC_URL` | derived from the request | web | origin browsers use; the OAuth redirect URI is `<PUBLIC_URL>/auth/callback` and must match the Gitea app |
+| `PI_COFFEE_COOKIE_SECRET` | random per start | web | HMAC key for the session cookie; set it so logins survive a Web Server restart |
+| `PI_COFFEE_DEFAULT_USER` | unset | web | identity forwarded to the Host when Gitea login is off (local smoke of the per-user layout) |
+| `PI_COFFEE_WORKDIR` | current directory | host | Pi working directory root; a logged-in user `alice` works in `<WORKDIR>/alice` |
+| `PI_COFFEE_AGENT_DIR` | Pi default | host | Pi config directory (`models.json`, provider login) — shared by every user in the VM |
+| `PI_COFFEE_SESSION_DIR` | Pi default | host | native Pi session directory root — the durable conversation store the sidebar and history are served from; per user under `<SESSION_DIR>/<user>` |
 | `PI_COFFEE_IDLE_TIMEOUT_MS` | `600000` | host | stop a Pi process with no browser attached and nothing running; conversations resume from the store |
 | `PI_COFFEE_TRANSFER_BIND` / `PI_COFFEE_TRANSFER_PORT` | `0.0.0.0` / `53317` | host | LocalSend v2 file transfer served on the User VM's LAN interface; `off` disables |
 | `PI_COFFEE_TRANSFER_ADVERTISE` | first LAN IPv4 | host | address browsers use to reach the transfer port |
 | `PI_COFFEE_MAX_FILE_BYTES` / `PI_COFFEE_MAX_BATCH_BYTES` | 256 MiB / 1 GiB | host | upload limits |
 | `PI_COFFEE_WEB_TLS_CERT` / `PI_COFFEE_WEB_TLS_KEY` | unset | web | optional HTTPS (internal CA); pair with the transfer TLS below |
 | `PI_COFFEE_TRANSFER_TLS_CERT` / `PI_COFFEE_TRANSFER_TLS_KEY` | unset | host | optional HTTPS for the transfer port; LocalSend fingerprint becomes the cert SHA-256 |
-| `PI_COFFEE_PROVIDER` / `PI_COFFEE_MODEL` | Pi default | host | provider/model from `models.json` |
+| `PI_COFFEE_PROVIDER` / `PI_COFFEE_MODEL` | Pi default | host | provider/model from `models.json` (under Codex, `PI_COFFEE_MODEL` is the Codex model id) |
+| `PI_COFFEE_AGENT` | `pi` | host | `pi` or `codex` — which CLI serves the sessions (ADR-0011). Same web page, same per-user folders |
+| `PI_COFFEE_CODEX_BIN` | `codex` on PATH | host | Codex CLI executable used for `codex app-server` |
+| `PI_COFFEE_CODEX_HOME` | Codex default (`~/.codex`) | host | shared `CODEX_HOME`: the admin's login (`auth.json`), `config.toml`, rollouts. Shared by every user in the VM |
+| `PI_COFFEE_CODEX_EFFORT` | model default | host | reasoning effort passed to every turn (`low`/`medium`/`high`/…) |
+| `PI_COFFEE_CODEX_SANDBOX` | `danger-full-access` | host | Codex tool sandbox: `read-only`, `workspace-write`, `danger-full-access` |
+| `PI_COFFEE_CODEX_APPROVAL` | `never` | host | `never` runs unattended; `on-request` / `untrusted` show Codex approvals as confirm dialogs in the browser |
+| `PI_COFFEE_CODEX_ARGS` | unset | host | colon-separated extra `codex app-server` arguments (e.g. `-c:model_provider=openai`) |
 | `PI_COFFEE_RELAY_TOKEN` | unset | host | this VM's Relay token, interpolated by Pi from `models.json` |
 | `PI_COFFEE_RELAY_BIND` / `PI_COFFEE_RELAY_PORT` | `127.0.0.1` / `8789` | relay | Relay bind |
 | `PI_COFFEE_UPSTREAM_URL` | `https://b.awangsawangs.xyz/v1` | relay | upstream OpenAI-compatible base URL |

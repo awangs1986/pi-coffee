@@ -140,6 +140,33 @@ describe("TransferServer (LocalSend v2)", () => {
     expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=missing.txt`)).status).toBe(404);
   });
 
+  it("pins a scope to its own root: inbox, listing and downloads stay inside that user's directory", async () => {
+    const { base } = await start();
+    const { mkdirSync } = await import("node:fs");
+    const aliceRoot = join(workdir, "alice");
+    mkdirSync(join(aliceRoot, "out"), { recursive: true });
+    writeFileSync(join(aliceRoot, "out", "a.txt"), "alice");
+    writeFileSync(join(workdir, "top.txt"), "shared");
+    const token = server!.issueToken("sess-a", aliceRoot);
+    expect(server!.issueToken("sess-a")).toBe(token);          // re-issuing keeps token and root
+    expect(server!.rootOf("sess-a")).toBe(aliceRoot);
+
+    const prepared = await prepare(base, token, { f: { id: "f", fileName: "in.txt", size: 2 } }, "sess-a");
+    const { sessionId, files } = prepared.body as { sessionId: string; files: Record<string, string> };
+    expect((await fetch(`${base}/upload?sessionId=${sessionId}&fileId=f&token=${files.f}`, { method: "POST", body: "hi" })).status).toBe(200);
+    expect(existsSync(join(aliceRoot, ".pi-coffee", "inbox", "sess-a", "in.txt"))).toBe(true);
+    expect(existsSync(join(workdir, ".pi-coffee", "inbox", "sess-a"))).toBe(false);
+    const complete = events.find((e) => (e.event as { type: string }).type === "transfer_complete");
+    expect(complete?.event).toMatchObject({ path: ".pi-coffee/inbox/sess-a/in.txt" });
+
+    const listed = await fetch(`${base}/prepare-download?scope=sess-a&token=${token}`, { method: "POST" });
+    const body = await listed.json() as { files: Record<string, unknown> };
+    expect(Object.keys(body.files)).toEqual([".pi-coffee/inbox/sess-a/in.txt"]);
+    expect(await (await fetch(`${base}/download?scope=sess-a&token=${token}&fileId=out/a.txt`)).text()).toBe("alice");
+    // The parent (another user's area, or the shared root) is out of reach.
+    expect((await fetch(`${base}/download?scope=sess-a&token=${token}&fileId=${encodeURIComponent("../top.txt")}`)).status).toBe(403);
+  });
+
   it("speaks HTTPS with a certificate fingerprint when given TLS material (the optional secure route)", async () => {
     const cert = readFileSync(join(process.cwd(), "test/fixtures/tls/test-cert.pem"));
     const key = readFileSync(join(process.cwd(), "test/fixtures/tls/test-key.pem"));
