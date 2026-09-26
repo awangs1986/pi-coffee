@@ -5,6 +5,8 @@ import type {
   ExtensionInfo,
   ImageInput,
   JsonValue,
+  RateLimits,
+  RateLimitWindow,
   SessionState,
   SessionStats,
   UiResponse,
@@ -21,6 +23,9 @@ import { CodexAppServer, type Json, type Obj, type PendingServerRequest } from "
 import { countMessages, projectTurns, toIso, toolCallOf, toolResultOf, toUserInput } from "./codex/translate.js";
 
 export { projectTurns } from "./codex/translate.js";
+
+/** Refresh the account meters at most this often between pushes. */
+const RATE_LIMIT_TTL_MS = 60_000;
 
 /**
  * Codex CLI behind the same seam as the original Pi (ADR-0011).
@@ -73,6 +78,11 @@ export class CodexSessionFactory implements PiSessionFactory {
   private mapping?: Map<string, string>;
   private readonly live = new Set<CodexSession>();
   private idleTimer?: ReturnType<typeof setTimeout>;
+  /** Account meters are per login, not per thread: one cache for every session of this user. */
+  private rateLimits?: RateLimits;
+  private rateLimitsReadAt = 0;
+  private rateLimitsUnavailable = false;
+  private unsubscribeAccount?: () => void;
 
   constructor(options: CodexSessionFactoryOptions) {
     this.options = options;
@@ -101,6 +111,15 @@ export class CodexSessionFactory implements PiSessionFactory {
     });
     await server.start(this.options.clientName ?? "pi_coffee", this.options.clientVersion ?? "0.1.0");
     this.server = server;
+    this.rateLimits = undefined;
+    this.rateLimitsReadAt = 0;
+    this.rateLimitsUnavailable = false;
+    this.unsubscribeAccount?.();
+    this.unsubscribeAccount = server.subscribeGlobal((method, params) => {
+      if (method !== "account/rateLimits/updated") return;
+      const parsed = parseRateLimits(params.rateLimits);
+      if (parsed) { this.rateLimits = parsed; this.rateLimitsReadAt = Date.now(); }
+    });
     // The VM admin logs Codex in, not the users: say so loudly when nobody has.
     void server.request("getAuthStatus", {}).then((status) => {
       const method = (status as Obj | null)?.authMethod;
@@ -182,6 +201,7 @@ export class CodexSessionFactory implements PiSessionFactory {
       model: typeof response.model === "string" ? response.model : this.options.model,
       reasoningEffort: typeof response.reasoningEffort === "string" ? response.reasoningEffort : this.options.reasoningEffort,
       approvalPolicy: this.options.approvalPolicy ?? "never",
+      rateLimits: () => this.readRateLimits(),
     });
     session.absorbThread(thread);
     this.live.add(session);
@@ -218,9 +238,12 @@ export class CodexSessionFactory implements PiSessionFactory {
         const id = String(thread.id);
         const preview = typeof thread.preview === "string" ? thread.preview.replace(/\s+/g, " ").trim().slice(0, 120) : "";
         const name = typeof thread.name === "string" && thread.name.length > 0 ? thread.name : undefined;
+        // Where the thread came from: ours (appServer) or the VM admin's terminal (cli/exec).
+        const source = typeof thread.source === "string" ? thread.source : undefined;
         return {
           id: reverse.get(id) ?? id,
           ...(name === undefined ? {} : { name }),
+          ...(source === undefined ? {} : { source }),
           createdAt: toIso(thread.createdAt),
           updatedAt: toIso(thread.updatedAt),
           // thread/list carries no message counts; the sidebar only needs
@@ -252,9 +275,32 @@ export class CodexSessionFactory implements PiSessionFactory {
     return typeof thread?.cwd === "string" && resolve(thread.cwd) === resolve(this.options.cwd);
   }
 
+  /**
+   * The account's rolling usage windows (5h / weekly), cached briefly and
+   * refreshed by `account/rateLimits/updated`. Undefined when the login has
+   * none (API key) or the server cannot answer.
+   */
+  async readRateLimits(): Promise<RateLimits | undefined> {
+    if (this.rateLimitsUnavailable) return undefined;
+    if (this.rateLimits && Date.now() - this.rateLimitsReadAt < RATE_LIMIT_TTL_MS) return this.rateLimits;
+    try {
+      const server = await this.connection();
+      const result = await server.request("account/rateLimits/read", {}) as Obj;
+      const parsed = parseRateLimits(result.rateLimits);
+      if (parsed) { this.rateLimits = parsed; this.rateLimitsReadAt = Date.now(); }
+      return parsed ?? this.rateLimits;
+    } catch {
+      // API-key logins have no meters; do not ask again for this server process.
+      if (!this.rateLimits) this.rateLimitsUnavailable = true;
+      return this.rateLimits;
+    }
+  }
+
   /** Stop the user's app-server; sessions resume from Codex's rollouts next time. */
   async close(): Promise<void> {
     this.cancelIdleStop();
+    this.unsubscribeAccount?.();
+    this.unsubscribeAccount = undefined;
     const server = this.server;
     this.server = undefined;
     await server?.stop();
@@ -265,6 +311,8 @@ interface CodexSessionSettings {
   model?: string;
   reasoningEffort?: string;
   approvalPolicy: string;
+  /** Account meters, owned by the factory (one login per user server). */
+  rateLimits?: () => Promise<RateLimits | undefined>;
 }
 
 class CodexSession implements PiSession {
@@ -288,6 +336,7 @@ class CodexSession implements PiSession {
   private readonly toolOutput = new Map<string, string>();
   private readonly followUps: Array<{ text: string; images?: ImageInput[] }> = [];
   private readonly pendingApprovals = new Map<string, PendingServerRequest>();
+  private readonly readRateLimits?: () => Promise<RateLimits | undefined>;
   private stopped = false;
 
   constructor(server: CodexAppServer, threadId: string, settings: CodexSessionSettings) {
@@ -295,6 +344,7 @@ class CodexSession implements PiSession {
     this.threadId = threadId;
     this.model = settings.model;
     this.effort = settings.reasoningEffort;
+    this.readRateLimits = settings.rateLimits;
     this.unsubscribe = server.subscribe(threadId, {
       notification: (method, params) => this.onNotification(method, params),
       request: (request) => this.onServerRequest(request),
@@ -362,6 +412,13 @@ class CodexSession implements PiSession {
   }
 
   async getState(): Promise<SessionState> {
+    // A turn we did not start (the VM admin's terminal on the same thread)
+    // sends us no turn/completed; ask the thread itself whether it is still busy.
+    if (this.streaming && this.activeTurnId === undefined) {
+      const result = await this.server.request("thread/read", { threadId: this.threadId, includeTurns: false }).catch(() => undefined) as Obj | undefined;
+      const status = (result?.thread as Obj | undefined)?.status as Obj | undefined;
+      if (status && status.type !== "active") this.streaming = false;
+    }
     return {
       isStreaming: this.streaming,
       messageCount: this.messageCount,
@@ -462,6 +519,7 @@ class CodexSession implements PiSession {
     const contextWindow = this.tokenUsage?.modelContextWindow;
     const last = (this.tokenUsage?.last ?? {}) as Obj;
     const used = num(last.totalTokens);
+    const rateLimits = await this.readRateLimits?.();
     return {
       userMessages: Math.ceil(this.messageCount / 2),
       assistantMessages: Math.floor(this.messageCount / 2),
@@ -477,6 +535,7 @@ class CodexSession implements PiSession {
       ...(typeof contextWindow === "number" && contextWindow > 0
         ? { contextUsage: { tokens: used, contextWindow, percent: Math.round((used / contextWindow) * 1000) / 10 } }
         : {}),
+      ...(rateLimits === undefined ? {} : { rateLimits }),
     };
   }
 
@@ -690,4 +749,36 @@ function decisionFor(method: string, approved: boolean): string {
   const legacy = method === "execCommandApproval" || method === "applyPatchApproval";
   if (legacy) return approved ? "approved" : "denied";
   return approved ? "accept" : "decline";
+}
+
+/**
+ * `account/rateLimits/read` shape → protocol shape. Windows are classified by
+ * length (300 min ≈ 5h, 10080 = weekly), not by the primary/secondary slot
+ * names, which Codex does not guarantee.
+ */
+export function parseRateLimits(raw: Json | undefined): RateLimits | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const obj = raw as Obj;
+  const windows = [obj.primary, obj.secondary]
+    .map(parseWindow)
+    .filter((window): window is RateLimitWindow => window !== undefined);
+  if (windows.length === 0) return undefined;
+  const fiveHour = windows.find((window) => window.windowMinutes <= 24 * 60);
+  const weekly = windows.find((window) => window.windowMinutes > 24 * 60);
+  return {
+    ...(fiveHour === undefined ? {} : { fiveHour }),
+    ...(weekly === undefined ? {} : { weekly }),
+    ...(typeof obj.planType === "string" ? { plan: obj.planType } : {}),
+  };
+}
+
+function parseWindow(raw: Json | undefined): RateLimitWindow | undefined {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const obj = raw as Obj;
+  if (typeof obj.usedPercent !== "number" || typeof obj.windowDurationMins !== "number") return undefined;
+  return {
+    usedPercent: obj.usedPercent,
+    windowMinutes: obj.windowDurationMins,
+    resetsAt: typeof obj.resetsAt === "number" ? new Date(obj.resetsAt * 1000).toISOString() : null,
+  };
 }

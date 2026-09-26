@@ -50,6 +50,8 @@ export interface HostServerOptions {
   idleTimeoutMs?: number;
   /** LocalSend v2 transfer endpoint on the User VM; browsers are told about it after `opened`. */
   transfer?: TransferServer;
+  /** Poll interval for turns driven outside this Host (terminal take-over); default 3 s. */
+  externalPollMs?: number;
 }
 
 /** A user's registry plus the bookkeeping the server keeps beside it. */
@@ -77,7 +79,7 @@ export class HostServer {
   private readonly factory: PiSessionFactory;
   private readonly scopeForUser?: (user: string) => UserScope | Promise<UserScope>;
   private readonly requireUser: boolean;
-  private readonly registryOptions: { eventBufferSize?: number; idleTimeoutMs?: number };
+  private readonly registryOptions: { eventBufferSize?: number; idleTimeoutMs?: number; externalPollMs?: number };
   /** Key: normalised user name, or "" for identity-less connections. */
   private readonly slots = new Map<string, Promise<UserSlot>>();
   private readonly transferTargets = new Map<string, { slot: Promise<UserSlot>; sessionId: string }>();
@@ -98,6 +100,7 @@ export class HostServer {
     this.registryOptions = {
       eventBufferSize: options.eventBufferSize,
       ...(options.idleTimeoutMs === undefined ? {} : { idleTimeoutMs: options.idleTimeoutMs }),
+      ...(options.externalPollMs === undefined ? {} : { externalPollMs: options.externalPollMs }),
     };
     this.http = createServer((request, response) => {
       if (request.url === "/healthz") {

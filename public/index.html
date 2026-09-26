@@ -62,6 +62,7 @@
               <div class="stats-note">占用与用量由 User VM 中的 Pi 统计；Pi 不区分系统提示 / 工具定义 / 对话三段。</div>
             </div>
           </div>
+          <button class="chip-btn hidden" id="usage" type="button" title="帐号用量（5 小时 / 每周额度，两位用户共用）"></button>
           <button class="chip-btn hidden" id="turn-diff" type="button" title="本轮改动的完整 diff"></button>
           <div class="topbar-meta" id="session-meta"></div>
         </header>
@@ -113,6 +114,20 @@
           <div class="footnote">对话由 User VM 中的原版 Pi agent 执行；记录保存在 VM 上，关闭页面不会中断正在运行的任务。</div>
         </div>
       </main>
+
+      <!-- Docked review of the current / last run's cumulative diff (P2). Narrow screens use the modal below. -->
+      <aside class="diff-panel hidden" id="diff-panel" aria-label="本轮改动">
+        <div class="diff-panel-head">
+          <h2>本轮改动</h2>
+          <span class="plugins-sub" id="dp-sub"></span>
+          <button type="button" class="btn small" id="dp-copy">复制 diff</button>
+          <button type="button" class="icon-btn" id="dp-close" aria-label="关闭">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <ul class="diff-files" id="dp-files"></ul>
+        <div class="diff-body diff-panel-body" id="dp-body"></div>
+      </aside>
     </div>
 
     <div class="modal-backdrop hidden" id="modal">

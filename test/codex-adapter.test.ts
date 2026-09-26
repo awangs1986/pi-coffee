@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -294,6 +294,76 @@ describe("Codex app-server adapter", () => {
     expect(await factory.delete("s-misc")).toBe(true);
     expect(await factory.list()).toEqual([]);
     expect(await factory.delete("s-misc")).toBe(false);
+  });
+});
+
+describe("Codex app-server adapter: usage meters and native threads", () => {
+  const benches: Bench[] = [];
+  const setup = () => { const b = bench(); benches.push(b); return b; };
+  afterEach(async () => {
+    for (const b of benches.splice(0)) {
+      for (const factory of b.factories) await factory.close();
+      rmSync(b.root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the account's 5h / weekly limit windows in stats and refreshes them from account/rateLimits/updated (P1)", async () => {
+    const b = setup();
+    const session = await b.factory().create({ sessionId: "s-limits" });
+    const first = await session.getStats();
+    // Classified by window length, not by the primary/secondary slot names.
+    expect(first.rateLimits).toEqual({
+      fiveHour: { usedPercent: 42, windowMinutes: 300, resetsAt: new Date(1_788_265_323 * 1000).toISOString() },
+      weekly: { usedPercent: 61, windowMinutes: 10080, resetsAt: new Date(1_788_765_541 * 1000).toISOString() },
+      plan: "plus",
+    });
+    const rec = recorder(session);
+    await session.prompt("burn some quota");
+    await rec.until(settled);
+    // The fake pushes account/rateLimits/updated after every turn (usedPercent +10).
+    const after = await session.getStats();
+    expect(after.rateLimits?.fiveHour?.usedPercent).toBe(52);
+    expect(after.contextUsage?.contextWindow).toBe(1000);
+  });
+
+  it("keeps stats usable when the server has no rate-limit data (API-key login)", async () => {
+    const b = setup();
+    const factory = new CodexSessionFactory({ cwd: b.cwd, cliPath: b.cliPath, codexHome: b.codexHome, env: { FAKE_CODEX_NO_LIMITS: "1" } });
+    b.factories.push(factory);
+    const session = await factory.create({ sessionId: "s-nolimits" });
+    const stats = await session.getStats();
+    expect(stats.rateLimits).toBeUndefined();
+    expect(stats.tokens.total).toBe(0);
+  });
+
+  it("lists threads the VM admin started from the terminal with their source, and opens them read-only while their turn runs (P3)", async () => {
+    const b = setup();
+    const factory = b.factory();
+    // Seed a thread the way `codex` in a terminal would: same cwd, source cli, one finished turn.
+    const cliThread = { id: "11111111-2222-4333-8444-555555555555", cwd: b.cwd, createdAt: 1_700_000_000, updatedAt: 1_700_000_500, source: "cli", preview: "fix the flaky test", turns: [{ id: "t1", items: [{ type: "userMessage", id: "u1", content: [{ type: "text", text: "fix the flaky test" }] }, { type: "agentMessage", id: "a1", text: "done" }], status: "completed" }], activeExternally: true };
+    const { mkdirSync, writeFileSync: write } = await import("node:fs");
+    mkdirSync(b.codexHome, { recursive: true });
+    write(join(b.codexHome, "fake-threads.json"), JSON.stringify({ [cliThread.id]: cliThread }));
+
+    const listed = await factory.list();
+    expect(listed).toEqual([expect.objectContaining({ id: cliThread.id, source: "cli", preview: "fix the flaky test" })]);
+    // Our own threads carry the app-server source so the sidebar can tell them apart.
+    const own = await factory.create({ sessionId: "s-own" });
+    const rec = recorder(own);
+    await own.prompt("hello");
+    await rec.until(settled);
+    expect((await factory.list()).find((s) => s.id === "s-own")?.source).toBe("appServer");
+
+    // Taking over = resuming the native thread; while another process drives it we only watch.
+    const taken = await factory.create({ sessionId: cliThread.id });
+    expect(await taken.getState()).toMatchObject({ isStreaming: true });
+    const history = await taken.getHistory();
+    expect(history.entries.map((e) => e.kind)).toEqual(["user", "assistant"]);
+    // No notification reaches us when the terminal's turn ends; getState re-reads the thread status.
+    const stored = JSON.parse(readFileSync(join(b.codexHome, "fake-threads.json"), "utf8"));
+    stored[cliThread.id].activeExternally = false;
+    write(join(b.codexHome, "fake-threads.json"), JSON.stringify(stored));
+    expect(await taken.getState()).toMatchObject({ isStreaming: false });
   });
 });
 

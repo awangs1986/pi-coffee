@@ -39,6 +39,18 @@ export interface SessionSummary {
   messageCount: number;
   preview: string;
   running: boolean;
+  /**
+   * Why this conversation wants the user's eyes: an agent dialog is waiting
+   * for an answer, or a run finished while no browser was attached. Absent
+   * when nothing is pending; the sidebar sorts these to the top.
+   */
+  attention?: "waiting" | "finished";
+  /**
+   * Where the conversation was started, as the agent's own store records it
+   * (Codex: `appServer` for ours, `cli` for the VM admin's terminal, …).
+   * Absent when the agent does not distinguish.
+   */
+  source?: string;
 }
 
 /**
@@ -87,6 +99,22 @@ export interface SessionStats {
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number };
   cost: number;
   contextUsage?: { tokens: number | null; contextWindow: number; percent: number | null };
+  /** Account-wide subscription meters (Codex ChatGPT login); absent for API-key or Pi sessions. */
+  rateLimits?: RateLimits;
+}
+
+/** One rolling usage window of the model account: how much is used and when it resets. */
+export interface RateLimitWindow {
+  usedPercent: number;
+  windowMinutes: number;
+  /** ISO time; null when the window is idle and has no reset scheduled. */
+  resetsAt: string | null;
+}
+
+export interface RateLimits {
+  fiveHour?: RateLimitWindow;
+  weekly?: RateLimitWindow;
+  plan?: string;
 }
 
 /**

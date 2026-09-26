@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { networkInterfaces } from "node:os";
@@ -374,7 +374,7 @@ export class TransferServer {
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     const files: Record<string, JsonValue> = {};
     for (const entry of entries) {
-      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      if (!entry.isFile() || entry.name.startsWith(".") || isCredentialFileName(entry.name)) continue;
       const full = join(dir, entry.name);
       const info = await stat(full);
       const id = relative(root, full).split(sep).join("/");
@@ -391,9 +391,15 @@ export class TransferServer {
     if (!fileId) { sendJson(response, 400, { message: "Missing fileId" }); return; }
     const root = this.rootOf(scope);
     const full = resolve(root, fileId);
+    // INV-T1: the lexical path must stay under the root …
     if (full !== root && !full.startsWith(root + sep)) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
+    // INV-T3: … and so must its name, whatever directory it sits in.
+    if (isCredentialFileName(basename(full))) { sendJson(response, 403, { message: "Credential files are never served" }); return; }
     const info = await stat(full).catch(() => null);
     if (!info || !info.isFile()) { sendJson(response, 404, { message: "Not found" }); return; }
+    // INV-T2: the *real* path must stay under the real root: a symlink inside
+    // the working directory that points outside it does not escape.
+    if (!(await withinRealRoot(root, full))) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
     response.writeHead(200, {
       "content-type": mimeFor(full),
       "content-length": String(info.size),
@@ -410,6 +416,32 @@ export class TransferServer {
 
 class UploadError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
+}
+
+/**
+ * INV-T3: names that are credentials wherever they live. Defence in depth on
+ * top of root confinement — a misconfigured root (e.g. a user's cwd set to
+ * `~`) must still never hand `~/.codex/auth.json` to a browser.
+ */
+const CREDENTIAL_FILE_NAMES = new Set([
+  "auth.json", ".credentials.json", ".netrc", "credentials", "credentials.json",
+  "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "known_hosts",
+]);
+const CREDENTIAL_FILE_PATTERNS = [/^\.env(\..+)?$/i, /\.pem$/i, /\.key$/i, /\.p12$/i, /\.pfx$/i, /^id_[a-z0-9]+$/i];
+
+export function isCredentialFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return CREDENTIAL_FILE_NAMES.has(lower) || CREDENTIAL_FILE_PATTERNS.some((pattern) => pattern.test(lower));
+}
+
+/** INV-T2: after resolving symlinks, `full` is still inside `root`. */
+export async function withinRealRoot(root: string, full: string): Promise<boolean> {
+  try {
+    const [realRoot, realFull] = await Promise.all([realpath(root), realpath(full)]);
+    return realFull === realRoot || realFull.startsWith(realRoot + sep);
+  } catch {
+    return false;
+  }
 }
 
 export function sanitizeFileName(name: string): string {

@@ -402,3 +402,38 @@ a.file-chip:hover { border-color: var(--border-strong); background: var(--bg-sub
 .diff-body .diff { max-height: none; }
 .diff-body .diff-row.meta { font-weight: 600; color: var(--text-2); margin-top: 10px; }
 #turn-diff { white-space: nowrap; }
+
+/* ---------- P0: who needs you ---------- */
+.side-label.attention { color: var(--warn, #b45309); }
+.session-item .badge { flex: none; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; }
+.session-item .badge.waiting { background: var(--warn, #d97706); animation: pulse 1s infinite alternate; }
+.session-item .badge.finished { background: var(--ok, #16a34a); }
+.session-item.waiting { background: #fff7ed; }
+.session-item.finished { background: #f0fdf4; }
+.session-item.waiting.active, .session-item.finished.active { background: #e4e6ea; }
+.session-item.terminal .title::before { content: '⌨ '; color: var(--text-3); }
+
+/* ---------- P1: account usage chip ---------- */
+#usage { white-space: nowrap; }
+.chip-btn.danger { color: var(--danger); border-color: #fca5a5; background: #fef2f2; }
+
+/* ---------- P2: docked diff review ---------- */
+.app.diff-docked { grid-template-columns: 260px 1fr minmax(380px, 34vw); }
+.diff-panel { display: flex; flex-direction: column; min-width: 0; height: 100vh; height: 100dvh; border-left: 1px solid var(--border); background: var(--bg); }
+.diff-panel.hidden { display: none; }
+.diff-panel-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.diff-panel-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.diff-panel-head .plugins-sub { flex: 1; }
+.diff-files { margin: 0; padding: 6px 8px; list-style: none; border-bottom: 1px solid var(--border); max-height: 32vh; overflow-y: auto; font-size: 12.5px; }
+.diff-file { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.diff-file:hover { background: #ebecf0; }
+.diff-file .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.diff-file .counts, .diff-file-head .counts { flex: none; font-variant-numeric: tabular-nums; color: var(--text-3); }
+.diff-file.added .path { color: #15803d; }
+.diff-file.deleted .path { color: var(--danger); text-decoration: line-through; }
+.diff-panel-body { flex: 1; overflow: auto; padding: 8px 14px 24px; }
+.diff-file-section + .diff-file-section { margin-top: 18px; }
+.diff-file-head { position: sticky; top: 0; z-index: 1; display: flex; gap: 8px; margin: 0; padding: 6px 0; font-size: 12.5px; font-weight: 650; background: var(--bg); border-bottom: 1px solid var(--border); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.diff-file-head .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.diff-file-body .diff-stats { display: none; }
+@media (max-width: 1099px) { .app.diff-docked { grid-template-columns: 260px 1fr; } .diff-panel { display: none; } }

@@ -3,9 +3,10 @@
 // local value is which conversation this browser last displayed.
 import {
   activityGroup, assistantNode, el, fillToolCard, formatBytes, installCopyHandlers,
-  noteNode, patchSummary, relativeTime, renderPatchText, timeGroup, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
+  noteNode, patchSummary, relativeTime, renderPatchText, toolCard, toolResultDetails, toolResultText, updateActivity, updateAssistant, userBubble,
   copyText,
 } from './render.js';
+import { attentionOf, formatReset, isTerminalSession, patchFiles, sessionGroups, usageBadge } from './sidebar.js';
 
 const ACTIVE_KEY_BASE = 'pi-coffee.active.v2';
 let ACTIVE_KEY = ACTIVE_KEY_BASE;   // suffixed with the login name once /auth/me answers
@@ -14,6 +15,8 @@ const ui = {
   app: $('#app'), thread: $('#thread'), scroller: $('#scroller'), toBottom: $('#to-bottom'),
   prompt: $('#prompt'), send: $('#send'), stop: $('#stop'), status: $('#status'), dot: $('#dot'),
   title: $('#title'), topbarState: $('#topbar-state'), stats: $('#stats'), sessionMeta: $('#session-meta'),
+  usage: $('#usage'),
+  diffPanel: $('#diff-panel'), dpSub: $('#dp-sub'), dpCopy: $('#dp-copy'), dpClose: $('#dp-close'), dpFiles: $('#dp-files'), dpBody: $('#dp-body'),
   turnDiffBtn: $('#turn-diff'), diffModal: $('#diff-modal'), diffBody: $('#diff-body'), diffSub: $('#diff-sub'), diffClose: $('#diff-close'), diffCopy: $('#diff-copy'),
   sessionList: $('#session-list'), search: $('#search'), queue: $('#queue'), slash: $('#slash'),
   attachments: $('#attachments'), attach: $('#attach'), file: $('#file'), hint: $('#hint'),
@@ -236,30 +239,46 @@ function renderSessionList() {
     ui.sessionList.appendChild(el('li', 'empty-list', filter ? '没有匹配的对话' : '还没有对话'));
     return;
   }
-  let group = null;
-  for (const session of known) {
-    const g = timeGroup(session.updatedAt);
-    if (g !== group) { group = g; ui.sessionList.appendChild(el('li', 'side-label', g)); }
-    const item = el('li', 'session-item' + (session.id === activeId ? ' active' : ''));
-    item.setAttribute('role', 'button');
-    item.tabIndex = 0;
-    const main = el('div', 'session-main');
-    main.appendChild(el('span', 'title', sessionTitle(session)));
-    const meta = el('span', 'meta', [relativeTime(session.updatedAt), session.messageCount ? session.messageCount + ' 条' : ''].filter(Boolean).join(' · '));
-    main.appendChild(meta);
-    item.appendChild(main);
-    if (session.running || (session.id === activeId && streaming)) item.appendChild(el('span', 'running'));
-    const menu = el('button', 'more', '⋯');
-    menu.type = 'button';
-    menu.title = '重命名 / 删除';
-    menu.setAttribute('aria-label', '对话操作');
-    menu.addEventListener('click', (event) => { event.stopPropagation(); openSessionMenu(session, menu); });
-    item.appendChild(menu);
-    const open = () => { switchSession(session.id); closeSidebarOnMobile(); };
-    item.addEventListener('click', open);
-    item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-    ui.sessionList.appendChild(item);
+  // Who needs you first (P0), then time buckets, then the VM admin's terminal threads (P3).
+  for (const group of sessionGroups(known)) {
+    const label = el('li', 'side-label' + (group.label === '需要你' ? ' attention' : ''), group.label);
+    if (group.label === '本机终端会话') label.title = '在 User VM 终端里用 codex 打开的会话（同一工作目录）。点击可查看，空闲后可接管继续对话。';
+    ui.sessionList.appendChild(label);
+    for (const session of group.sessions) ui.sessionList.appendChild(sessionRow(session));
   }
+}
+function sessionRow(session) {
+  const attention = attentionOf(session);
+  const terminal = isTerminalSession(session);
+  const item = el('li', 'session-item' + (session.id === activeId ? ' active' : '') + (attention ? ' ' + attention : '') + (terminal ? ' terminal' : ''));
+  item.setAttribute('role', 'button');
+  item.tabIndex = 0;
+  const main = el('div', 'session-main');
+  main.appendChild(el('span', 'title', sessionTitle(session)));
+  const metaParts = [relativeTime(session.updatedAt), session.messageCount ? session.messageCount + ' 条' : ''];
+  if (attention === 'waiting') metaParts.unshift('等你回答');
+  else if (attention === 'finished') metaParts.unshift('已完成，待查看');
+  else if (attention === 'running') metaParts.unshift('运行中');
+  if (terminal) metaParts.push('终端');
+  main.appendChild(el('span', 'meta', metaParts.filter(Boolean).join(' · ')));
+  item.appendChild(main);
+  if (attention === 'waiting') item.appendChild(el('span', 'badge waiting', '?'));
+  else if (attention === 'finished') item.appendChild(el('span', 'badge finished', '✓'));
+  else if (attention === 'running') item.appendChild(el('span', 'running'));
+  const menu = el('button', 'more', '⋯');
+  menu.type = 'button';
+  menu.title = '重命名 / 删除';
+  menu.setAttribute('aria-label', '对话操作');
+  menu.addEventListener('click', (event) => { event.stopPropagation(); openSessionMenu(session, menu); });
+  item.appendChild(menu);
+  const open = () => { switchSession(session.id); closeSidebarOnMobile(); };
+  item.addEventListener('click', open);
+  item.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  return item;
+}
+/** Conversations that want the user, for the tab title. */
+function attentionCount() {
+  return sessions.filter((s) => s.id !== activeId && (s.attention === 'waiting' || s.attention === 'finished')).length;
 }
 
 let menuNode;
@@ -301,7 +320,8 @@ function renderHeader() {
   ui.title.textContent = title;
   ui.title.disabled = !activeId;
   ui.sessionMeta.textContent = activeId ? activeId.slice(0, 8) : '';
-  document.title = (finishedWhileHidden ? '✅ ' : '') + (activeId && title !== '新对话' ? title + ' · ' : '') + 'PI Coffee';
+  const pending = attentionCount();
+  document.title = (finishedWhileHidden ? '✅ ' : '') + (pending ? '(' + pending + ') ' : '') + (activeId && title !== '新对话' ? title + ' · ' : '') + 'PI Coffee';
   ui.topbarState.innerHTML = streaming ? '<span class="dot busy"></span>正在工作…' : '';
   renderStats();
 }
@@ -311,7 +331,22 @@ function fmtTokens(n) {
   if (n >= 1000) return (n / 1000).toFixed(n >= 100_000 ? 0 : 1) + 'K';
   return String(n);
 }
+function renderUsage() {
+  const badge = usageBadge(statsCache && statsCache.rateLimits);
+  ui.usage.classList.toggle('hidden', !badge);
+  if (!badge) return;
+  ui.usage.textContent = badge.text;
+  ui.usage.classList.toggle('warn', badge.level === 'warn');
+  ui.usage.classList.toggle('danger', badge.level === 'danger');
+  const l = statsCache.rateLimits;
+  const lines = ['帐号用量（VM 上登录的那个 Codex 帐号，所有用户共用）'];
+  if (l.fiveHour) lines.push('5 小时窗：已用 ' + Math.round(l.fiveHour.usedPercent) + '%' + (formatReset(l.fiveHour.resetsAt) ? '，' + formatReset(l.fiveHour.resetsAt) : ''));
+  if (l.weekly) lines.push('每周窗：已用 ' + Math.round(l.weekly.usedPercent) + '%' + (formatReset(l.weekly.resetsAt) ? '，' + formatReset(l.weekly.resetsAt) : ''));
+  if (l.plan) lines.push('套餐：' + l.plan);
+  ui.usage.title = lines.join('\n');
+}
 function renderStats() {
+  renderUsage();
   if (!statsCache || !activeId) { ui.stats.classList.add('hidden'); hideStatsPop(); return; }
   const usage = statsCache.contextUsage;
   const pct = usage && typeof usage.percent === 'number' ? usage.percent : null;
@@ -658,14 +693,64 @@ function flushToolFills() {
 }
 ui.thread.addEventListener('toggle', (event) => { if (event.target.classList?.contains('tool')) event.target.dataset.userToggled = '1'; }, true);
 
-// ---------- 本轮改动 (cumulative turn diff) ----------
+// ---------- 本轮改动 (cumulative turn diff, P2 docked review) ----------
+const DOCK_MIN_WIDTH = 1100;   // below this the panel would crush the thread: use the modal
+let diffDocked = false;        // user opened the docked panel; it follows later turn_diff updates
+let diffRaf = 0;
 function setTurnDiff(diff) {
   turnDiff = diff || '';
   const summary = patchSummary(turnDiff);
   const show = turnDiff.trim().length > 0;
   ui.turnDiffBtn.classList.toggle('hidden', !show);
   if (show) ui.turnDiffBtn.textContent = '本轮改动 ' + summary.files + ' 个文件 +' + summary.add + ' −' + summary.del;
-  if (!show) closeDiffModal();
+  if (!show) { closeDiffModal(); closeDiffPanel(); return; }
+  // The docked panel is live: a run that keeps editing keeps the review current.
+  if (diffDocked) { cancelAnimationFrame(diffRaf); diffRaf = requestAnimationFrame(renderDiffPanel); }
+}
+function canDock() { return window.innerWidth >= DOCK_MIN_WIDTH; }
+function openDiffReview() {
+  if (!turnDiff.trim()) return;
+  if (canDock()) openDiffPanel(); else openDiffModal();
+}
+function openDiffPanel() {
+  diffDocked = true;
+  ui.diffPanel.classList.remove('hidden');
+  ui.app.classList.add('diff-docked');
+  renderDiffPanel();
+}
+function closeDiffPanel() {
+  diffDocked = false;
+  ui.diffPanel.classList.add('hidden');
+  ui.app.classList.remove('diff-docked');
+}
+function renderDiffPanel() {
+  const files = patchFiles(turnDiff);
+  const summary = patchSummary(turnDiff);
+  ui.dpSub.textContent = files.length + ' 个文件 · +' + summary.add + ' −' + summary.del;
+  ui.dpFiles.innerHTML = '';
+  ui.dpBody.innerHTML = '';
+  files.forEach((file, index) => {
+    const row = el('li', 'diff-file ' + file.status);
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.title = file.path;
+    row.appendChild(el('span', 'path', file.path || '(未命名)'));
+    row.appendChild(el('span', 'counts', '+' + file.add + ' −' + file.del));
+    const jump = () => { const target = ui.dpBody.querySelector('[data-file="' + index + '"]'); if (target) target.scrollIntoView({ block: 'start' }); };
+    row.addEventListener('click', jump);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jump(); } });
+    ui.dpFiles.appendChild(row);
+    const section = el('section', 'diff-file-section');
+    section.dataset.file = String(index);
+    const head = el('h3', 'diff-file-head');
+    head.appendChild(el('span', 'path', file.path || '(未命名)'));
+    head.appendChild(el('span', 'counts', '+' + file.add + ' −' + file.del));
+    section.appendChild(head);
+    const body = el('div', 'diff-file-body');
+    body.innerHTML = renderPatchText(file.text);
+    section.appendChild(body);
+    ui.dpBody.appendChild(section);
+  });
 }
 function openDiffModal() {
   if (!turnDiff.trim()) return;
@@ -675,10 +760,14 @@ function openDiffModal() {
   ui.diffModal.classList.remove('hidden');
 }
 function closeDiffModal() { ui.diffModal.classList.add('hidden'); }
-ui.turnDiffBtn.addEventListener('click', openDiffModal);
+ui.turnDiffBtn.addEventListener('click', openDiffReview);
 ui.diffClose.addEventListener('click', closeDiffModal);
 ui.diffModal.addEventListener('click', (e) => { if (e.target === ui.diffModal) closeDiffModal(); });
 ui.diffCopy.addEventListener('click', async () => { if (await copyText(turnDiff)) toast('已复制 diff'); });
+ui.dpClose.addEventListener('click', closeDiffPanel);
+ui.dpCopy.addEventListener('click', async () => { if (await copyText(turnDiff)) toast('已复制 diff'); });
+// Dock <-> modal follows the window: a docked panel on a shrinking window becomes a modal.
+window.addEventListener('resize', () => { if (diffDocked && !canDock()) { closeDiffPanel(); openDiffModal(); } });
 
 // ---------- finished-while-away notification ----------
 function notifyFinished() {

@@ -25,6 +25,12 @@ export interface HostSessionOptions {
   onIdle?: (session: HostSession) => void;
   /** Called when a run starts or settles (the conversation list's running flag / counts change). */
   onLifecycle?: (session: HostSession) => void;
+  /**
+   * How often to re-read the agent's state while a turn this Host did not
+   * start is running (e.g. the VM admin's terminal drives the same Codex
+   * thread). No events reach us for such a turn, so its end is polled.
+   */
+  externalPollMs?: number;
 }
 
 export interface SessionOpenResult {
@@ -60,6 +66,10 @@ export class HostSession {
   private started = false;
   private startPromise?: Promise<void>;
   private idleTimer?: ReturnType<typeof setTimeout>;
+  /** A run settled while no browser was attached; cleared when one attaches. */
+  private unseenSettle = false;
+  private readonly externalPollMs: number;
+  private externalTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: HostSessionOptions) {
     this.id = options.id ?? randomUUID();
@@ -68,6 +78,7 @@ export class HostSession {
     this.idleTimeoutMs = Math.max(0, options.idleTimeoutMs ?? 0);
     this.onIdle = options.onIdle;
     this.onLifecycle = options.onLifecycle;
+    this.externalPollMs = Math.max(0, options.externalPollMs ?? 3000);
   }
 
   async start(): Promise<void> {
@@ -79,6 +90,7 @@ export class HostSession {
       try {
         this.state = await this.pi.getState();
         this.started = true;
+        this.watchExternalTurn();
       } catch (error) {
         this.unsubscribe?.();
         this.unsubscribe = undefined;
@@ -114,6 +126,10 @@ export class HostSession {
 
   attach(sink: SessionSink): void {
     this.sinks.add(sink);
+    if (this.unseenSettle) {
+      this.unseenSettle = false;
+      this.onLifecycle?.(this); // the list's "finished" flag just cleared
+    }
     this.clearIdleTimer();
   }
 
@@ -136,6 +152,13 @@ export class HostSession {
 
   get hasSinks(): boolean {
     return this.sinks.size > 0;
+  }
+
+  /** What the conversation list should say about this session's need for the user. */
+  get attention(): "waiting" | "finished" | undefined {
+    if (this.pendingUi.size > 0) return "waiting";
+    if (this.unseenSettle) return "finished";
+    return undefined;
   }
 
   reservePrompt(requestId: string): void {
@@ -193,6 +216,7 @@ export class HostSession {
     if (!this.pendingUi.has(response.id)) return false;
     // Remove first so a duplicate answer racing with Pi's follow-on events is rejected.
     this.pendingUi.delete(response.id);
+    this.onLifecycle?.(this);
     await this.ready().respondUi(response);
     return true;
   }
@@ -217,6 +241,8 @@ export class HostSession {
 
   async stop(): Promise<void> {
     this.clearIdleTimer();
+    if (this.externalTimer !== undefined) clearTimeout(this.externalTimer);
+    this.externalTimer = undefined;
     if (this.startPromise) {
       try {
         await this.startPromise;
@@ -230,6 +256,34 @@ export class HostSession {
     this.pi = undefined;
     this.started = false;
     this.sinks.clear();
+  }
+
+  /**
+   * A turn is running that nobody prompted through this Host (take-over of a
+   * terminal thread). Poll the adapter until it reports idle, then publish the
+   * settle the browsers are waiting for.
+   */
+  private watchExternalTurn(): void {
+    if (this.externalTimer !== undefined || this.externalPollMs === 0) return;
+    if (!this.state.isStreaming || this.activeRequestId !== undefined) return;
+    this.externalTimer = setTimeout(async () => {
+      this.externalTimer = undefined;
+      if (!this.pi || !this.started) return;
+      // Our own events may have settled it meanwhile.
+      if (!this.state.isStreaming || this.activeRequestId !== undefined) return;
+      try {
+        const fresh = await this.pi.getState();
+        if (!fresh.isStreaming) {
+          this.state = { ...this.state, ...fresh, isStreaming: true };
+          this.handlePiEvent({ type: "agent_settled" });
+          return;
+        }
+      } catch {
+        // Transient; try again next tick.
+      }
+      this.watchExternalTurn();
+    }, this.externalPollMs);
+    this.externalTimer.unref?.();
   }
 
   private scheduleIdleCheck(): void {
@@ -264,6 +318,7 @@ export class HostSession {
         lifecycle = true;
         // Whatever dialogs were open have been answered or timed out by now.
         this.pendingUi.clear();
+        if (this.sinks.size === 0) this.unseenSettle = true;
         void this.refreshState();
       }
     }
@@ -285,6 +340,7 @@ export class HostSession {
     while (this.events.length > this.eventBufferSize) this.events.shift();
     if (isRecord(safeEvent) && safeEvent.type === "extension_ui_request" && typeof safeEvent.id === "string" && isDialogMethod(safeEvent.method)) {
       this.pendingUi.set(safeEvent.id, frame);
+      lifecycle = true; // the list's "waiting" flag changed
     }
     for (const sink of this.sinks) sink.send(frame);
     if (settled) this.scheduleIdleCheck();
@@ -316,10 +372,13 @@ export class HostSessionRegistry {
   private readonly sessions = new Map<string, HostSession>();
   private readonly changeListeners = new Set<() => void>();
 
-  constructor(options: { factory: PiSessionFactory; eventBufferSize?: number; idleTimeoutMs?: number }) {
+  private readonly externalPollMs?: number;
+
+  constructor(options: { factory: PiSessionFactory; eventBufferSize?: number; idleTimeoutMs?: number; externalPollMs?: number }) {
     this.factory = options.factory;
     this.eventBufferSize = options.eventBufferSize ?? 256;
     this.idleTimeoutMs = options.idleTimeoutMs ?? 10 * 60 * 1000;
+    this.externalPollMs = options.externalPollMs;
   }
 
   /** Fires whenever the conversation list may have changed (new, settled, renamed, deleted, retired). */
@@ -341,6 +400,7 @@ export class HostSessionRegistry {
       factory: this.factory,
       eventBufferSize: this.eventBufferSize,
       idleTimeoutMs: this.idleTimeoutMs,
+      ...(this.externalPollMs === undefined ? {} : { externalPollMs: this.externalPollMs }),
       onIdle: (idle) => void this.retire(idle),
       onLifecycle: () => this.notifyChange(),
     });
@@ -385,10 +445,11 @@ export class HostSessionRegistry {
     // in yet is noise in a shared list (the opening browser shows it locally).
     const summaries: SessionSummary[] = stored
       .filter((item) => item.messageCount > 0)
-      .map((item) => ({
-        ...item,
-        running: this.sessions.get(item.id)?.isStreaming ?? false,
-      }));
+      .map((item) => {
+        const live = this.sessions.get(item.id);
+        const attention = live?.attention;
+        return { ...item, running: live?.isStreaming ?? false, ...(attention === undefined ? {} : { attention }) };
+      });
     // A conversation that was just opened has no file yet (Pi writes it with
     // the first message). Like Codex, it only appears in everyone's list once
     // it has content; the browser that opened it shows it locally meanwhile.
@@ -402,6 +463,7 @@ export class HostSessionRegistry {
         messageCount: session.currentState.messageCount,
         preview: "",
         running: session.isStreaming,
+        ...(session.attention === undefined ? {} : { attention: session.attention }),
       });
     }
     return summaries;
