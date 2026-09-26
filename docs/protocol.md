@@ -113,7 +113,7 @@ Files never cross this protocol or the Web Server. After `opened`/`history`
 the Host sends
 
 ```json
-{"v":1,"type":"transfer","sessionId":"…","url":"http://<user-vm-lan-ip>:53317","scope":"<sessionId>","token":"…","inbox":".pi-coffee/inbox/<sessionId>","maxFileBytes":268435456,"maxBatchBytes":1073741824}
+{"v":1,"type":"transfer","sessionId":"…","url":"http://<user-vm-lan-ip>:53317","scope":"<opaque-owner-and-session-scope>","token":"…","inbox":".pi-coffee/inbox/<sessionId>","maxFileBytes":268435456,"maxBatchBytes":1073741824}
 ```
 
 and the browser talks LocalSend v2 directly to that URL: `POST
@@ -132,8 +132,10 @@ paths. The Host reports progress on the ordinary event stream:
 Downloads use the LocalSend download API against the same URL: `POST
 /prepare-download?scope&token` lists the inbox; `GET
 /download?scope&token&fileId=<workdir-relative path>` streams any file under
-the working directory (agent output included). A LocalSend app that sends
-without scope/token lands in the `shared` inbox. These are Host-originated
+the owning user's working directory (agent output included). Upload preparation,
+inbox listing and downloads require a Host-issued scope and token; missing grants
+return 401, including for plain LocalSend clients. Scopes bind the authenticated
+user and session, so identical session ids cannot share grants or events. These are Host-originated
 events; unlike Pi events they are not part of the durable history.
 
 ## Lifetime rule

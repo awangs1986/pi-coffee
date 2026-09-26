@@ -37,6 +37,19 @@ async function prepare(base: string, token: string, files: Record<string, unknow
 }
 
 describe("TransferServer (LocalSend v2)", () => {
+  it("requires a scope grant for upload preparation, inbox listing and downloads", async () => {
+    const { base, token } = await start();
+    writeFileSync(join(workdir, "private.txt"), "fixture content");
+    for (const [path, method] of [["download?fileId=private.txt", "GET"], ["prepare-download", "POST"], ["prepare-upload", "POST"]]) {
+      const response = await fetch(`${base}/${path}`, {
+        method,
+        ...(method === "POST" ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ files: { a: { id: "a", fileName: "a.txt", size: 1 } } }) } : {}),
+      });
+      expect(response.status).toBe(401);
+    }
+    expect(await (await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=private.txt`)).text()).toBe("fixture content");
+  });
+
   it("answers info/register with a LocalSend device description and CORS headers", async () => {
     const { base } = await start();
     const info = await fetch(`${base}/info`);
@@ -98,20 +111,17 @@ describe("TransferServer (LocalSend v2)", () => {
     expect([400, 413]).toContain(overrun.status);
   });
 
-  it("cancel removes partial state, and plain LocalSend clients land in the shared inbox", async () => {
+  it("cancel removes partial state, and unscoped LocalSend uploads are refused", async () => {
     const { base, token } = await start();
     const prepared = await prepare(base, token, { f: { id: "f", fileName: "later.txt", size: 5 } });
     const { sessionId, files } = prepared.body as { sessionId: string; files: Record<string, string> };
     expect((await fetch(`${base}/cancel?sessionId=${sessionId}`, { method: "POST" })).status).toBe(200);
     expect((await fetch(`${base}/upload?sessionId=${sessionId}&fileId=f&token=${files.f}`, { method: "POST", body: "hello" })).status).toBe(403);
 
-    // A LocalSend app knows nothing about scopes/tokens: it gets the shared inbox.
+    // A client without a Host-issued grant cannot write to the shared root.
     const plain = await fetch(`${base}/prepare-upload`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ files: { p: { id: "p", fileName: "phone.jpg", size: 2 } } }) });
-    expect(plain.status).toBe(200);
-    const body = await plain.json() as { sessionId: string; files: Record<string, string> };
-    expect((await fetch(`${base}/upload?sessionId=${body.sessionId}&fileId=p&token=${body.files.p}`, { method: "POST", body: "hi" })).status).toBe(200);
-    expect(existsSync(join(workdir, ".pi-coffee", "inbox", "shared", "phone.jpg"))).toBe(true);
-    expect(events.at(-1)?.scope).toBe("shared");
+    expect(plain.status).toBe(401);
+    expect(existsSync(join(workdir, ".pi-coffee", "inbox", "shared", "phone.jpg"))).toBe(false);
   });
 
   it("lists the inbox and downloads files under the working directory only", async () => {

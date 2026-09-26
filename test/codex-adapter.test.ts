@@ -14,7 +14,7 @@ interface Bench {
   codexHome: string;
   cliPath: string;
   factories: CodexSessionFactory[];
-  factory(overrides?: { approvalPolicy?: "never" | "on-request"; cwd?: string }): CodexSessionFactory;
+  factory(overrides?: { approvalPolicy?: "never" | "on-request"; cwd?: string; mappingFile?: string }): CodexSessionFactory;
 }
 
 function bench(): Bench {
@@ -28,7 +28,7 @@ function bench(): Bench {
   return {
     root, cwd, codexHome, cliPath, factories,
     factory(overrides = {}) {
-      const factory = new CodexSessionFactory({ cwd: overrides.cwd ?? cwd, cliPath, codexHome, approvalPolicy: overrides.approvalPolicy ?? "never" });
+      const factory = new CodexSessionFactory({ cwd: overrides.cwd ?? cwd, cliPath, codexHome, approvalPolicy: overrides.approvalPolicy ?? "never", mappingFile: overrides.mappingFile });
       factories.push(factory);
       return factory;
     },
@@ -149,6 +149,28 @@ describe("Codex app-server adapter", () => {
     await recA.until(settled); await recB.until(settled);
     expect((await alice.list()).map((s) => s.id)).toEqual(["a-1"]);
     expect((await bob.list()).map((s) => s.id)).toEqual(["b-1"]);
+  });
+
+  it("refuses another user's native thread id for resume and delete even when it is known", async () => {
+    const b = setup();
+    const alice = b.factory({ mappingFile: join(b.root, "alice-map.json") });
+    const session = await alice.create({ sessionId: "alice-local" });
+    const rec = recorder(session);
+    await session.prompt("alice history");
+    await rec.until(settled);
+    await alice.close();
+    // A native session discovered without PI Coffee's alias map has its native id.
+    const nativeView = b.factory();
+    const [listed] = await nativeView.list();
+    expect(listed.id).not.toBe("alice-local");
+    await nativeView.close();
+    const bob = b.factory({ cwd: join(b.root, "work", "bob") });
+    expect(await bob.list()).toEqual([]);
+    expect(await bob.create({ sessionId: listed.id }).then(() => "resumed", (error: Error) => error.message)).toBe("No such conversation");
+    expect(await bob.delete(listed.id)).toBe(false);
+    await bob.close();
+    const resumed = await b.factory().create({ sessionId: listed.id });
+    expect((await resumed.getHistory()).entries).toContainEqual(expect.objectContaining({ kind: "user", text: "alice history" }));
   });
 
   it("translates command and file-change items into tool events with results", async () => {

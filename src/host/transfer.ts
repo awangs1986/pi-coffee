@@ -71,6 +71,7 @@ export class TransferServer {
   private readonly http: HttpServer;
   private readonly tokens = new Map<string, string>();        // scope -> token
   private readonly roots = new Map<string, string>();         // scope -> per-user root (ADR-0010)
+  private readonly inboxScopes = new Map<string, string>();   // opaque grant -> original session inbox
   private readonly uploads = new Map<string, UploadSession>(); // upload session id -> session
   private readonly fingerprint: string;
   private readonly secure: boolean;
@@ -132,10 +133,14 @@ export class TransferServer {
    * Host runs. `root` pins the scope to one user's directory in the shared
    * User VM: its inbox lives under it and downloads cannot leave it.
    */
-  issueToken(scope: string, root?: string): string {
-    if (root !== undefined) this.roots.set(scope, resolve(root));
+  issueToken(scope: string, root?: string, inboxScope = scope): string {
     const existing = this.tokens.get(scope);
-    if (existing) return existing;
+    if (existing) {
+      if (root !== undefined && resolve(root) !== this.rootOf(scope)) throw new Error("Transfer scope already bound");
+      return existing;
+    }
+    this.roots.set(scope, resolve(root ?? this.workdir));
+    this.inboxScopes.set(scope, inboxScope);
     const token = randomBytes(24).toString("hex");
     this.tokens.set(scope, token);
     return token;
@@ -143,7 +148,7 @@ export class TransferServer {
 
   /** Inbox path relative to the scope's root (what Pi sees from its cwd). */
   inboxFor(scope: string): string {
-    return join(INBOX_DIR, safeScope(scope));
+    return join(INBOX_DIR, safeScope(this.inboxScopes.get(scope) ?? scope));
   }
 
   /** Absolute directory that `fileId`s of this scope are relative to. */
@@ -212,11 +217,10 @@ export class TransferServer {
     };
   }
 
-  /** Resolve the scope for a request: token-scoped, or "shared" when a plain LocalSend client comes by. */
+  /** File access always needs a Host-issued scope grant, including local clients. */
   private scopeOf(url: URL): string | null {
     const scope = url.searchParams.get("scope");
     const token = url.searchParams.get("token");
-    if (scope === null && token === null) return "shared";
     if (scope === null || token === null) return null;
     return this.tokens.get(scope) === token ? scope : null;
   }

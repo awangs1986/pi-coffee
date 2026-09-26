@@ -82,7 +82,9 @@ export class GiteaAuth {
     const payload = raw.slice(0, dot);
     const signature = raw.slice(dot + 1);
     const expected = this.sign(payload);
-    if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return undefined;
+    const suppliedBytes = Buffer.from(signature);
+    const expectedBytes = Buffer.from(expected);
+    if (suppliedBytes.length !== expectedBytes.length || !timingSafeEqual(suppliedBytes, expectedBytes)) return undefined;
     let parsed: unknown;
     try {
       parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
@@ -146,7 +148,11 @@ export class GiteaAuth {
     target.searchParams.set("redirect_uri", this.redirectUri(request));
     target.searchParams.set("response_type", "code");
     target.searchParams.set("state", state);
-    response.writeHead(302, { location: target.toString(), "cache-control": "no-store" });
+    response.writeHead(302, {
+      location: target.toString(),
+      "set-cookie": this.cookie(state, STATE_TTL_MS / 1000, request, `${this.cookieName}_oauth_state`),
+      "cache-control": "no-store",
+    });
     response.end();
   }
 
@@ -154,11 +160,12 @@ export class GiteaAuth {
     const state = url.searchParams.get("state");
     const code = url.searchParams.get("code");
     const issued = state === null ? undefined : this.states.get(state);
-    if (state !== null) this.states.delete(state);
-    if (issued === undefined || issued + STATE_TTL_MS < this.now() || code === null) {
+    const browserState = parseCookies(request.headers.cookie)[`${this.cookieName}_oauth_state`];
+    if (state === null || browserState !== state || issued === undefined || issued + STATE_TTL_MS < this.now() || code === null) {
       this.redirectWithError(response, "登录已过期或被中断，请重试。");
       return;
     }
+    this.states.delete(state);
     let login: string | undefined;
     try {
       login = await this.exchange(code, this.redirectUri(request));
@@ -175,7 +182,10 @@ export class GiteaAuth {
     const exp = this.now() + this.ttlMs;
     const payload = Buffer.from(JSON.stringify({ u: user, exp }), "utf8").toString("base64url");
     response.writeHead(303, {
-      "set-cookie": this.cookie(`${payload}.${this.sign(payload)}`, Math.floor(this.ttlMs / 1000), request),
+      "set-cookie": [
+        this.cookie(`${payload}.${this.sign(payload)}`, Math.floor(this.ttlMs / 1000), request),
+        this.cookie("", 0, request, `${this.cookieName}_oauth_state`),
+      ],
       location: "/",
       "cache-control": "no-store",
     });
@@ -230,9 +240,9 @@ export class GiteaAuth {
     return `${encrypted ? "https" : "http"}://${request.headers.host ?? "localhost"}`;
   }
 
-  private cookie(value: string, maxAgeSeconds: number, request: IncomingMessage): string {
+  private cookie(value: string, maxAgeSeconds: number, request: IncomingMessage, name = this.cookieName): string {
     const secure = this.origin(request).startsWith("https://") ? "; Secure" : "";
-    return `${this.cookieName}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
+    return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
   }
 
   private sign(payload: string): string {
