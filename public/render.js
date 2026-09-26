@@ -228,6 +228,13 @@ export function userBubble(entry) {
     bubble.appendChild(el('div', 'thumbs-note', `[${entry.imageCount} 张图片]`));
   }
   node.appendChild(bubble);
+  const tools = el('div', 'msg-tools');
+  const copy = el('button', 'msg-tool', '复制');
+  copy.type = 'button';
+  copy.title = '复制这条消息';
+  copy.addEventListener('click', async () => { if (await copyText(entry.text || '')) flashButton(copy); });
+  tools.appendChild(copy);
+  node.appendChild(tools);
   return node;
 }
 
