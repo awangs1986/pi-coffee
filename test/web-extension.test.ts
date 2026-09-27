@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { createWebExtension } from "../src/extensions/web-access/extension.js";
-import { MemorySearchTransport } from "../src/extensions/web-access/search.js";
+import { MemorySearchTransport, OfficialSerperSearchTransport } from "../src/extensions/web-access/search.js";
 import { ResearchArtifactStore } from "../src/extensions/web-access/research-artifact.js";
 
 type Handler = (event: any, context: any) => unknown;
@@ -60,6 +60,31 @@ class FakePi {
 }
 
 describe("PI Coffee web extension", () => {
+  it("uses the official Serper provider while keeping full results out of the Pi turn", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-coffee-official-search-"));
+    try {
+      const calls: Array<{ query: string; options: Record<string, unknown> }> = [];
+      const transport = new OfficialSerperSearchTransport(async (query, options) => {
+        calls.push({ query, options });
+        return { answer: "", results: Array.from({ length: 4 }, (_, i) => ({
+          title: `Official result ${i}`, url: `https://example.com/source-${i}`,
+          snippet: i === 3 ? "SOURCE_SENTINEL" : `short result ${i}`,
+        })) };
+      });
+      const pi = new FakePi();
+      createWebExtension({ transport, artifactStore: new ResearchArtifactStore(root) })(pi.asExtensionApi());
+      const result = await pi.runTool("web_search", { query: "official serper test", delegate: false });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.query).toBe("official serper test");
+      expect(calls[0]?.options.numResults).toBe(5);
+      expect(result.content[0].text).toContain("[Research sealed]");
+      expect(JSON.stringify(result)).not.toContain("SOURCE_SENTINEL");
+      expect(JSON.stringify(pi.entries)).not.toContain("SOURCE_SENTINEL");
+      const entry = pi.entries.find(value => value.customType === "pi-coffee-research-sealed");
+      expect(await readFile(entry.data.ref.path, "utf8")).toContain("SOURCE_SENTINEL");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it("does not search in the parent when default delegation fails", async () => {
     const pi = new FakePi();
     const transport = new MemorySearchTransport([]);

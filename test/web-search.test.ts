@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MemorySearchTransport, RelaySearchTransport, normalizeWebSearchQuery, parseSearchBatch } from "../src/extensions/web-access/search.js";
+import { MemorySearchTransport, OfficialSerperSearchTransport, normalizeWebSearchQuery } from "../src/extensions/web-access/search.js";
 
 describe("PI Coffee web search adapter", () => {
   it("normalizes bounded multi-query input", () => {
@@ -24,42 +24,28 @@ describe("PI Coffee web search adapter", () => {
     expect(() => normalizeWebSearchQuery({ query: "x", recencyFilter: "hour" as never })).toThrow(/recency/);
   });
 
-  it("keeps the Relay token on the User VM side and parses bounded results", async () => {
-    let seen: { url: string; init: RequestInit } | undefined;
-    const transport = new RelaySearchTransport(
-      "http://relay.test/v1/search/serper",
-      "relay-token",
-      async (url, init) => {
-        seen = { url: String(url), init };
-        return new Response(JSON.stringify({
-          responseId: "r-1",
-          queries: ["pi"],
-          results: [{ title: "Pi", url: "https://example.com/pi", snippet: "bounded" }],
-        }), { status: 200, headers: { "content-type": "application/json" } });
-      },
-    );
-    const result = await transport.search({ queries: ["pi"], numResults: 5, domainFilter: [] });
-    expect(result.results[0]?.url).toBe("https://example.com/pi");
-    expect(seen?.url).toBe("http://relay.test/v1/search/serper");
-    expect((seen?.init.headers as Record<string, string>).authorization).toBe("Bearer relay-token");
-    expect(JSON.stringify(seen?.init)).not.toContain("SERPER");
-  });
-
-  it("bounds the raw Relay body before parsing and always sets a cancellation deadline", async () => {
-    let seenSignal: AbortSignal | null | undefined;
-    const transport = new RelaySearchTransport("http://relay.test", undefined, async (_url, init) => {
-      seenSignal = init?.signal;
-      return new Response("x".repeat(600_000));
+  it("passes bounded options to the official provider and retains only usable sources", async () => {
+    const calls: unknown[] = [];
+    const transport = new OfficialSerperSearchTransport(async (query, options) => {
+      calls.push({ query, options });
+      return { answer: "", results: [
+        { title: "Valid", url: "https://example.com", snippet: "source" },
+        { title: "Invalid", url: "file:///tmp/x", snippet: "drop" },
+      ] };
     });
-    await expect(transport.search({ queries: ["q"], numResults: 1, domainFilter: [] })).rejects.toThrow("512 KiB");
-    expect(seenSignal).toBeInstanceOf(AbortSignal);
+    const input = normalizeWebSearchQuery({ query: "official", numResults: 2, recencyFilter: "week", domainFilter: ["example.com"] });
+    const batch = await transport.search(input);
+    expect(calls).toEqual([{ query: "official", options: { numResults: 2, recencyFilter: "week", domainFilter: ["example.com"] } }]);
+    expect(batch.results).toEqual([{ title: "Valid", url: "https://example.com", snippet: "source" }]);
+    expect(batch.provider).toBe("serper");
   });
 
-  it("filters malformed result entries and bounds the in-memory transport", async () => {
-    expect(parseSearchBatch({ responseId: "r", queries: ["q"], results: [
-      { title: "ok", url: "https://example.com", snippet: "s" },
-      { title: "bad", url: "file:///tmp/x", snippet: "drop" },
-    ] }).results).toHaveLength(1);
+  it("does not publish an invalid or empty official search as evidence", async () => {
+    const input = normalizeWebSearchQuery({ query: "no valid source" });
+    const transport = new OfficialSerperSearchTransport(async () => ({ answer: "", results: [
+      { title: "Invalid", url: "file:///tmp/x", snippet: "" },
+    ] }));
+    await expect(transport.search(input)).rejects.toThrow("no valid sources");
     const memory = new MemorySearchTransport([{ title: "one", url: "https://one.test", snippet: "" }]);
     await memory.search({ queries: ["a"], numResults: 1, domainFilter: [] });
     expect(memory.calls).toHaveLength(1);

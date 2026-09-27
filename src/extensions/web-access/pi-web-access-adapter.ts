@@ -7,9 +7,9 @@ const packageEntry = resolvePackage("pi-web-access/index.ts");
 
 /**
  * Load the official pi-web-access extension through Pi's native extension
- * manager while reserving the `web_search` name for PI Coffee's Relay-backed
- * adapter. The upstream package remains responsible for fetch/content/source
- * tools; no upstream implementation or credentials are copied here.
+ * manager while reserving the `web_search` name for PI Coffee's bounded
+ * evidence adapter. That adapter calls the original package's Serper provider
+ * but must prevent upstream web_search from persisting full results to Pi history.
  */
 export default async function piWebAccessAdapter(pi: ExtensionAPI): Promise<void> {
   const loaded = await createJiti(import.meta.url, { moduleCache: false }).import(packageEntry, { default: true });
@@ -26,10 +26,7 @@ export default async function piWebAccessAdapter(pi: ExtensionAPI): Promise<void
       }
       if (property === "registerCommand") {
         return (name: string, command: Parameters<ExtensionAPI["registerCommand"]>[1]) => {
-          // The official curator/search command can call Serper or another
-          // provider directly. PI Coffee's local `/websearch` command is the
-          // only search entry point so the Control Plane key boundary cannot
-          // be bypassed by a later extension registration.
+          // Official curator/search commands bypass Coffee's evidence limit.
           if (name === "websearch" || name === "curator") return;
           return target.registerCommand(name, command);
         };

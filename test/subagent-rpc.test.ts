@@ -27,7 +27,7 @@ describe.skipIf(process.platform !== 'linux')('real native subagents and delegat
    let text = ''; for await (const chunk of req) text += chunk;
    const input = JSON.parse(text || '{}');
    if (req.url === '/v1/search/serper') {
-    searches++; res.setHeader('content-type','application/json'); res.end(JSON.stringify({ responseId: 'real-search', queries: ['capacity test'], results: [{ title: 'Primary', url: 'https://example.com/primary', snippet: 'evidence '.repeat(70)+'RAW_SEARCH_TAIL_NOT_FOR_PARENT' }] })); return;
+    searches++; res.setHeader('content-type','application/json'); res.end(JSON.stringify({ organic: [{ title: 'Primary', link: 'https://example.com/primary', snippet: 'evidence '.repeat(70)+'RAW_SEARCH_TAIL_NOT_FOR_PARENT' }] })); return;
    }
    requests.push(input);
    if (requests.length > 12) { res.writeHead(500); res.end('loop'); return; }
@@ -77,7 +77,7 @@ print(n)`], {encoding:'utf8'});
     return local.startsWith('..') ? path : resolve(buildRoot, local);
   });
   const client = new RpcClient({ cliPath: resolve('node_modules/@earendil-works/pi-coding-agent/dist/cli.js'), cwd: root, provider: 'localtest', model: 'parent',
-   env: { PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: '1', PI_SUBAGENTS_TEMP_ROOT: join(root,'native-temp'), PI_COFFEE_SEARCH_URL: `http://127.0.0.1:${port}`, PI_COFFEE_SCHEDULER_DIR: join(root,'admission') },
+   env: { PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: '1', PI_SUBAGENTS_TEMP_ROOT: join(root,'native-temp'), SERPER_API_KEY: 'fixture-only', PI_COFFEE_SERPER_FIXTURE_URL: `http://127.0.0.1:${port}/v1/search/serper`, NODE_OPTIONS: `--import ${resolve('test/fixtures/serper-preload.mjs')}`, PI_COFFEE_SCHEDULER_DIR: join(root,'admission') },
    args: ['--offline', '--session-dir', join(root,'sessions'), ...extensions.flatMap(p => ['--extension',p])],
   });
   let events: unknown[] = [];

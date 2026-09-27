@@ -6,7 +6,7 @@ import { invokeNativeSubagent } from "../../subagents/delegation.js";
 import { ResearchArtifactStore, pointerContext, redactSecrets, type ResearchArtifactRef } from "./research-artifact.js";
 import {
   MemorySearchTransport,
-  RelaySearchTransport,
+  OfficialSerperSearchTransport,
   normalizeWebSearchQuery,
   type SearchTransport,
   type WebSearchBatch,
@@ -49,7 +49,7 @@ export function createWebExtension(options: WebExtensionOptions = {}): (pi: Exte
 }
 
 function installWebExtension(pi: ExtensionAPI, options: WebExtensionOptions): void {
-  const transport = options.transport ?? new RelaySearchTransport();
+  const transport = options.transport ?? new OfficialSerperSearchTransport();
   const artifactStore = options.artifactStore ?? new ResearchArtifactStore();
   const sealedByToolCall = new Map<string, SealedResearch>();
   const delegateByDefault = options.delegateByDefault ?? true;
@@ -59,14 +59,14 @@ function installWebExtension(pi: ExtensionAPI, options: WebExtensionOptions): vo
   pi.registerTool(webSearchTool);
   pi.registerTool(sealTool);
   pi.registerCommand("websearch", {
-    description: "Search through the PI Coffee Control Plane Serper Relay",
+    description: "Search with the official pi-web-access Serper provider",
     handler: async (args) => {
       const query = args.trim();
       if (query.length === 0) {
         pi.sendUserMessage("Use the web_search tool for the user's web research request.");
         return;
       }
-      pi.sendUserMessage(`Use the web_search tool to research this request through the Control Plane Relay. Do not use another search provider. Request: ${query}`);
+      pi.sendUserMessage(`Use the web_search tool to research this request with Serper. Request: ${query}`);
     },
   });
 
@@ -76,11 +76,11 @@ function installWebExtension(pi: ExtensionAPI, options: WebExtensionOptions): vo
       kind: "pi-extension",
       origin: "suite",
       title: "API-backed web research",
-      summary: "Search through the Control Plane's Serper relay, optionally ask a native child Pi researcher, and seal the result as Markdown",
+      summary: "Search with the official pi-web-access Serper provider, optionally ask a native child Pi researcher, and seal the result as Markdown",
       keywords: ["web", "search", "internet", "serper", "research", "sources", "md", "artifact"],
       tools: [toolSchema(webSearchTool), toolSchema(sealTool)],
       supportedHarness: ["chat", "work"],
-      permissionSummary: "network reads go through the Control Plane Relay; artifacts stay on the User VM",
+      permissionSummary: "Serper credentials and research artifacts stay on the User VM",
       runnerConformance: "passed",
       supportsProxyCall: false,
     },
@@ -88,9 +88,9 @@ function installWebExtension(pi: ExtensionAPI, options: WebExtensionOptions): vo
     conformanceSource: "local",
     readiness: {
       status: "Degraded",
-      summary: "Relay availability is checked when the first search runs",
+      summary: "Serper availability is checked when the first search runs",
       missing: [],
-      nextSteps: ["configure PI_COFFEE_SEARCH_URL or the User VM Relay route"],
+      nextSteps: ["configure pi-web-access serperApiKey or SERPER_API_KEY in the User VM"],
       inspectedAt: new Date().toISOString(),
     },
   });
@@ -133,7 +133,7 @@ function createWebSearchTool(
   return {
     name: "web_search",
     label: "Web Search",
-    description: "Search the web through the Control Plane Serper Relay. The Relay holds the Serper key; this User VM receives bounded results. Results are saved on the User VM before returning a short top-ranked brief and source index. Chat search directly without children. Work delegates to a native researcher by default; delegate=false explicitly selects direct search.",
+    description: "Search the web through the official pi-web-access Serper provider. Results are saved on the User VM before returning a short top-ranked brief and source index. Chat searches directly without children. Work delegates to a native researcher by default; delegate=false explicitly selects direct search.",
     promptSnippet: "Use for current web facts. Read specific sources to verify important claims; do not load the whole search archive.",
     parameters: Type.Object({
       query: Type.Optional(Type.String({ description: "single search query" })),
