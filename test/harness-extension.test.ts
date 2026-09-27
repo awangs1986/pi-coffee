@@ -9,7 +9,10 @@ import harnessExtension, { createHarnessExtension } from "../src/harness/extensi
 import { MemoryCapabilitySettingsStore } from "../src/capabilities/settings.js";
 import { WORK_TOOLS, CHAT_TOOLS } from "../src/harness/mode.js";
 import { renderHarnessPrompt } from "../src/harness/prompt.js";
-import { createWebExtension } from "../src/extensions/web-access/extension.js";
+function createWebExtension(_options: unknown) {return (pi: ExtensionAPI)=>pi.registerTool({
+ name:'web_search',label:'Official search fixture',description:'search',parameters:{} as never,
+ execute:async()=>({content:[],details:{}}),
+});}
 
 type Handler = (event: unknown, context: unknown) => unknown;
 

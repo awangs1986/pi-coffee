@@ -24,7 +24,7 @@ it("loads the native package entry and exposes its bundled integration resources
   try {
     await client.start();
     const commands = (await client.getCommands()).map(command => command.name);
-    expect(commands).toEqual(expect.arrayContaining(["chat", "work", "harness", "context-recovery", "websearch", "skill:lsp"]));
+    expect(commands).toEqual(expect.arrayContaining(["chat", "work", "harness", "context-recovery", "websearch", "curator", "skill:lsp"]));
     expect(errors).toEqual([]);
     expect(resources.disabled).toEqual([]);
     const bin = resources.path.split(delimiter)[0];

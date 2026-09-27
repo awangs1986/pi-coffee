@@ -14,7 +14,7 @@ const nativeSubagents = process.platform === "linux";
 
 await writeFile(
   inspectionExtension,
-  `import { writeFileSync } from "node:fs";\nexport default function (pi) {\n  pi.on("session_start", () => {\n    writeFileSync(process.env.PI_COFFEE_WEB_INSPECT_PATH, JSON.stringify({ all: pi.getAllTools().map((tool) => tool.name), active: pi.getActiveTools() }));\n  });\n}\n`,
+  `import { writeFileSync } from "node:fs";\nexport default function (pi) {\n  pi.on("session_start", () => {\n    writeFileSync(process.env.PI_COFFEE_WEB_INSPECT_PATH, JSON.stringify({ all: pi.getAllTools().map((tool) => tool.name), searchSchema: pi.getAllTools().find(tool => tool.name === "web_search")?.parameters, active: pi.getActiveTools() }));\n  });\n}\n`,
 );
 
 const extensions = resolvePiExtensions({
@@ -42,7 +42,9 @@ try {
   await client.newSession();
   const inspection = await readJsonWhenReady(inspectionPath);
   const commands = await client.getCommands();
-  const requiredTools = ["web_search", "research_seal", "fetch_content", "source_check", "get_search_content"];
+  const requiredTools = ["web_search", "fetch_content", "source_check", "get_search_content"];
+  if (new Set(inspection.all).size !== inspection.all.length) throw new Error("Duplicate tool registrations");
+  if (inspection.searchSchema?.properties?.delegate || !inspection.searchSchema?.properties?.provider) throw new Error("Expected unmodified official web_search schema");
   const missingTools = requiredTools.filter((name) => !inspection.all.includes(name));
   if (missingTools.length > 0) throw new Error(`Missing Web tools: ${missingTools.join(", ")}`);
   if (nativeSubagents && (!inspection.all.includes("subagent") || !inspection.all.includes("bg_wait"))) {
@@ -56,8 +58,8 @@ try {
   }
   const websearch = commands.find((command) => command.name === "websearch");
   if (!websearch) throw new Error("Missing /websearch command");
-  if (!websearch.description.includes("official pi-web-access Serper")) {
-    throw new Error(`Official curator command replaced Coffee /websearch: ${websearch.description}`);
+  if (inspection.all.includes("research_seal") || !commands.some(c => c.name === "curator")) {
+    throw new Error(`Legacy search remains or official curator command is missing: ${websearch.description}`);
   }
   if (extensionErrors.length > 0) throw new Error(`Pi extension errors: ${JSON.stringify(extensionErrors)}`);
   console.log(JSON.stringify({

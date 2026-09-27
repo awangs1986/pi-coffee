@@ -23,7 +23,6 @@ describe("PI Coffee native extension selection", () => {
   it("loads the read-only context observer after the final Harness boundary", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
-      resolveWebExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
@@ -35,21 +34,19 @@ describe("PI Coffee native extension selection", () => {
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
     expect(resolvePiSubagentsExtension()).toMatch(/[\\/]subagents[\\/]native-adapter\.js$/);
-    expect(resolvePiWebAccessExtension()).toMatch(/[\\/]extensions[\\/]web-access[\\/]pi-web-access-adapter\.js$/);
+    expect(resolvePiWebAccessExtension()).toBe(resolvePiWebAccessPackage());
     expect(resolvePiWebAccessPackage()).toMatch(/node_modules[\\/]pi-web-access[\\/]index\.ts$/);
     expect(resolveContextFoldExtension()).toMatch(/[\\/]context[\\/]extension\.js$/);
   });
 
   it("can disable only pi-subagents while retaining Harness", () => {
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([
-      resolveWebExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
       resolveContextUsageExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([
-      resolveWebExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
@@ -59,7 +56,6 @@ describe("PI Coffee native extension selection", () => {
 
   it("can disable context-fold independently, leaving Pi native compaction available", () => {
     expect(resolvePiExtensions({ PI_COFFEE_CONTEXT_FOLD: "off" })).toEqual([
-      resolveWebExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
@@ -68,23 +64,10 @@ describe("PI Coffee native extension selection", () => {
     ]);
   });
 
-  it("can disable the web adapters independently", () => {
-    expect(resolvePiExtensions({ PI_COFFEE_WEB: "off" })).toEqual([
-      resolvePiSubagentsExtension(),
-      resolvePiWebAccessExtension(),
-      resolvePiSubagentsResourceExtension(),
-      resolveContextFoldExtension(),
-      resolveHarnessExtension(),
-      resolveContextUsageExtension(),
-    ]);
-    expect(resolvePiExtensions({ PI_COFFEE_WEB_ACCESS: "off" })).toEqual([
-      resolveWebExtension(),
-      resolvePiSubagentsExtension(),
-      resolvePiSubagentsResourceExtension(),
-      resolveContextFoldExtension(),
-      resolveHarnessExtension(),
-      resolveContextUsageExtension(),
-    ]);
+  it("disables the single native Web extension with either legacy switch", () => {
+    for(const key of ['PI_COFFEE_WEB','PI_COFFEE_WEB_ACCESS'])
+      expect(resolvePiExtensions({[key]:'off'})).not.toContain(resolvePiWebAccessPackage());
+    expect(resolvePiExtensions({}).filter(p=>p===resolvePiWebAccessPackage())).toHaveLength(1);
   });
 
   it("keeps pi-lens optional and explains an explicit opt-in without an installed package", () => {
