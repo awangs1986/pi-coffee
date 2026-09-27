@@ -1,6 +1,6 @@
 import { getEncoding } from 'js-tiktoken';
 import { buildSessionContext, convertToLlm, type ExtensionAPI, type ExtensionContext } from '@earendil-works/pi-coding-agent';
-import type { ContextBreakdown, ContextCategoryId } from '../shared/protocol.js';
+import type { ContextBreakdown, ContextCategoryId } from './usage-contract.js';
 import { currentHarnessMode } from '../harness/runtime-mode.js';
 
 const ENTRY='coffee-context-usage';

@@ -1,3 +1,5 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # Work 工具设计与现有实现
 
 状态：2026-09-22 已完成运行时迁移。owner 在实际工具链测试后批准精简基础集合，并要求使用 Skill + CLI 的 LSP 中间层。2026-09-20 的原表继承决定已被本轮明确精简取代，已有执行器与按需发现架构继续复用。
@@ -49,8 +51,8 @@ Work 预先看见 LSP Skill 的名称、用途和真实路径，按需读取正�
 
 ## 实测证据与下一次验收
 
-[固定响应接线探针](../reviews/toolchain-smoke-20260921.md)与[真实模型探针](../reviews/real-agent-toolchain-20260921.md)均针对原工具表。真实 `eidolon/gpt-5.6-terra` 会主动使用基础工具；Web 与子 Agent 发现/激活/调用有证据。pi-lens 原生工具 registered 但不 active；单独对照的 LSP 诊断不确定、导航为空，索引和 AST 能力可用。Verify 登录 shell 找不到 Node。不能把这些结果算作新工具集合或 LSP 中间层的验收。
+[固定响应接线探针](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/toolchain-smoke-20260921.md)与[真实模型探针](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/real-agent-toolchain-20260921.md)均针对原工具表。真实 `eidolon/gpt-5.6-terra` 会主动使用基础工具；Web 与子 Agent 发现/激活/调用有证据。pi-lens 原生工具 registered 但不 active；单独对照的 LSP 诊断不确定、导航为空，索引和 AST 能力可用。Verify 登录 shell 找不到 Node。不能把这些结果算作新工具集合或 LSP 中间层的验收。
 
-新探针入口为 `npm run smoke:lsp-agent`；[结果](../reviews/lsp-agent-evaluation-20260921.md)记录 3 个 fixture × 3 次真实 `eidolon/gpt-5.6-terra` 运行，结果为 3/3、2/3、3/3。已更新到当前工具表的探针是 `npm run smoke:toolchain` 与 `npm run smoke:toolchain:real`；固定响应探针验证工具执行与隔离，真实模型探针用于自主发现评测。
+新探针入口为 `npm run smoke:lsp-agent`；[结果](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/lsp-agent-evaluation-20260921.md)记录 3 个 fixture × 3 次真实 `eidolon/gpt-5.6-terra` 运行，结果为 3/3、2/3、3/3。已更新到当前工具表的探针是 `npm run smoke:toolchain` 与 `npm run smoke:toolchain:real`；固定响应探针验证工具执行与隔离，真实模型探针用于自主发现评测。
 
-本轮迁移证据见[验收记录](../reviews/chat-work-migration-20260922.md)。既有真实模型报告仍只证明报告所列版本。
+本轮迁移证据见[验收记录](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/chat-work-migration-20260922.md)。既有真实模型报告仍只证明报告所列版本。
