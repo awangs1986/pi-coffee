@@ -12,6 +12,17 @@ Pi 0.87.1, Chat/Work, capability discovery, Git/search extensions, subagents, co
 
 [PA-014](docs/spec/web-search-plugin.md) now selects the unmodified official `pi-web-access` extension as Pi's only Web integration, with Serper configured as its default provider. [Pi #71](http://gitea:3000/awangs/pi-coffee/issues/71) removes the Coffee search/seal adapter and automatic Web delegation. The owner accepted native shared cache placement; deployed/live-provider acceptance is tracked separately. Migration acceptance must cover native Chat/Work tool visibility, Serper calls, large-result context limits, and the official cache's ownership across Conversations. [Pi #24](http://gitea:3000/awangs/pi-coffee/issues/24) has older Relay-specific acceptance text and needs its deployment criteria reconciled with PA-014.
 
+## OMP LSP port
+
+The LSP subset of [Pi #67](http://gitea:3000/awangs/pi-coffee/issues/67), HARNESS-P3/P4,
+was ported on `codex/omp-lsp-port` from Pi main `0278a99` and merged into local main. It adds implementation,
+six language-family profiles and the OMP lifecycle/diagnostic fixes while preserving
+Pi 0.87.1 and the public Skill/CLI interface. See the [acceptance method](docs/testing/omp-lsp-acceptance.md)
+and [local evidence](docs/reviews/omp-lsp-port-20260927.md). This does not merge or
+certify the remaining P0–P7, context, subagent or Server experiments. Package
+publication, Server consumer upgrade and deployment remain separate actions.
+The acceptance report records the completed live-model evaluation and its limits.
+
 ## Independent work preserved
 
 - [Pi #67](http://gitea:3000/awangs/pi-coffee/issues/67) and [PR #68](http://gitea:3000/awangs/pi-coffee/pulls/68): unmerged P0–P7 work, required-language LSP and native-first/Handoff experiments. Its tests and decisions are evidence for that branch, not current main. Host changes from that branch must be ported into the Server repository when separately accepted.

@@ -17,3 +17,5 @@ await import("node:fs/promises").then(({ chmod }) => chmod(resolve(root, "dist/b
 
 await mkdir(resolve(root, "dist/src/subagents"), { recursive: true });
 await cp(resolve(root, "src/subagents/launch.py"), resolve(root, "dist/src/subagents/launch.py"));
+
+await cp(resolve(root, "third_party/oh-my-pi"), resolve(root, "dist/third_party/oh-my-pi"), { recursive: true });

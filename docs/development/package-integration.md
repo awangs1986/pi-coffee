@@ -9,7 +9,7 @@ Import from `pi-coffee`:
 - `resolvePiExtensions(env?)`: ordered individual extension paths for an embedding adapter; preserves existing opt-in and replacement settings.
 - `resolvePiSkills(env?)`: bundled LSP Skill paths, with the existing override contract.
 - `withCoffeeLspPath(env?)`: the child PATH overlay containing the bundled LSP launcher.
-- `stopLspDaemon(options)`: release the owning task's LSP daemon using its existing scoped lifecycle.
+- `stopLspDaemon(sessionId, env?)`: release the owning task's LSP daemon using its existing scoped lifecycle.
 - `ContextBreakdown` and `ContextCategoryId`: bounded attribution types, without a Web transport dependency.
 
 The native Pi package manifest loads `dist/src/pi-extension.js`, which installs the same ordered extensions. Use either the manifest entry or the individual integration paths, once per Pi process. Consumer code must not import private `dist/src` implementation files.
