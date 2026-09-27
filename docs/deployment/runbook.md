@@ -1,5 +1,25 @@
 # PI Coffee Server deployment
 
+## Release identity gate
+
+Deploy this Server repository together with a compatible Agent Host. The older
+GitHub `awangs1986/pi-coffee` monolith is a different code lineage: its main branch
+does not contain the complete three-Agent workbench. A healthy endpoint or one
+successful Codex reply does not prove the browser features are present.
+
+After build and deployment, run this probe with the actual systemd release
+directory (or the identical freshly built checkout):
+
+```sh
+node scripts/probe-workbench-release.mjs http://webserver:3000/ /absolute/path/to/release
+```
+
+The probe checks the five restored control groups and matches served assets to
+the release. It preserves OAuth: an unauthenticated root redirect uses the
+release's built HTML, not a bypass or a stored browser cookie. Also sign in and
+exercise new-task Agent choices, brand menu, Pi Context Usage, task details,
+and an actual file Diff. See [2026-09-27 recovery](../reviews/workbench-recovery-20260927.md).
+
 This repository installs two independent processes on the Debian Server:
 
 | Process | Entrypoint | Holds |

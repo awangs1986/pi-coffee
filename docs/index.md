@@ -1,5 +1,7 @@
 # PI Coffee Server documentation
 
+- [Complete workbench recovery and release gate](reviews/workbench-recovery-20260927.md): deployment-source regression, restored UI acceptance, local Host routing and the remaining GitHub/Gitea reconciliation.
+
 - [VM 完整权限与 Gitea 工作区决策](./adr/0012-owner-privileges-and-gitea-checkouts.md)
 - [T0–T4 联合交付](./development/t0-t4-gitea-workspaces.md)：T3 UI/代理代码已实现，Server 仍参与 T4 部署与双 VM 验收。
 
