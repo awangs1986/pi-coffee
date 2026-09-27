@@ -395,18 +395,21 @@ export class TransferServer {
     if (full !== root && !full.startsWith(root + sep)) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
     // INV-T3: … and so must its name, whatever directory it sits in.
     if (isCredentialFileName(basename(full))) { sendJson(response, 403, { message: "Credential files are never served" }); return; }
-    const info = await stat(full).catch(() => null);
+    const realFull = await realpath(full).catch(() => null);
+    if (!realFull) { sendJson(response, 404, { message: "Not found" }); return; }
+    if (isCredentialFileName(basename(realFull))) { sendJson(response, 403, { message: "Credential files are never served" }); return; }
+    const info = await stat(realFull).catch(() => null);
     if (!info || !info.isFile()) { sendJson(response, 404, { message: "Not found" }); return; }
     // INV-T2: the *real* path must stay under the real root: a symlink inside
     // the working directory that points outside it does not escape.
-    if (!(await withinRealRoot(root, full))) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
+    if (!(await withinRealRoot(root, realFull))) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
     response.writeHead(200, {
       "content-type": mimeFor(full),
       "content-length": String(info.size),
       "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(basename(full))}`,
       "cache-control": "no-store",
     });
-    createReadStream(full).pipe(response);
+    createReadStream(realFull).pipe(response);
   }
 
   private emit(scope: string, event: JsonValue): void {
