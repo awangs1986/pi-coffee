@@ -173,10 +173,10 @@ export class CodexSessionFactory implements PiSessionFactory {
     return threads;
   }
 
-  async create(options: { sessionId: string }): Promise<PiSession> {
+  async create(options: { sessionId: string; requireExisting?: boolean }): Promise<PiSession> {
     const server = await this.connection();
     const mapping = await this.loadMapping();
-    const known = mapping.get(options.sessionId) ?? options.sessionId;
+    const known = options.requireExisting ? options.sessionId : mapping.get(options.sessionId) ?? options.sessionId;
     const common = {
       cwd: this.options.cwd,
       ...(this.options.sandbox === undefined ? {} : { sandbox: this.options.sandbox }),
@@ -188,6 +188,7 @@ export class CodexSessionFactory implements PiSessionFactory {
     let response: Obj | undefined;
     if (UUID_LIKE.test(known)) {
       const owned = await this.ownsThread(server, known).catch((error) => {
+        if (options.requireExisting) throw new Error("Native conversation is unavailable. Its binding and local files were retained; create a new task if the native history was never saved.");
         if (mapping.has(options.sessionId)) throw error;
         return undefined; // A newly generated Host id has no native thread yet.
       });
@@ -195,6 +196,7 @@ export class CodexSessionFactory implements PiSessionFactory {
       if (owned) response = await server.request("thread/resume", { threadId: known, ...common }) as Obj;
     }
     if (!response) {
+      if (options.requireExisting) throw new Error("Native conversation is unavailable; no replacement was created");
       response = await server.request("thread/start", { ...common, threadSource: null }) as Obj;
       const thread = response.thread as Obj;
       if (typeof thread.id === "string" && thread.id !== options.sessionId) await this.remember(options.sessionId, thread.id);

@@ -29,7 +29,7 @@ Unmerged `frontend-audit` and `shared-vm-transition` branches were inspected as 
 
 ## Verification
 
-- `npm run check`: 49 test files, 313 tests passed, including the combined Host, gateway, native adapters, workspaces, Skills, Pi harness and LSP suites.
+- `npm run check`: 49 test files, 314 tests passed, including the combined Host, gateway, native adapters, workspaces, Skills, Pi harness and LSP suites.
 - `npm audit`: zero known vulnerabilities in the combined lockfile.
 - Real Web → Host → native Codex `gpt-6-luna` task: read a disposable README, created `verification.txt` with `UNIFIED_WORKBENCH_OK`, and returned that marker. Native tool activity was visible; refresh and Host restart restored history. Web rename persisted.
 - Browser: Pi-only Chat default; all three Work engines enabled; brand menu, dedicated search with preserved draft, Skills destinations, task path expansion and seven-category Context Usage verified. Context showed system prompt/rules/Skills/tool categories, not cumulative billing totals.
@@ -37,10 +37,14 @@ Unmerged `frontend-audit` and `shared-vm-transition` branches were inspected as 
 - Sidebar collapsed at 1280×720: document remained 1280×720 and composer stayed within the viewport. No browser console errors were reported during this isolated walk.
 - Security regression: cross-user task access and transfer grants, logout during partial upload, native structured questions, and revoked-cookie replay across Web restart. The last regression failed before the epoch/generation fix and passed afterwards. A bounded follow-up review found no remaining blocking finding in those paths.
 
-Local evidence: `/tmp/verify-20260927-unified/` (screenshots), `/tmp/coffee-unify-final-check-3.log`, `/tmp/coffee-unify-auth-red.log`, `/tmp/coffee-unify-auth-green.log`, and `/tmp/coffee-unified-verify/task-result.json`. Synthetic test content only; credentials and native transcripts are excluded from commits and Issues.
+Local evidence: `/tmp/verify-20260927-unified/` (screenshots), `/tmp/coffee-unify-final-check-4.log`, `/tmp/coffee-unify-auth-red.log`, `/tmp/coffee-unify-auth-green.log`, and `/tmp/coffee-unified-verify/task-result.json`. Synthetic test content only; credentials and native transcripts are excluded from commits and Issues.
 
 Limits: no new paid Claude or Pi prompt was sent in this reconciliation. Native turn-diff events and structured questions were verified with adapter fixtures; the actual Luna turn used command tools, so only branch Diff received a real browser walkthrough. Existing workbench polish items remain: terminal ANSI decoration can appear in Pi extension status, and refreshed checkout summaries may add another transcript card. These do not remove any of the recovered controls and are not claimed fixed here. Old VM reachability and snapshot evidence were not revalidated.
 
 ## History preservation
 
 The Agent integration is a normal merge. The unrelated Server history is attached with a tree-preserving merge after its gateway, browser, tests, scripts and documentation were explicitly integrated. This preserves both ancestry paths without overwriting the newer Host/Codex implementation. Generated pelican artwork from Agent history is excluded from the product tree; its original commits remain reachable. Historical deployment documents are marked superseded where source placement conflicts with ADR-0020.
+
+## Upgrade probe follow-up
+
+The deployed upgrade probe found a pre-existing empty Codex task whose native CLI reported both `thread not loaded` and `no rollout found`. No model turn had been persisted for that task. The factory now treats a durable native binding as resume-only: it fails clearly without creating a substitute thread or changing the task binding. A regression failed before this guard and passed after it. Such legacy empty tasks retain their local directory and can be replaced by explicitly creating a new task. Completed native histories were restored in the isolated real-Luna check. This is not evidence that unsaved native history can be recovered.
