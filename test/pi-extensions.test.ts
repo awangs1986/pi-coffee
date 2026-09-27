@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { delimiter, isAbsolute } from "node:path";
 import { discoverAndLoadExtensions } from "@earendil-works/pi-coding-agent";
 import {
   resolveWebExtension,
+  resolveContextUsageExtension,
   resolveHarnessExtension,
   resolvePiExtensions,
   resolveContextFoldExtension,
@@ -16,64 +18,70 @@ import {
 import subagentsResourceExtension from "../src/subagents/extension.js";
 
 describe("PI Coffee native extension selection", () => {
-  it("loads context-fold last so deterministic compaction replaces Pi's native summary", () => {
+  it("loads the read-only context observer after the final Harness boundary", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
-    expect(extensions.every((path) => path.startsWith("/"))).toBe(true);
+    expect(extensions.every((path) => isAbsolute(path))).toBe(true);
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
-    expect(resolvePiSubagentsExtension()).toMatch(/node_modules[\\/]pi-subagents[\\/]index\.ts$/);
-    expect(resolvePiWebAccessExtension()).toMatch(/[\\/]web[\\/]pi-web-access-adapter\.js$/);
+    expect(resolvePiSubagentsExtension()).toMatch(/[\\/]subagents[\\/]native-adapter\.js$/);
+    expect(resolvePiWebAccessExtension()).toMatch(/[\\/]extensions[\\/]web-access[\\/]pi-web-access-adapter\.js$/);
     expect(resolvePiWebAccessPackage()).toMatch(/node_modules[\\/]pi-web-access[\\/]index\.ts$/);
-    expect(resolveContextFoldExtension()).toMatch(/node_modules[\\/]context-fold[\\/]index\.ts$/);
+    expect(resolveContextFoldExtension()).toMatch(/[\\/]context[\\/]extension\.js$/);
   });
 
   it("can disable only pi-subagents while retaining Harness", () => {
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "false" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
   });
 
   it("can disable context-fold independently, leaving Pi native compaction available", () => {
     expect(resolvePiExtensions({ PI_COFFEE_CONTEXT_FOLD: "off" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
+      resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
   });
 
   it("can disable the web adapters independently", () => {
     expect(resolvePiExtensions({ PI_COFFEE_WEB: "off" })).toEqual([
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
     expect(resolvePiExtensions({ PI_COFFEE_WEB_ACCESS: "off" })).toEqual([
       resolveWebExtension(),
-      resolveHarnessExtension(),
       resolvePiSubagentsExtension(),
       resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
+      resolveHarnessExtension(),
+      resolveContextUsageExtension(),
     ]);
   });
 
@@ -130,7 +138,7 @@ describe("PI Coffee native extension selection", () => {
   });
 
   it("keeps an explicit extension replacement list authoritative", () => {
-    expect(resolvePiExtensions({ PI_COFFEE_EXTENSIONS: " ./one.js:/two.js: " })).toEqual([
+    expect(resolvePiExtensions({ PI_COFFEE_EXTENSIONS: ` ./one.js${delimiter}/two.js${delimiter} ` })).toEqual([
       "./one.js",
       "/two.js",
     ]);

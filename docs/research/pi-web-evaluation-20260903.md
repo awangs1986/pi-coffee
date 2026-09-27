@@ -1,8 +1,8 @@
 # pi-web 评估：与 PI Coffee Web Shell 的结合点（ARCH-001 / OPEN-009）
 
-> 日期：2026-09-03  
-> 对象：[agegr/pi-web](https://github.com/agegr/pi-web) `v0.8.11`（MIT，5.8k stars，活跃维护）  
-> 基线：PI Coffee `main` 分支的 Web Shell（`public/`，零依赖三文件）与 Host/Web 窄协议  
+> 日期：2026-09-03\
+> 对象：[agegr/pi-web](https://github.com/agegr/pi-web) `v0.8.11`（MIT，5.8k stars，活跃维护）\
+> 基线：PI Coffee `main` 分支的 Web Shell（`public/`，零依赖三文件）与 Host/Web 窄协议\
 > 结论性质：工程评估，供 owner 决策；不改变任何已定决策（`D-*`、ADR）
 
 ## 1. 一句话结论
@@ -25,7 +25,7 @@
 | Extension UI | 完整处理 `extension_ui_request`：`confirm / select / input / editor`（阻塞对话框）、`notify / setStatus / setWidget / setTitle / set_editor_text`（即发即忘）、`custom`（用 headless TUI 模拟） | `rpc-manager.ts` |
 | 会话结构 | 两种分支：Fork（新 `.jsonl`）与 in-session branch（`navigate_tree`）；`entryIds[]` 与消息一一对应 | `AGENTS.md` |
 | 重连/对齐 | 单调 run id 丢弃过期事件；`prompt_done` 后 SSE 保持 30 s 宽限；不在第一个 `agent_end` 关闭（重试/压缩/队列续跑）；`visibilitychange`/`online` 时对齐 `get_state` | `hooks/useAgentSession.ts` |
-| 其他 | 工具预设（Chat only / read-only / full）作为**策略**而非安全；子代理开关；worktree 切换；模型/skills/plugins 管理；Web Push 完成通知；i18n（en / zh-CN / zh-TW） | README、ADR-0002/0003 |
+| 其他 | 工具预设（纯聊天 / 只读 / 完整工具集）作为**策略**而非安全；子代理开关；worktree 切换；模型/skills/plugins 管理；Web Push 完成通知；i18n（en / zh-CN / zh-TW） | README、ADR-0002/0003 |
 
 ## 3. 与 PI Coffee 决策逐条对照
 

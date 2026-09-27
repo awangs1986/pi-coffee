@@ -13,8 +13,8 @@ export interface ToolSchemaLike {
  * are registered in Pi.
  */
 export const SCHEMA_BUDGETS = Object.freeze({
-  simple: 2_560,
-  full: 4_096,
+  chat: 2_560,
+  work: 4_096,
   epochCeiling: 8_192,
 });
 

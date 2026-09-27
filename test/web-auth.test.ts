@@ -156,6 +156,27 @@ describe("Gitea login on the Web Server (ADR-0004 / ADR-0010)", () => {
     expect(replay.headers.get("location")).toContain("/login?error=");
   });
 
+  it("does not revive a logged-out cookie after Web restarts with the same signing secret", async () => {
+    const fake = await fakeGitea({ "code-alice": "alice" });
+    gitea = fake.server;
+    const options = { giteaUrl: fake.url, clientId: "coffee", clientSecret: "s3cret", allowedUsers: ["alice"], cookieSecret: "stable-test-secret" };
+    const start = async () => {
+      web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: "ws://127.0.0.1:1/host", auth: new GiteaAuth(options) });
+      await web.start();
+      return `http://127.0.0.1:${web.address().port}`;
+    };
+    let url = await start();
+    const alice = await login(url, "code-alice");
+    await fetch(`${url}/auth/logout`, { method: "POST", headers: { cookie: alice.cookie!, origin: url }, redirect: "manual" });
+    const again = await login(url, "code-alice");
+    expect((await fetch(`${url}/auth/me`, { headers: { cookie: again.cookie! } })).status).toBe(200);
+    await web!.close();
+    url = await start();
+    expect((await fetch(`${url}/auth/me`, { headers: { cookie: alice.cookie! } })).status).toBe(401);
+    const renewed = await login(url, "code-alice");
+    expect((await fetch(`${url}/auth/me`, { headers: { cookie: renewed.cookie! } })).status).toBe(200);
+  });
+
   it("rejects malformed multibyte session signatures without disrupting HTTP or WebSocket login checks", async () => {
     const auth = new GiteaAuth({ giteaUrl: "http://127.0.0.1", clientId: "coffee", clientSecret: "fixture", allowedUsers: ["alice"] });
     web = new WebServer({ host: "127.0.0.1", port: 0, hostUrl: "ws://127.0.0.1:1/host", auth });
@@ -237,7 +258,7 @@ describe("Gitea login on the Web Server (ADR-0004 / ADR-0010)", () => {
 
     // Alice's socket reaches the Host as "alice"; Bob's as "bob"; their lists never mix.
     const bob = await login(webUrl, "code-bob");
-    const aliceSocket = new WebSocket(`${webUrl.replace("http", "ws")}/ws`, { headers: { cookie: alice.cookie! } });
+    const aliceSocket = new WebSocket(`${webUrl.replace("http", "ws")}/ws`, { headers: { cookie: alice.cookie!,origin:webUrl } });
     const aliceFrames = reader(aliceSocket);
     await once(aliceSocket, "open");
     aliceSocket.send(encodeFrame({ v: 1, type: "open" }));
@@ -248,7 +269,7 @@ describe("Gitea login on the Web Server (ADR-0004 / ADR-0010)", () => {
     expect([...perUser.keys()]).toEqual(["alice"]);
     expect(perUser.get("alice")!.sessions.has(aliceOpened.sessionId)).toBe(true);
 
-    const bobSocket = new WebSocket(`${webUrl.replace("http", "ws")}/ws`, { headers: { cookie: bob.cookie! } });
+    const bobSocket = new WebSocket(`${webUrl.replace("http", "ws")}/ws`, { headers: { cookie: bob.cookie!,origin:webUrl } });
     await once(bobSocket, "open");
     bobSocket.send(encodeFrame({ v: 1, type: "list_sessions" }));
     const [data] = await once(bobSocket, "message") as [Buffer];
@@ -263,9 +284,12 @@ describe("Gitea login on the Web Server (ADR-0004 / ADR-0010)", () => {
     const logoutPage = await fetch(`${webUrl}/auth/logout`, { headers: { cookie: alice.cookie! }, redirect: "manual" });
     expect(logoutPage.status).toBe(200);
     expect(logoutPage.headers.get("set-cookie")).toBeNull();
-    const logout = await fetch(`${webUrl}/auth/logout`, { method: "POST", headers: { cookie: alice.cookie! }, redirect: "manual" });
+    const aliceClosed=once(aliceSocket,"close");
+    const logout = await fetch(`${webUrl}/auth/logout`, { method: "POST", headers: { cookie: alice.cookie!,origin:webUrl }, redirect: "manual" });
     expect(logout.status).toBe(303);
     expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+    await aliceClosed;
+    expect((await fetch(`${webUrl}/auth/me`,{headers:{cookie:alice.cookie!}})).status).toBe(401);
 
     aliceSocket.close();
     bobSocket.close();

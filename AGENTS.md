@@ -1,22 +1,20 @@
-# PI Coffee handoff entrypoint
+# PI Coffee source and release authority
 
-PI Coffee is the independent product in this repository. The current Picode Gitea repository named V5 is a frozen reference; do not edit it, split it, or import its unfinished implementation while working here.
+GitHub `awangs1986/pi-coffee-server` is the authoritative repository. This repository contains Browser, Web gateway, Relay, Host and native Agent adapters. Gitea `awangs/pi-coffee-server` mirrors the same commits. The former Gitea `pi-coffee` runtime repository and Picode/V5 are historical references.
 
-## First read
+## Before changes, merges or deployment
 
-1. Read [`docs/index.md`](./docs/index.md) to choose the relevant branch of the documentation.
-2. Read [`BACKLOG.md`](./BACKLOG.md) for the discussion-derived scope, status, dependencies, open questions, and explicit non-goals.
-3. Read the linked Gitea Issue before changing scope: [PI Coffee map](http://testpc:3000/awangs/pi-coffee/issues/1).
-4. For the current implementation, trust the code and tests in this checkout; for planned behaviour, trust [`docs/spec/0.1.md`](./docs/spec/0.1.md) and its ticket links.
+1. Read [docs/index.md](docs/index.md), [BACKLOG.md](BACKLOG.md), and the linked Issue for the affected feature.
+2. Fetch GitHub and Gitea. Compare commits and feature coverage before reconciling divergent histories. Preserve work on both sides; use normal merge ancestry and never replace a newer capability with an older tree.
+3. Read [the unification decision](docs/adr/0020-unified-github-authority.md) when choosing repository boundaries, resolving contradictory older docs, or deploying. Host remains in this repository by the owner's explicit decision.
+4. Work from current GitHub main in a clean checkout. Preserve other local branches and uncommitted work.
 
-## Working rules
+## Implementation and release
 
-- Keep the Pi adapter behind its small interface; the Host and Web Server must not import Pi internals directly.
-- Preserve the Host session lifetime across browser disconnects.
-- Use the red → green loop at the public seam for each change. Run `npm run check` before reporting completion.
-- Keep credentials, cookies, VM snapshots, and user transcripts out of commits and Issues.
-- Record scope/status changes in the corresponding Gitea Issue. Do not silently turn a planned 0.1 item into a V5 change.
-
-## Completion criterion
-
-A ticket is ready to close only when its acceptance evidence is recorded in the Issue and a fresh clone can run the documented check or deployment probe that demonstrates it.
+- Keep native Pi/Codex/Claude details behind Agent interfaces. Web authenticates and forwards; Host owns execution and durable task data.
+- Select the authenticated user's scope for every HTTP and WebSocket operation. Browser disconnects preserve running sessions.
+- Use the red → green loop at public HTTP/WS and browser-controller seams. Run `npm run check`.
+- Preserve the acceptance matrix in [the reconciliation report](docs/reviews/repository-unification-20260927.md): a model reply alone does not verify the workbench.
+- Push GitHub main first, then fast-forward Gitea main to the identical commit. Fetch and verify both remote SHAs. Deploy from that commit and record the release identity and served asset probe.
+- Keep credentials, cookies, snapshots and user transcripts out of commits and Issues.
+- Record scope, failures and acceptance evidence in the corresponding Issue. A release is complete only when a fresh clone passes the documented check and the deployed application passes the relevant UI/API probe.

@@ -115,7 +115,7 @@ describe("TransferServer (LocalSend v2)", () => {
     const { base, token } = await start();
     const prepared = await prepare(base, token, { f: { id: "f", fileName: "later.txt", size: 5 } });
     const { sessionId, files } = prepared.body as { sessionId: string; files: Record<string, string> };
-    expect((await fetch(`${base}/cancel?sessionId=${sessionId}`, { method: "POST" })).status).toBe(200);
+    expect((await fetch(`${base}/cancel?sessionId=${sessionId}&scope=sess-1&token=${token}`, { method: "POST" })).status).toBe(200);
     expect((await fetch(`${base}/upload?sessionId=${sessionId}&fileId=f&token=${files.f}`, { method: "POST", body: "hello" })).status).toBe(403);
 
     // A client without a Host-issued grant cannot write to the shared root.

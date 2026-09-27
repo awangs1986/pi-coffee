@@ -1,6 +1,8 @@
+import type { Workspaces } from "./workspaces.js";
 import { createHash, randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { link, mkdir, readdir, rm, stat, realpath } from "node:fs/promises";
+
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { networkInterfaces } from "node:os";
@@ -19,6 +21,7 @@ export interface TransferServerOptions {
   port?: number;
   /** Pi's working directory; uploads land under `<workdir>/.pi-coffee/inbox/<scope>/`. */
   workdir: string;
+  workspaces?: Workspaces;
   /** Address browsers should use to reach this server. Auto-detected LAN IPv4 when omitted. */
   advertiseHost?: string;
   alias?: string;
@@ -69,18 +72,25 @@ export class TransferServer {
   private readonly maxBatchBytes: number;
   private readonly onEvent?: (scope: string, event: JsonValue) => void;
   private readonly http: HttpServer;
+  private readonly workspaceScopes = new Map<string,Workspaces>();
+  private workspaceFor(scope:string):Workspaces|undefined{return this.workspaceScopes.get(scope) ?? this.workspaces;}
+  private taskFor(scope:string):string{return this.inboxScopes.get(scope) ?? scope;}
+  private readonly tokenExpiry = new Map<string, number>();
   private readonly tokens = new Map<string, string>();        // scope -> token
   private readonly roots = new Map<string, string>();         // scope -> per-user root (ADR-0010)
   private readonly inboxScopes = new Map<string, string>();   // opaque grant -> original session inbox
+  private readonly activeRequests = new Map<string,Set<IncomingMessage>>();
   private readonly uploads = new Map<string, UploadSession>(); // upload session id -> session
   private readonly fingerprint: string;
   private readonly secure: boolean;
   private started = false;
+  private readonly workspaces?: Workspaces;
 
   constructor(options: TransferServerOptions) {
     this.host = options.host ?? "0.0.0.0";
     this.port = options.port ?? 53317;
     this.workdir = resolve(options.workdir);
+    this.workspaces=options.workspaces;
     this.advertiseHost = options.advertiseHost;
     this.alias = options.alias ?? "PI Coffee";
     this.maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
@@ -128,12 +138,16 @@ export class TransferServer {
     return `${this.secure ? "https" : "http"}://${host}:${this.address().port}`;
   }
 
+
   /**
    * The token a browser presents for this scope (Session); stable while the
    * Host runs. `root` pins the scope to one user's directory in the shared
    * User VM: its inbox lives under it and downloads cannot leave it.
    */
-  issueToken(scope: string, root?: string, inboxScope = scope): string {
+  issueToken(scope: string, root?: string, inboxScope = scope, workspaces?:Workspaces): string {
+    this.tokenExpiry.set(scope,Date.now()+45000);
+    if(workspaces)this.workspaceScopes.set(scope,workspaces);
+
     const existing = this.tokens.get(scope);
     if (existing) {
       if (root !== undefined && resolve(root) !== this.rootOf(scope)) throw new Error("Transfer scope already bound");
@@ -146,7 +160,59 @@ export class TransferServer {
     return token;
   }
 
-  /** Inbox path relative to the scope's root (what Pi sees from its cwd). */
+  revokeAll(): void { this.tokens.clear(); this.tokenExpiry.clear(); this.uploads.clear(); this.roots.clear();this.inboxScopes.clear();this.workspaceScopes.clear(); }
+
+  async revoke(scope:string):Promise<void> {
+    this.tokens.delete(scope);this.tokenExpiry.delete(scope);
+    for(const req of this.activeRequests.get(scope) ?? [])req.destroy();
+    this.activeRequests.delete(scope);
+    for(const [id,session] of this.uploads)if(session.scope===scope){
+      this.uploads.delete(id);
+      for(const file of session.files.values())if(file.state!=="done"){file.state="failed";await rm(file.partPath,{force:true}).catch(()=>undefined);}
+    }
+  }
+  async quiesce(scope:string):Promise<void> {
+    if([...this.uploads.values()].some(s=>s.scope===scope && [...s.files.values()].some(f=>f.state==='uploading')))throw new Error('Wait for active uploads before permanent cleanup');
+    this.tokens.delete(scope);this.tokenExpiry.delete(scope);
+    for(const [id,s] of this.uploads)if(s.scope===scope)this.uploads.delete(id);
+  }
+  private async workspaceFile(scope:string,path:string):Promise<string> {
+    await this.workspaceFor(scope)!.file(this.taskFor(scope),'');
+    const legacyPrefix=this.inboxFor(scope).split(sep).join('/')+'/';
+    if(path.startsWith('.pi-coffee/inbox/') && !path.startsWith(legacyPrefix) && path.split('/').length>3) {
+      // The normal Work inbox may contain nested paths, so let its own root resolve first.
+      return this.workspaceFor(scope)!.file(this.taskFor(scope),path);
+    }
+    if(path.startsWith(legacyPrefix)) {
+      const base=await realpath(join(this.rootOf(scope),this.inboxFor(scope)));
+      const full=await realpath(resolve(this.rootOf(scope),path));
+      if(!full.startsWith(base+sep) || base!==resolve(this.rootOf(scope),this.inboxFor(scope)))throw new Error('Outside legacy inbox scope');
+      return full;
+    }
+    return this.workspaceFor(scope)!.file(this.taskFor(scope),path);
+  }
+  private async baseFor(scope:string):Promise<string> {
+    if(!this.workspaceFor(scope))return this.rootOf(scope);
+    const c=await this.workspaceFor(scope)!.lookup(this.taskFor(scope));if(!c)throw new Error('Unknown workspace');
+    await this.workspaceFor(scope)!.file(this.taskFor(scope),'');return c.cwd;
+  }
+  async inbox(scope:string):Promise<string> {
+    if(!this.workspaceFor(scope))return this.inboxFor(scope);
+    const base=await this.baseFor(scope);
+    return relative(base,join(await this.workspaceFor(scope)!.dataRoot(this.taskFor(scope)),'inbox')).split(sep).join('/');
+  }
+  private async inboxPath(scope:string,writing=false):Promise<string> {
+    if(this.workspaceFor(scope) && writing)await this.workspaceFor(scope)!.cwd(this.taskFor(scope));
+    return join(await this.baseFor(scope),await this.inbox(scope));
+  }
+  async importPath(scope:string,file:string):Promise<string> {
+    const base=await realpath(await this.inboxPath(scope));
+    const full=await realpath(resolve(base,file));
+    if(!full.startsWith(base+sep) || !full.toLowerCase().endsWith('.zip'))throw new Error("Only a ZIP in the conversation inbox can be imported");
+    return full;
+  }
+
+
   inboxFor(scope: string): string {
     return join(INBOX_DIR, safeScope(this.inboxScopes.get(scope) ?? scope));
   }
@@ -174,6 +240,22 @@ export class TransferServer {
     if (!path.startsWith(API + "/")) { sendJson(response, 404, { message: "Not found" }); return; }
     const route = path.slice(API.length + 1);
 
+    if(route === "tree" || route === "artifacts" || route === "preview" || route === "workspace-download") {
+      const scope=this.scopeOf(url);
+      if(!scope || !this.workspaceFor(scope)) {sendJson(response,401,{message:"Authorized workspace required"});return;}
+      try {
+        const path=url.searchParams.get("path") ?? "";
+        if(route==="artifacts") {sendJson(response,200,{artifacts:await this.workspaceFor(scope)!.artifacts(this.taskFor(scope))} as unknown as JsonValue);return;}
+        if(route==="tree") {sendJson(response,200,await this.workspaceFor(scope)!.tree(this.taskFor(scope),path) as unknown as JsonValue);return;}
+        const full=await this.workspaceFile(scope,path);if(isCredentialFileName(basename(path)) || isCredentialFileName(basename(full)))throw new Error("Credential file");const info=await stat(full);
+        if(!info.isFile())throw new Error("Not a file");
+        if(route==="preview" && info.size>10*1024*1024) {sendJson(response,413,{message:"Preview exceeds 10 MiB; download instead"});return;}
+        const mime=mimeFor(full);const inline=route==="preview" && /^(image\/|text\/plain|text\/markdown|application\/pdf)/.test(mime);
+        response.writeHead(200,{"content-type":mime,"content-length":String(info.size),"x-content-type-options":"nosniff","content-security-policy":"sandbox; default-src 'none'; style-src 'unsafe-inline'", "referrer-policy":"no-referrer","cache-control":"no-store","content-disposition":`${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(basename(full))}`});
+        createReadStream(full).on("error",()=>response.destroy()).pipe(response);
+      } catch {sendJson(response,403,{message:"File unavailable or outside workspace"});}
+      return;
+    }
     switch (route) {
       case "info":
       case "register":
@@ -221,8 +303,9 @@ export class TransferServer {
   private scopeOf(url: URL): string | null {
     const scope = url.searchParams.get("scope");
     const token = url.searchParams.get("token");
+
     if (scope === null || token === null) return null;
-    return this.tokens.get(scope) === token ? scope : null;
+    return this.tokens.get(scope) === token && (!this.workspaceFor(scope) || (this.tokenExpiry.get(scope) ?? 0)>Date.now()) ? scope : null;
   }
 
   private async prepareUpload(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
@@ -238,9 +321,9 @@ export class TransferServer {
     const files = isRecord(body) && isRecord(body.files) ? body.files : null;
     if (!files || Object.keys(files).length === 0) { sendJson(response, 400, { message: "Invalid body: files" }); return; }
 
-    const root = this.rootOf(scope);
-    const targetDir = join(root, this.inboxFor(scope));
-    await mkdir(targetDir, { recursive: true });
+    const targetDir = await this.inboxPath(scope,true);
+    await mkdir(targetDir, { recursive: true,mode:0o700 });
+
     const session: UploadSession = { id: randomUUID(), scope, files: new Map(), createdAt: Date.now() };
     const usedNames = new Set(await readdir(targetDir).catch(() => [] as string[]));
     let batch = 0;
@@ -267,6 +350,7 @@ export class TransferServer {
         state: "pending",
       });
     }
+    if(this.workspaceFor(scope) && !this.tokens.has(scope)){sendJson(response,403,{message:"File authorization revoked"});return;}
     this.uploads.set(session.id, session);
     const tokens: Record<string, string> = {};
     for (const [id, file] of session.files) tokens[id] = file.token;
@@ -281,14 +365,18 @@ export class TransferServer {
     const session = this.uploads.get(sessionId);
     const file = session?.files.get(fileId);
     if (!session || !file || file.token !== token) { sendJson(response, 403, { message: "Invalid token" }); return; }
-    if (file.state === "uploading") { sendJson(response, 409, { message: "Already uploading" }); return; }
+    if (file.state === "uploading" || file.state === "done") { sendJson(response, 409, { message: "Already uploading or completed" }); return; }
+    if (this.workspaceFor(session.scope) && (this.tokenExpiry.get(session.scope) ?? 0) <= Date.now()) {
+      sendJson(response, 403, { message: "File authorization expired; refresh the workspace and retry" }); return;
+    }
     file.state = "uploading";
 
     const hash = createHash("sha256");
     let received = 0;
     let lastProgress = 0;
     const scope = session.scope;
-    const relativeFinal = relative(this.rootOf(scope), file.finalPath).split(sep).join("/");
+    const requests=this.activeRequests.get(scope) ?? new Set<IncomingMessage>();this.activeRequests.set(scope,requests);requests.add(request);request.once("close",()=>{requests.delete(request);if(!requests.size)this.activeRequests.delete(scope);});
+
     const fail = async (status: number, message: string) => {
       file.state = "failed";
       await rm(file.partPath, { force: true }).catch(() => undefined);
@@ -297,7 +385,7 @@ export class TransferServer {
       else response.destroy();
     };
 
-    const out = createWriteStream(file.partPath);
+    const out = createWriteStream(file.partPath,{flags:"wx",mode:0o600});
     try {
       await new Promise<void>((resolvePromise, reject) => {
         request.on("data", (chunk: Buffer) => {
@@ -329,30 +417,58 @@ export class TransferServer {
       return;
     }
 
+    if (this.workspaceFor(session.scope) && (this.tokenExpiry.get(session.scope) ?? 0)<=Date.now()) {await fail(403,"File authorization expired; refresh the workspace and retry");return;}
+    if (!this.uploads.has(session.id)) { await fail(403,"Upload authorization revoked"); return; }
     if (received !== file.size) { await fail(400, `Expected ${file.size} bytes, received ${received}`); return; }
     const digest = hash.digest("hex");
     if (file.sha256 !== undefined && file.sha256 !== digest) { await fail(422, "Checksum mismatch (sha256)"); return; }
-    await rename(file.partPath, file.finalPath);
+    if(!this.tokens.has(scope) || this.uploads.get(session.id)!==session){await fail(403,"File authorization revoked");return;}
+    try {
+      await this.publishUpload(file);
+    } catch (error) {
+      await fail(500, error instanceof Error ? error.message : "Upload publication failed");
+      return;
+    }
     file.state = "done";
     this.emit(scope, {
       type: "transfer_complete",
       sessionId: session.id,
       fileId: file.id,
       fileName: file.fileName,
-      path: relativeFinal,
+      path: relative(await this.baseFor(scope), file.finalPath).split(sep).join("/"),
       size: file.size,
       sha256: digest,
       fileType: file.fileType,
     });
-    response.writeHead(200);
-    response.end();
+    sendJson(response,200,{path:relative(await this.baseFor(scope),file.finalPath).split(sep).join("/"),sha256:digest,fileName:file.fileName});
     if ([...session.files.values()].every((f) => f.state === "done" || f.state === "failed")) this.uploads.delete(session.id);
+  }
+
+  /** Publish complete bytes without replacing another upload or a user's file. */
+  private async publishUpload(file: PendingFile): Promise<void> {
+    const dir = resolve(file.finalPath, "..");
+    const originalName = file.fileName;
+    const used = new Set<string>();
+    for (;;) {
+      try {
+        // Both paths are in the same inbox. link is atomic and fails if the destination exists.
+        await link(file.partPath, file.finalPath);
+        await rm(file.partPath, { force: true });
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        used.add(file.fileName);
+        for (const name of await readdir(dir)) used.add(name);
+        file.fileName = uniqueName(originalName, used);
+        file.finalPath = join(dir, file.fileName);
+      }
+    }
   }
 
   private async cancel(response: ServerResponse, url: URL): Promise<void> {
     const sessionId = url.searchParams.get("sessionId");
     const session = sessionId ? this.uploads.get(sessionId) : undefined;
-    if (session) {
+    if (session && (this.scopeOf(url) === session.scope)) {
       for (const file of session.files.values()) {
         if (file.state !== "done") {
           file.state = "failed";
@@ -369,15 +485,16 @@ export class TransferServer {
   private async prepareDownload(response: ServerResponse, url: URL): Promise<void> {
     const scope = this.scopeOf(url);
     if (scope === null) { sendJson(response, 401, { message: "Invalid scope token" }); return; }
-    const root = this.rootOf(scope);
-    const dir = join(root, this.inboxFor(scope));
+    const dir = await this.inboxPath(scope);
+
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     const files: Record<string, JsonValue> = {};
     for (const entry of entries) {
       if (!entry.isFile() || entry.name.startsWith(".") || isCredentialFileName(entry.name)) continue;
       const full = join(dir, entry.name);
       const info = await stat(full);
-      const id = relative(root, full).split(sep).join("/");
+      const id = relative(await this.baseFor(scope), full).split(sep).join("/");
+
       files[id] = { id, fileName: entry.name, size: info.size, fileType: mimeFor(entry.name), modified: info.mtime.toISOString() };
     }
     sendJson(response, 200, { info: this.info(), sessionId: scope, files });
@@ -389,20 +506,23 @@ export class TransferServer {
     if (scope === null) { sendJson(response, 401, { message: "Invalid scope token" }); return; }
     const fileId = url.searchParams.get("fileId");
     if (!fileId) { sendJson(response, 400, { message: "Missing fileId" }); return; }
-    const root = this.rootOf(scope);
+
+    const root = await this.baseFor(scope);
     const full = resolve(root, fileId);
     // INV-T1: the lexical path must stay under the root …
-    if (full !== root && !full.startsWith(root + sep)) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
+    if (!this.workspaceFor(scope) && full !== root && !full.startsWith(root + sep)) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
     // INV-T3: … and so must its name, whatever directory it sits in.
     if (isCredentialFileName(basename(full))) { sendJson(response, 403, { message: "Credential files are never served" }); return; }
-    const realFull = await realpath(full).catch(() => null);
-    if (!realFull) { sendJson(response, 404, { message: "Not found" }); return; }
+    let realFull:string;
+    try {realFull=await (this.workspaceFor(scope) ? this.workspaceFile(scope,fileId) : realpath(full));}
+    catch(error){sendJson(response,(error as NodeJS.ErrnoException).code==="ENOENT" ? 404 : 403,{message:"File unavailable or outside download scope"});return;}
     if (isCredentialFileName(basename(realFull))) { sendJson(response, 403, { message: "Credential files are never served" }); return; }
     const info = await stat(realFull).catch(() => null);
+
     if (!info || !info.isFile()) { sendJson(response, 404, { message: "Not found" }); return; }
     // INV-T2: the *real* path must stay under the real root: a symlink inside
     // the working directory that points outside it does not escape.
-    if (!(await withinRealRoot(root, realFull))) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
+    if (!this.workspaceFor(scope) && !(await withinRealRoot(root, realFull))) { sendJson(response, 403, { message: "Outside the working directory" }); return; }
     response.writeHead(200, {
       "content-type": mimeFor(full),
       "content-length": String(info.size),

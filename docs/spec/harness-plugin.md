@@ -1,37 +1,16 @@
 # PI Coffee Harness Pi 插件
 
-状态：已实现（PI Coffee `main`）。这是对冻结 V5 Harness 工具表的 Pi-native 适配，不是对 V5 运行时的复制。
+产品模式只由 [Pi Agent 主规格](./pi-agent.md) 定义为 Chat/Work。Work 保留 Pi 原生 Base 并追加通用正文；Chat 不发送系统指令。工具数量和按需分配见主规格 PA-003/011，不在此维护第二张模式表。
 
-## 基线和计数
+## 实现状态与接缝
 
-本插件以 Gitea `awangs/picode` 的最新 V5 `origin/main` 提交
-`778a3d534ba41f331210037a8c791bdfc0dabe7f` 为基线。V5 的 `/harness` 只有两张基础工具表：
+**2026-09-22：迁移已实现。** 默认 Work；使用 `/chat`、`/work` 或 `/harness chat|work` 切换，退役别名不再接受。v1 会话追加 v2 Work 状态并通知，保留历史并撤销旧能力激活。未知版本保留历史并要求显式选择模式。缺失必需工具时拒绝切换，恢复失败时停止模型请求。
 
-| 模式 | 基础工具 | 数量 |
-|---|---|---:|
-| `simple` | `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, `search_tools` | **8** |
-| `full` | Simple 的 8 个 + `git`, `verify` | **10** |
-
-`src/harness/mode.ts` 是 PI Coffee 内部唯一的工具表来源。插件在启动时会把期望表过滤到 Pi 实际注册的工具；缺少必需工具时不会声称模式已就绪。启用后续可选插件可能使“有效激活工具数”高于基础数，但不会改变这两张 V5 基础表。
-
-V5 的 `capabilities`、`context`、`handoff`、`kernel` 及 Web 能力不是这两张 Harness 基础表的一部分，后续逐项另立工单。
-
-## Pi 接缝
-
-`src/harness/extension.ts` 是原版 Pi 的 `ExtensionAPI` factory：
-
-- 注册 `search_tools`、`git`、`verify` 三个自定义工具；Simple 启动时只激活 `search_tools`，Full 再激活 `git` 和 `verify`。
-- 注册 `/harness` 和 `/verify` 命令。
-- 从会话的 custom entries 恢复模式和验证 profile；状态只在 User VM 的 Pi session 中持久化。
-- 在 `before_agent_start` 把现有的 V3-derived `lean`/`full` fixture 追加到 Pi Base Prompt，并用 `<pi_coffee_harness>` 边界去重。动态工具列表只作为运行时事实追加，不改写稳定 prompt 正文。
-- `standard` 映射为 Full + quick profile，`tdd` 映射为 Full + advisory tdd profile；没有第三套工具表。
-
-Host 的 `RpcPiSessionFactory` 支持 `extensions`，`main` 默认加载编译后的
-Harness、锁定的 `pi-subagents` 入口和资源 Adapter。`subagent`/`bg_wait`
-属于可选扩展工具，不改变 Simple=8、Full=10。可用
-`PI_COFFEE_SUBAGENTS=off` 只关闭该扩展；`PI_COFFEE_EXTENSIONS`（Linux 使用
-冒号分隔）可替换整个扩展列表，设为 `off` 可关闭全部扩展。详见
-[`subagents-plugin.md`](./subagents-plugin.md)。
+- 使用原版 Pi 的公开 `ExtensionAPI`；Host 只传扩展路径，不导入 Pi 内部实现。
+- Work 正文由 `renderHarnessPrompt("work")` 读取，通过 `before_agent_start` 追加，并用既有块边界去重；动态事实与稳定正文分开。
+- 模式、能力和验证状态只存于 User VM 原生会话。恢复读取当前 Pi 分支；切模型/模式时撤销能力激活，Work 恢复时重新校验。
+- 注册工具不等于激活工具；每次请求的实际 schema 是模型可调用能力的依据。
+- `PI_COFFEE_SUBAGENTS=off` 关闭子任务扩展；`PI_COFFEE_EXTENSIONS` 可替换扩展列表，设为 `off` 关闭全部扩展。工具与模型政策见[子 Agent 接缝](./subagents-plugin.md)。
 
 ## User VM 后端适配
 
@@ -48,7 +27,7 @@ PI Coffee 的执行安全边界是 owner-managed User VM。没有移植 V5 的 G
 
 命令参数通过参数数组传给 Pi，不拼接 Git shell 字符串。工作目录由当前 Pi session 的 `ctx.cwd` 决定。
 
-### `verify`
+### 显式 `/verify` 命令（不作为模型工具）
 
 `src/harness/native-verify.ts` 读取当前 User VM 工作区的 `.picode/verify.json`，按 `none|quick|tdd` profile 顺序调用 `bash -lc <command>`，只报告 `passed|failed|not_run`，并截断过大的输出。支持 V5 quick 数组和 tdd 的 `gate`/`smoke` 结构；TDD 状态机动作返回 `not-supported`。
 
@@ -63,9 +42,10 @@ npm run check
 
 相关测试：
 
-- `test/harness-extension.test.ts`：模式、别名、会话恢复、prompt 去重、工具驻留和实际 quick 命令；
-- `test/harness-tools.test.ts`：8/10 计数、缺失工具 fail-closed、原生 Git 适配和 TDD 明确降级；
+- `test/harness-extension.test.ts`：模式、退役别名拒绝、会话迁移/恢复、prompt 去重和工具驻留；
+- `test/harness-tools.test.ts`：当前工具解析、缺失工具 fail-closed、原生 Git 适配和 TDD 明确降级；
 - `test/pi-adapter.test.ts`：扩展参数传播。
+- `test/chat-work-rpc.test.ts`：真实 Pi 加载默认插件与 LSP Skill，检查最终 HTTP 请求中的 Chat 空系统指令和精确工具表。
 
 这张工具表和适配边界对应 Gitea `HARNESS-002` 工单。下一阶段的可靠性
 矩阵和扩展工具接入计划记录在

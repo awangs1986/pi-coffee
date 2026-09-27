@@ -39,7 +39,7 @@ function manifest(
       description: `${name} does useful work`,
       parameters: { type: "object", properties: { query: { type: "string" } } },
     })),
-    supportedHarness: ["simple", "full"],
+    supportedHarness: ["chat", "work"],
     permissionSummary: "runs with the owning User VM's normal rights",
     runnerConformance: "passed",
     ...overrides,
@@ -47,12 +47,12 @@ function manifest(
 }
 
 function setup(options: {
-  mode?: "simple" | "full";
+  mode?: "chat" | "work";
   failOn?: string;
   proxy?: CapabilityProxy;
   settings?: MemoryCapabilitySettingsStore;
 } = {}) {
-  let mode = options.mode ?? "simple";
+  let mode = options.mode ?? "chat";
   let registered: string[] = [];
   const registrar: ToolRegistrar = {
     register(tool) {
@@ -80,7 +80,7 @@ function setup(options: {
     catalog,
     epoch,
     registered: () => [...registered],
-    setMode(next: "simple" | "full") {
+    setMode(next: "chat" | "work") {
       mode = next;
       epoch.rebuild({ harnessMode: next }, ["read", "search_tools"]);
       catalog.onEpochRebuild();
@@ -121,16 +121,16 @@ describe("CapabilityCatalog", () => {
   it("hides not-run and harness-incompatible capabilities from the agent", () => {
     const { catalog, setMode } = setup();
     catalog.register(manifest("subagent", ["subagent"], {
-      supportedHarness: ["full"],
+      supportedHarness: ["work"],
       runnerConformance: "not_run",
     }), "trusted");
-    catalog.register(manifest("lsp", ["lsp"], { supportedHarness: ["full"] }), "trusted");
+    catalog.register(manifest("lsp", ["lsp"], { supportedHarness: ["work"] }), "trusted");
 
     expect(catalog.search("subagent lsp")).toEqual([]);
     expect(catalog.activate("subagent", { currentTurn: 1 })).toMatchObject({ ok: false, code: "not-ready" });
     expect(catalog.activate("lsp", { currentTurn: 1 })).toMatchObject({ ok: false, code: "harness-unsupported" });
 
-    setMode("full");
+    setMode("work");
     expect(catalog.search("lsp").map((hit) => hit.id)).toEqual(["lsp"]);
     expect(catalog.search("subagent")).toEqual([]);
   });
@@ -170,10 +170,10 @@ describe("CapabilityCatalog", () => {
     const { catalog, epoch, setMode } = setup();
     const huge = {
       name: "huge",
-      description: "x".repeat(SCHEMA_BUDGETS.simple * 3 + 2_000),
+      description: "x".repeat(SCHEMA_BUDGETS.chat * 3 + 2_000),
       parameters: { type: "object" },
     };
-    expect(estimateSchemaTokens(huge)).toBeGreaterThan(SCHEMA_BUDGETS.simple);
+    expect(estimateSchemaTokens(huge)).toBeGreaterThan(SCHEMA_BUDGETS.chat);
     catalog.register({ ...manifest("huge", []), tools: [huge] }, "trusted");
     const before = epoch.snapshot();
     expect(catalog.activate("huge", { currentTurn: 1 })).toMatchObject({ ok: false, code: "budget-exceeded" });
@@ -182,7 +182,7 @@ describe("CapabilityCatalog", () => {
     catalog.register(manifest("small", ["small_tool"]), "trusted");
     expect(catalog.activate("small", { currentTurn: 1 }).ok).toBe(true);
     expect(catalog.listSettings().find((entry) => entry.id === "small")?.schemaResident).toBe(true);
-    setMode("full");
+    setMode("work");
     expect(catalog.listSettings().find((entry) => entry.id === "small")).toMatchObject({
       trust: "trusted",
       schemaResident: false,
@@ -227,7 +227,7 @@ describe("Capability manifest and settings persistence", () => {
       summary: "API-backed search",
       keywords: ["web", "search"],
       tools: [{ name: "web_search", description: "search", parameters: { type: "object" } }],
-      supportedHarness: ["simple", "full"],
+      supportedHarness: ["chat", "work"],
       permissionSummary: "network access through the configured Adapter",
       supportsProxyCall: false,
     }));

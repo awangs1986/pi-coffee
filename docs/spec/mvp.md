@@ -59,7 +59,7 @@ separately and do not revive V5 controls.
 - Host seam and disconnect replay: [`test/host-server.test.ts`](../../test/host-server.test.ts)
 - Web bridge and replay: [`test/web-server.test.ts`](../../test/web-server.test.ts)
 - Original RPC adapter: [`test/pi-adapter.test.ts`](../../test/pi-adapter.test.ts)
-- Full browser → Host → Pi RPC path: [`test/mvp-e2e.test.ts`](../../test/mvp-e2e.test.ts)
+- Complete browser → Host → Pi RPC path: [`test/mvp-e2e.test.ts`](../../test/mvp-e2e.test.ts)
 
 Run:
 
@@ -77,7 +77,7 @@ From a fresh clone, the colleague can install dependencies, get a green `npm run
 
 ## Real-model evidence
 
-`scripts/smoke-real-model.mjs` drives the browser protocol against a running
+`pi-coffee-server/scripts/smoke-real-model.mjs` drives the browser protocol against a running
 stack whose Host has a real provider (the CPA relay via Pi's `models.json`, see
 the runbook) and asserts: streamed `text_delta` through `agent_settled`,
 strictly increasing cursors, exact bounded replay after a browser disconnect,

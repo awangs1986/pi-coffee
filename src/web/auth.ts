@@ -55,6 +55,9 @@ export class GiteaAuth {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
   /** Outstanding login attempts: state → issued-at. */
+  // Cookies and revocations share a process lifetime; restart cannot revive a revoked cookie.
+  private readonly epoch = randomBytes(16).toString("hex");
+  private readonly generations = new Map<string, string>();
   private readonly states = new Map<string, number>();
 
   constructor(options: GiteaAuthOptions) {
@@ -72,6 +75,8 @@ export class GiteaAuth {
     this.fetchImpl = options.fetch ?? fetch;
     this.now = options.now ?? Date.now;
   }
+
+  originAllowed(request: IncomingMessage):boolean {return request.headers.origin===this.origin(request);}
 
   /** The Browser User this request is authenticated as, if its cookie is valid. */
   principalOf(request: IncomingMessage): Principal | undefined {
@@ -92,9 +97,9 @@ export class GiteaAuth {
       return undefined;
     }
     if (typeof parsed !== "object" || parsed === null) return undefined;
-    const { u, exp } = parsed as { u?: unknown; exp?: unknown };
+    const { u, exp, epoch, generation } = parsed as { u?: unknown; exp?: unknown; epoch?: unknown; generation?: unknown };
     const user = normalizeUsername(u);
-    if (user === undefined || typeof exp !== "number" || exp <= this.now()) return undefined;
+    if (user === undefined || typeof exp !== "number" || exp <= this.now() || epoch !== this.epoch || generation !== (this.generations.get(user) ?? "initial")) return undefined;
     // Revocation is the allow-list: removing a name logs that person out.
     if (!this.allowed.has(user)) return undefined;
     return { user };
@@ -119,6 +124,8 @@ export class GiteaAuth {
       case "/auth/logout":
         // Only a POST clears the cookie, so a cross-site link cannot log people out.
         if (request.method === "POST") {
+          if(!this.originAllowed(request)){response.writeHead(403);response.end();return true;}
+          const principal=this.principalOf(request);if(principal)this.generations.set(principal.user,randomBytes(16).toString("hex"));
           response.writeHead(303, { "set-cookie": this.cookie("", 0, request), location: "/login", "cache-control": "no-store" });
         } else {
           response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
@@ -180,7 +187,7 @@ export class GiteaAuth {
       return;
     }
     const exp = this.now() + this.ttlMs;
-    const payload = Buffer.from(JSON.stringify({ u: user, exp }), "utf8").toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ u: user, exp, epoch: this.epoch, generation: this.generations.get(user) ?? "initial" }), "utf8").toString("base64url");
     response.writeHead(303, {
       "set-cookie": [
         this.cookie(`${payload}.${this.sign(payload)}`, Math.floor(this.ttlMs / 1000), request),

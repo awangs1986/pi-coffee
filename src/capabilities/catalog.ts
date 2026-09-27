@@ -13,7 +13,7 @@ import {
   type TrustState,
 } from "./settings.js";
 
-export type HarnessMode = "simple" | "full";
+export type HarnessMode = "chat" | "work";
 export type RunnerConformance = "passed" | "not_run";
 export type ReadinessStatus = "Ready" | "Degraded" | "NeedsSetup" | "Unavailable";
 export type CapabilityKind = "pi-extension" | "mcp-server" | "skill" | "builtin";
@@ -324,7 +324,7 @@ export class CapabilityCatalog {
     }
 
     const cost = estimateSchemaTokensAll(record.manifest.tools);
-    const modeBudget = this.options.harness() === "simple" ? this.budgets.simple : this.budgets.full;
+    const modeBudget = this.options.harness() === "chat" ? this.budgets.chat : this.budgets.work;
     const remaining = Math.min(modeBudget, this.budgets.epochCeiling) - this.spentSchemaTokens;
     if (cost > remaining) {
       return { ok: false, code: "budget-exceeded", message: `activation would spend ${cost} schema tokens; remaining budget ${Math.max(0, remaining)}` };
@@ -399,7 +399,7 @@ export class CapabilityCatalog {
   }
 
   schemaBudgetSnapshot(): { spent: number; ceiling: number; modeBudget: number; remaining: number } {
-    const modeBudget = this.options.harness() === "simple" ? this.budgets.simple : this.budgets.full;
+    const modeBudget = this.options.harness() === "chat" ? this.budgets.chat : this.budgets.work;
     const ceiling = Math.min(modeBudget, this.budgets.epochCeiling);
     return { spent: this.spentSchemaTokens, ceiling: this.budgets.epochCeiling, modeBudget, remaining: Math.max(0, ceiling - this.spentSchemaTokens) };
   }
@@ -441,7 +441,7 @@ export function validateManifest(manifest: CapabilityManifest): void {
     if (names.has(tool.name)) throw new Error(`duplicate tool '${tool.name}' in capability '${manifest.id}'`);
     names.add(tool.name);
   }
-  if (manifest.supportedHarness.some((mode) => mode !== "simple" && mode !== "full")) throw new Error(`invalid harness in capability '${manifest.id}'`);
+  if (manifest.supportedHarness.some((mode) => mode !== "chat" && mode !== "work")) throw new Error(`invalid harness in capability '${manifest.id}'`);
   if (manifest.runnerConformance !== "passed" && manifest.runnerConformance !== "not_run") throw new Error(`invalid runner status for '${manifest.id}'`);
 }
 

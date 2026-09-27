@@ -1,5 +1,7 @@
 # PI Coffee 讨论交接完整性审计（2026-09-03）
 
+> 2026-09-20 文档清理：本页涉及旧模式的段落/表项已撤下，未改写为 Chat/Work 的实现证据。原始记录用 `git show b027838:docs/research/handoff-completeness-audit-20260903.md` 追溯；当前模式只见 [Pi Agent 主规格](../spec/pi-agent.md)。其余内容仍是标题日期的历史快照。
+
 ## 结论
 
 截至 `main` 的 `c014fafb660a8bbdca3465a52d6bbbe4fe9a61de`，今天讨论形成的**稳定设计结论**已经进入 PI Coffee 的 Git 主线，并有 Gitea Issue 入口。最重要的上下文归属也已经明确记录：持久上下文、Pi transcript、Task 文件和插件状态留在 owning User VM/Host；Control Plane 只保存最小路由索引和有界 usage metadata。
@@ -17,7 +19,6 @@
 | 单 Browser Shell/tab、多 Task/Session、关闭浏览器后任务继续 | `BACKLOG.md` 的 D-025–D-029、[ADR-0006](../adr/0006-browser-lifetime-is-independent-of-session-lifetime.md)、Issue [#10](http://testpc:3000/awangs/pi-coffee/issues/10) | 已记录 |
 | 文件/图片上传、User VM inbox、原图保存、限制和下载归属 | `BACKLOG.md` 的 D-030–D-035、[ADR-0007](../adr/0007-user-vm-owns-uploaded-files-and-images.md)、Issue [#11](http://testpc:3000/awangs/pi-coffee/issues/11) | 已记录 |
 | Deployment Skill、原生插件优先、pi-web 评估、Rust 只在有性能证据时使用 | `BACKLOG.md` 的 D-036–D-040、[`docs/research/pi-web-evaluation-20260903.md`](./pi-web-evaluation-20260903.md)、Issues [#6](http://testpc:3000/awangs/pi-coffee/issues/6)、[#9](http://testpc:3000/awangs/pi-coffee/issues/9) | 已记录 |
-| V3-derived Lean/Full prompt、V5 Simple/Full 8/10 工具契约 | [`docs/spec/harness-prompt.md`](../spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](../spec/harness-plugin.md)、Issues [#14](http://testpc:3000/awangs/pi-coffee/issues/14)、[#15](http://testpc:3000/awangs/pi-coffee/issues/15) | 已记录/已实现基础切片 |
 | `pi-subagents` 锁版本、资源 Adapter、尚未完成的真实 VM/Web 验收 | [`docs/research/pi-subagents-audit-20260903.md`](./pi-subagents-audit-20260903.md)、[`docs/spec/subagents-plugin.md`](../spec/subagents-plugin.md)、Issues [#17](http://testpc:3000/awangs/pi-coffee/issues/17)、[#18](http://testpc:3000/awangs/pi-coffee/issues/18) | 加载已完成，运行验收未完成 |
 | grill 后形成的执行顺序、非目标、开放问题和替换过的方案 | [`BACKLOG.md`](../../BACKLOG.md) 的 Decision Register、被替换方案、后续 Backlog、Open Questions | 已整理为摘要 |
 

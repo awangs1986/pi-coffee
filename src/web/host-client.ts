@@ -1,11 +1,10 @@
+import { USER_HEADER } from "../shared/identity.js";
 import { WebSocket, type RawData } from "ws";
-import { decodeServerFrame, encodeFrame, type ServerFrame } from "../shared/protocol.js";
 
 export interface HostClientOptions {
   url: string;
   token?: string;
-  /** Extra upgrade headers, e.g. the authenticated Browser User's name. */
-  headers?: Record<string, string>;
+  user?: string;
   onUnavailable?: (error: Error) => void;
 }
 
@@ -15,7 +14,7 @@ export class HostClient {
   private socket?: WebSocket;
   private intentionalClose = false;
   private ready = false;
-  private readonly listeners = new Set<(frame: ServerFrame) => void>();
+  private readonly listeners = new Set<(data: RawData, isBinary: boolean) => void>();
 
   constructor(options: HostClientOptions) {
     this.options = options;
@@ -23,22 +22,12 @@ export class HostClient {
 
   async connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN) return;
-    const headers: Record<string, string> = {
-      ...(this.options.headers ?? {}),
-      ...(this.options.token === undefined ? {} : { Authorization: `Bearer ${this.options.token}` }),
-    };
-    const socket = new WebSocket(this.options.url, Object.keys(headers).length === 0 ? undefined : { headers });
+    const headers = { ...(this.options.token ? {Authorization:`Bearer ${this.options.token}`} : {}), ...(this.options.user ? {[USER_HEADER]:this.options.user} : {}) };
+    const socket = new WebSocket(this.options.url, headers === undefined ? undefined : { headers });
     this.socket = socket;
     this.intentionalClose = false;
-    socket.on("message", (data: RawData) => {
-      try {
-        const frame = decodeServerFrame(rawDataToBytes(data));
-        for (const listener of this.listeners) listener(frame);
-      } catch {
-        // A Host that emits an invalid frame is treated as unavailable. The
-        // bridge will report a structured error to the browser.
-        this.close();
-      }
+    socket.on("message", (data: RawData, isBinary: boolean) => {
+      for (const listener of this.listeners) listener(data, isBinary);
     });
     socket.on("error", (error) => {
       if (this.ready && !this.intentionalClose) {
@@ -73,14 +62,14 @@ export class HostClient {
     this.ready = true;
   }
 
-  send(frame: Parameters<typeof encodeFrame>[0]): void {
+  send(data: RawData | string, isBinary = false): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       throw new Error("Host connection is not open");
     }
-    this.socket.send(encodeFrame(frame));
+    this.socket.send(data, { binary: isBinary });
   }
 
-  onFrame(listener: (frame: ServerFrame) => void): () => void {
+  onFrame(listener: (data: RawData, isBinary: boolean) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -92,11 +81,4 @@ export class HostClient {
     this.ready = false;
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.close();
   }
-}
-
-function rawDataToBytes(data: RawData): Uint8Array {
-  if (typeof data === "string") return new TextEncoder().encode(data);
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (Array.isArray(data)) return Buffer.concat(data);
-  return data;
 }

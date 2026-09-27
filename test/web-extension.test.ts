@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { createWebExtension } from "../src/web/extension.js";
-import { MemorySearchTransport } from "../src/web/search.js";
-import { ResearchArtifactStore } from "../src/web/research-artifact.js";
+import { createWebExtension } from "../src/extensions/web-access/extension.js";
+import { MemorySearchTransport } from "../src/extensions/web-access/search.js";
+import { ResearchArtifactStore } from "../src/extensions/web-access/research-artifact.js";
 
 type Handler = (event: any, context: any) => unknown;
 
@@ -60,43 +60,70 @@ class FakePi {
 }
 
 describe("PI Coffee web extension", () => {
-  it("delegates, seals after agent_end, and projects only a pointer into the next context", async () => {
+  it("does not search in the parent when default delegation fails", async () => {
+    const pi = new FakePi();
+    const transport = new MemorySearchTransport([]);
+    createWebExtension({ transport, subagentInvoker: async () => undefined })(pi.asExtensionApi());
+    await expect(pi.runTool("web_search", { query: "q" })).rejects.toThrow("Research child failed");
+    expect(transport.calls).toHaveLength(0);
+    expect(pi.entries).toHaveLength(0);
+  });
+  it("persists only a bounded best-result brief and index before the next model request", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-coffee-web-extension-"));
     try {
       const pi = new FakePi();
-      const transport = new MemorySearchTransport([
-        { title: "Pi docs", url: "https://example.com/pi", snippet: "Pi is an agent." },
-      ]);
-      createWebExtension({
-        transport,
-        artifactStore: new ResearchArtifactStore(root),
-        subagentInvoker: async () => "child evidence brief",
+      let delegated = 0;
+      const results = Array.from({ length: 20 }, (_, i) => ({
+        title: `Source ${i}`, url: `https://example.com/${i}`, snippet: `UNIQUE_${i} ` + "evidence ".repeat(120),
+      }));
+      createWebExtension({ transport: new MemorySearchTransport(results), artifactStore: new ResearchArtifactStore(root),
+        subagentInvoker: async () => { delegated++; return "brief"; },
       })(pi.asExtensionApi());
-
-      const result = await pi.runTool("web_search", { query: "pi", delegate: true });
-      expect(result.content[0].text).toContain("child evidence brief");
-      expect(result.details.responseId).toBe("memory-1");
-
-      await pi.emit("agent_end", {
-        type: "agent_end",
-        messages: [{ role: "assistant", content: [{ type: "text", text: "Pi is an agent according to the source." }] }],
-      });
-      const sealed = pi.entries.find((entry) => entry.customType === "pi-coffee-research-sealed");
-      expect(sealed).toBeDefined();
-      const markdown = await readFile(sealed.data.ref.path, "utf8");
-      expect(markdown).toContain("Pi is an agent according to the source.");
-      expect(markdown).toContain("https://example.com/pi");
-
-      const projected = await pi.emit("context", {
-        type: "context",
-        messages: [{ role: "toolResult", toolCallId: "call-1", content: result.content, details: result.details }],
-      });
+      await pi.emit("turn_start", { turnIndex: 1 });
+      const result = await pi.runTool("web_search", { query: "pi", numResults: 20, delegate: false });
+      expect(delegated).toBe(0);
+      expect(result.content[0].text).toContain("[Research sealed]");
+      expect(result.content[0].text.length).toBeLessThanOrEqual(4096);
+      expect(JSON.stringify(result)).not.toContain("UNIQUE_19");
+      expect(JSON.stringify(pi.entries)).not.toContain("UNIQUE_19");
+      const entry = pi.entries.find(e => e.customType === "pi-coffee-research-sealed");
+      expect(await readFile(entry.data.ref.path, "utf8")).toContain("UNIQUE_19");
+      // No final answer and no agent_end are required; multi-turn progression cannot leak raw results.
+      await pi.emit("turn_start", { turnIndex: 2 });
+      const next = await pi.emit("context", { messages: [{ role: "toolResult", toolCallId: "call-1", content: result.content }] }) as any;
+      expect(JSON.stringify(next ?? result)).not.toContain("UNIQUE_19");
+      const resumed = new FakePi(); resumed.entries.push(...pi.entries);
+      createWebExtension({ artifactStore: new ResearchArtifactStore(root) })(resumed.asExtensionApi());
+      await resumed.emit("session_start", {});
+      const projected = await resumed.emit("context", { messages: [{ role: "toolResult", toolCallId: "call-1", content: [{ type: "text", text: "old raw payload" }] }] }) as any;
       expect(projected.messages[0].content[0].text).toContain("[Research sealed]");
-      expect(projected.messages[0].content[0].text).toContain("Pi is an agent according to the source.");
-      expect(projected.messages[0].content[0].text).not.toContain("Pi docs");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
+      expect(JSON.stringify(projected)).not.toContain("old raw payload");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("delegates by default without searching in the parent and bounds the returned brief", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-coffee-web-extension-"));
+    try {
+      const pi = new FakePi(); let delegated = 0;
+      const transport = new MemorySearchTransport([]);
+      createWebExtension({ transport, artifactStore: new ResearchArtifactStore(root),
+        subagentInvoker: async (input) => { expect(input.task).toContain('"queries":["q"]'); delegated++; return "child brief ".repeat(2000); },
+      })(pi.asExtensionApi());
+      const result = await pi.runTool("web_search", { query: "q" });
+      expect(transport.calls).toHaveLength(0);
+      expect(delegated).toBe(1);
+      expect(result.content[0].text).toContain("child brief");
+      expect(result.content[0].text.length).toBeLessThanOrEqual(4096);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it("never falls back to putting raw results in history when artifact persistence fails", async () => {
+    const pi = new FakePi();
+    createWebExtension({ transport: new MemorySearchTransport([{ title: "raw", url: "https://example.com", snippet: "DO_NOT_PERSIST" }]),
+      artifactStore: { seal() { throw new Error("disk full"); } } as unknown as ResearchArtifactStore,
+    })(pi.asExtensionApi());
+    await expect(pi.runTool("web_search", { query: "q", delegate: false })).rejects.toThrow("disk full");
+    expect(JSON.stringify(pi.entries)).not.toContain("DO_NOT_PERSIST");
   });
 
   it("supports explicit sealing and keeps unknown response IDs bounded", async () => {
@@ -113,7 +140,7 @@ describe("PI Coffee web extension", () => {
       await pi.runTool("web_search", { query: "fact" });
       const sealed = await pi.runTool("research_seal", { responseId: "memory-1", conclusion: "fact confirmed" });
       expect(sealed.details.ok).toBe(true);
-      expect(pi.entries.filter((entry) => entry.customType === "pi-coffee-research-sealed")).toHaveLength(1);
+      expect(pi.entries.filter((entry) => entry.customType === "pi-coffee-research-sealed")).toHaveLength(2);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -132,7 +159,7 @@ describe("PI Coffee web extension", () => {
       })(pi.asExtensionApi());
       await pi.runTool("web_search", { query: "fact" });
       await pi.runTool("research_seal", { responseId: "memory-1", conclusion: "serper-conclusion-secret must be hidden" });
-      const sealed = pi.entries.find((entry) => entry.customType === "pi-coffee-research-sealed");
+      const sealed = pi.entries.filter((entry) => entry.customType === "pi-coffee-research-sealed").at(-1);
       expect(sealed.data.conclusion).not.toContain("serper-conclusion-secret");
       expect(JSON.stringify(pi.messages)).not.toContain("serper-conclusion-secret");
       expect(await readFile(sealed.data.ref.path, "utf8")).not.toContain("serper-conclusion-secret");

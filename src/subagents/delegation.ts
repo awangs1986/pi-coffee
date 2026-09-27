@@ -1,3 +1,7 @@
+import { subagentsAllowed } from "../harness/runtime-mode.js";
+import { capabilityManifestRegistrations } from "../capabilities/registry.js";
+import { readGlobalSubagentModel } from "./model-policy.js";
+import { boundSubagentResult } from "./result-artifact.js";
 import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
@@ -8,15 +12,16 @@ import {
   type SubagentDelegationResponse,
 } from "pi-subagents/delegation";
 
-const DEFAULT_TIMEOUT_MS = 45_000;
+const DEFAULT_TIMEOUT_MS = 15 * 60_000;
 const MAX_TASK_CHARS = 24_000;
-const MAX_RESULT_CHARS = 12_000;
+const MAX_RESULT_CHARS = 3600;
 
 export interface NativeSubagentInvocation {
   task: string;
   context: ExtensionContext;
   signal?: AbortSignal;
   agent?: string;
+  model?: string;
   timeoutMs?: number;
 }
 
@@ -26,10 +31,16 @@ export interface NativeSubagentInvocation {
  * ToolDefinition object and gives the request an explicit cancellation and
  * terminal-response identity.
  */
-export function invokeNativeSubagent(
+export async function invokeNativeSubagent(
   pi: ExtensionAPI,
   input: NativeSubagentInvocation,
 ): Promise<string | undefined> {
+  if (!subagentsAllowed(pi)) throw new Error("Subagents are disabled in Chat; switch to Work to delegate.");
+  if (process.env.PI_SUBAGENT_CHILD === "1") throw new Error("Research children cannot delegate recursively");
+  if (input.signal?.aborted) return undefined;
+  if (!capabilityManifestRegistrations(pi).some(r => r.manifest.id === "subagent" && r.manifest.runnerConformance === "passed" && r.conformanceSource === "local")) return undefined;
+  const configuredModel = input.model ?? await readGlobalSubagentModel();
+  if (input.signal?.aborted) return undefined;
   const requestId = randomUUID();
   const ownerRunId = `pi-coffee-web-${randomUUID()}`;
   const nodeId = "research-brief";
@@ -37,12 +48,14 @@ export function invokeNativeSubagent(
     requestId,
     ownerRunId,
     nodeId,
-    agent: input.agent?.trim() || process.env.PI_COFFEE_WEB_SUBAGENT_AGENT?.trim() || "scout",
+    agent: input.agent?.trim() || process.env.PI_COFFEE_WEB_SUBAGENT_AGENT?.trim() || "coffee-research",
     task: input.task.slice(0, MAX_TASK_CHARS),
+    ...(configuredModel ? { model: configuredModel } : {}),
     context: "fresh",
     cwd: input.context.cwd,
     timeoutMs: clampTimeout(input.timeoutMs),
-    toolBudget: { hard: 0, block: "*" },
+    toolBudget: { hard: 24, block: ["subagent", "bg_wait"] },
+    artifacts: true,
     result: { kind: "text" },
   };
 
@@ -57,7 +70,7 @@ export function invokeNativeSubagent(
       if (timer !== undefined) clearTimeout(timer);
       removeAbort?.();
       unsubscribe();
-      resolve(value === undefined ? undefined : value.slice(0, MAX_RESULT_CHARS));
+      resolve(value === undefined ? undefined : boundSubagentResult(value).content[0].text.slice(0, MAX_RESULT_CHARS));
     };
 
     const unsubscribe = pi.events.on(SUBAGENT_DELEGATION_RESPONSE_EVENT, (payload) => {
@@ -106,5 +119,5 @@ function isMatchingResponse(
 
 function clampTimeout(value: number | undefined): number {
   if (!Number.isSafeInteger(value) || value === undefined) return DEFAULT_TIMEOUT_MS;
-  return Math.max(1_000, Math.min(value, 120_000));
+  return Math.max(1_000, Math.min(value, 20 * 60_000));
 }

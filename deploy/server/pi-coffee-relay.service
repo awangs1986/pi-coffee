@@ -7,16 +7,16 @@ Wants=network-online.target
 Type=simple
 User=pi-coffee
 Group=pi-coffee
-WorkingDirectory=/opt/pi-coffee
+WorkingDirectory=/opt/pi-coffee-server
 EnvironmentFile=/etc/pi-coffee/relay.env
-ExecStart=/usr/bin/node dist/src/main.js relay
+ExecStart=/usr/bin/node dist/src/relay/main.js
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadOnlyPaths=/opt/pi-coffee
+ReadOnlyPaths=/opt/pi-coffee-server
 
 [Install]
 WantedBy=multi-user.target

@@ -1,6 +1,40 @@
 # PI Coffee MVP protocol
 
+> 当前协议记录已实现的接口。工作区合同由 [GW-01～12](./spec/gitea-workspaces.md) 定义；Host 和 Server 已切换到独立 Checkout、同步/PR/迁移动作，并退出平台本地 merge 接口。
+
+> **2026-09-22 目标 Workspace 合同，尚待实现**：每个 Chat/Work Conversation 的 cwd、inbox、research、artifact 和 images 归属见 [`conversation-workspaces.md`](./spec/conversation-workspaces.md)。下文 `.pi-coffee/inbox/<sessionId>` 是当前已实现帧，不能覆盖新合同；协议升级时必须返回 Host 解析的 Workspace 相对路径，浏览器不得提交 cwd。
+
+> **2026-09-19 目标拓扑变更，尚待实现**：见 [ADR-0010](./adr/0010-unified-web-gateway-private-user-vms.md)。默认只对外提供统一 HTTPS 入口，聊天和文件流由网关转到私网 VM；VM 不再要求浏览器直达。本文中的直连 Transfer 地址、双浏览器侧 TLS 和逐 VM 端口开放说明描述旧实现，不应据此配置新公网部署。当前代码／模板尚未完成文件网关，不能只关闭 VM 文件端口就声称迁移成功。网关与 Host 保持独立生命周期；文件流不在入口落盘。
+
 The Browser and Host use the same versioned JSON frame vocabulary. The Web Server validates the Browser frame and forwards it; it does not reinterpret Pi events and keeps no conversation state.
+
+## Workspace HTTP capability
+
+When `PI_COFFEE_PROJECT_ROOT` is configured, authenticated clients use
+`GET /api/workspace` for the v2 Project/Conversation registry and
+`POST /api/workspace` for actions. The Web gateway forwards these requests and
+does not execute Git.
+
+| Action | Required fields | Result |
+|---|---|---|
+| `project` | `name`, optional external `url` | Gitea-backed Project registration |
+| `import` | `name`, uploaded ZIP `scope`/`file` | Gitea-backed Project after bounded import |
+| `discover` | — | locally discovered repositories imported to Gitea |
+| `conversation` | `projectId`, optional `branch` | independent Checkout and reserved Conversation branch |
+| `status` | `id`, optional `refresh` | dirty and remote sync state/SHA/time |
+| `changes` | `id` | bounded diff/checks against fetched target branch |
+| `checkpoint` | `id`, selected `paths`, `message` | commit, normal push and exact remote SHA confirmation |
+| `sync` | `id` | retry normal push of the existing local checkpoint |
+| `pull_request` | `id`, `title` | idempotent real Gitea PR record |
+| `continue` | `projectId`, `sourceBranch`, `sourceSha`, optional new `id` | new Checkout/branch at the verified source SHA |
+| `bind_project` | `projectId`, credential-free `repoUrl` | bind a legacy Project before migration |
+| `migration_plan` / `migrate` | `id` | inspect or execute a legacy-to-Checkout migration while retaining the old directory |
+| `archive` / `restore` / `delete` | `id`; delete also needs exact `confirmation` | visibility or guarded local cleanup; remote branch/PR are retained |
+
+`merge_preview` and `merge` are no longer protocol actions. A client that
+needs integration opens the returned Gitea PR. Health reports
+`capabilities.giteaCheckouts`, `ownerEnvironment` and `passwordlessRoot`; the
+last two describe observed process capability rather than configuration intent.
 
 ## Connection sequence
 
@@ -74,7 +108,7 @@ not supported.
 
 `list_sessions`, `rename_session` and `delete_session` are sidebar commands and are accepted before `open`. `delete_session` stops a live Pi process for that conversation and removes its file from the User VM's session store. Every other command needs an open Session (`not_open` error).
 
-Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`); the browser downscales before sending. Bulk uploads into the Task inbox are `FILE-001`.
+Images are sent inline as base64 (at most 8 per prompt, within `MAX_FRAME_BYTES`); the browser downscales before sending. Bulk uploads into the Conversation inbox are `FILE-001`.
 
 ## Server frames
 
@@ -147,3 +181,98 @@ events; unlike Pi events they are not part of the durable history.
 ## Lifetime rule
 
 Closing a Browser WebSocket detaches that Browser from the Session. It is not a stop command and must not interrupt Pi. The Host stops a Pi process only during Host shutdown or after the idle timeout above, and in both cases the conversation remains in Pi's session store.
+
+
+## Conversation Workspace additions (CW-01–10, 2026-09-22)
+
+The authenticated `/api/workspace` registry returns `vmId`, `capabilities.chatWorkspaces`,
+Projects and Conversations. A Conversation includes `workspaceKind: chat | project`,
+`cwd` (absolute display/copy path), `creationState: creating | ready | failed`, and optional
+`creationError`. Project workspaces also carry `startBranch`, `startSha`, assigned `branch`
+and last remote confirmation. Paths are resolved by Host; clients cannot supply a cwd.
+
+- `conversation`: pass a stable `id` and `workspaceKind`. `chat` needs no project; `project`
+  requires `projectId` and optional starting `branch`. Retry the same payload/ID after
+  uncertain transport or failed creation. Partial files stay at the reported path;
+  ready/missing directories are never silently recreated. Existing callers omitting
+  workspaceKind keep the Project behavior.
+- `branches`: `{projectId}` returns remote branch names for the creation picker.
+- `files`: `{id}` returns the scoped grant and cwd-relative inbox (`inbox` for Chat,
+  `.pi-coffee/inbox` for Project). Upload completion also returns `{path,sha256,fileName}`
+  in HTTP JSON, so a lost WebSocket event does not strand a completed upload.
+- `status`: Chat returns `state: local`; Project returns the **actual** `branch` and
+  `branch_mismatch` on drift/detached HEAD. Such state blocks checkpoint/push. Failed
+  remote checks return `unknown` plus the last confirmation time, never cached `synced`.
+- `archive`/`restore` change visibility only. Running Pi and children continue.
+- `delete`: archived ID and exact `confirmation` are mandatory. `includeLocalFiles:true`
+  explicitly covers the directory, attachments/research/artifacts/images and ignored
+  files. Dirty/unpushed Project code still blocks deletion. Host checks idle children,
+  stops idle Pi, closes its LSP and revokes upload grants before removing local data.
+  Failed creation can also be explicitly cleaned; tombstoned IDs cannot be reused.
+  Native history is deleted; remote branches/PRs/repositories and external legacy data remain.
+
+New Pi processes receive the registry cwd, `PI_COFFEE_DATA_ROOT`, initial Chat/Work mode
+and `PI_SUBAGENTS_TEMP_ROOT` under their data root. Restored mode overrides the initial
+default. Native sessions remain in their existing VM store. Proven old
+`.pi-coffee/inbox/<id>/...` references retain scoped **read-only** download/preview access;
+new uploads go to the task directory. Unattributed global evidence is not reassigned.
+
+## Native engine extension (nativeProtocol 1)
+
+The envelope remains `v: 1`; the additive native contract is negotiated by
+`open.nativeProtocol: 1`. Pi clients remain compatible. Opening a native Task
+without that opt-in fails before creating a process. Unknown Task IDs do not
+select Pi implicitly.
+
+Authenticated `GET /api/engines` returns exactly three installation/version
+entries: `pi`, `codex`, `claude`, each with `name`, `available` and optional
+`reason`/`version` and native `authentication` (configured/required/unknown). Native authentication remains in the CLI; availability is not
+provider authorization. The Web gateway forwards this endpoint as read-only to
+the user's fixed Host.
+
+Workspace `conversation` and `continue` accept `engine` (legacy default `pi`).
+Engine identity is fixed at creation and preserved through retry/archive/restore.
+Native IDs are Host-owned binding metadata, never an `open` or `prompt` input.
+`opened` adds `engine` and boolean `capabilities`: models, images, stop, questions,
+tools, thinking, steer, followUp, stats, commands, extensions, compact, rename,
+cleanup. Missing capabilities on legacy Pi Hosts retain the established Pi UI.
+Missing native capabilities do not imply support.
+
+Native `event` payloads use the existing ordered cursor and Task scope:
+
+- `run_started {runId}` and `run_completed {status, message?}`. Stop acknowledgement
+  accepts the request; only native terminal evidence completes the run.
+- `message_delta {id, delta}` and `message_completed {id, text}`. Completion
+  replaces the accumulated text for that ID.
+- `tool_update {id, name?, args?, status, result?, isError?}`. Updates share one
+  stable item ID; history/replay must not append duplicates.
+- `native_request {id, method, title, message?, options?, secret?}` uses the
+  existing `ui_response` envelope. Requests remain pending across disconnects;
+  invalid or stale answers cannot grant a different request. Question groups
+  are presented sequentially and answered as one native response.
+- `background_state {known, active}` is independent of foreground completion.
+  Unknown writer state is not permission for a Git or cleanup operation.
+
+A failed or uncertain native delivery is visible and is not replayed. Completed
+history comes from the native engine and its binding. Secrets, raw native stderr
+and native login material are not exposed by discovery or lifecycle errors.
+See [activation and recovery](deployment/native-agents.md) for the version-pinned
+capability matrix and retained-data cleanup policy.
+
+## Categorized context usage
+
+`stats.contextBreakdown` is additive and defined in [CU-01–03](spec/context-usage.md).
+It carries `version: 1`, `method: o200k_base_estimate`, `basis: last_request | session_preview`,
+`model`, `capturedAt`, `contextWindow`, `totalTokens`, `mediaOmitted`, and seven
+`{id,tokens}` categories. The Browser must use this total for the segmented chart,
+not cumulative `stats.tokens`. Missing breakdown is unavailable. Raw content
+never crosses this metadata interface.
+
+## Skill management HTTP
+
+Authenticated `POST /api/skills` is the additive native Skill management seam.
+The [canonical contract](spec/skill-management.md) defines `list`, `detail`,
+`install`, `update`, `enable`, `disable` and idle `reload`, scoped by `engine`,
+`scope` and an optional registered `conversationId`. It does not add Agent tools
+or alter WebSocket model/session protocols. Old Hosts return 404; Web must show
+management as unavailable. File/source ownership and all mutations remain on VM.

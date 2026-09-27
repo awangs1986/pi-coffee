@@ -108,6 +108,16 @@ describe("Codex app-server adapter", () => {
     expect(state.messageCount).toBe(2);
   });
 
+  it("delivers structured native questions and returns the browser answer to Codex",async()=>{
+    const b=setup(),session=await b.factory().create({sessionId:"question-task"});
+    const rec=recorder(session);await session.prompt("ask structured");
+    const question=await rec.until(event=>event.type==="native_request");
+    expect(question).toMatchObject({method:"input",title:"Choose a color"});
+    await session.respondUi({id:String(question.id),value:"Blue"});
+    await rec.until(settled);
+    expect((await session.getHistory()).entries).toEqual(expect.arrayContaining([expect.objectContaining({kind:"assistant",text:"echo: ask structured Blue"})]));
+  });
+
   it("follows thread/list cursors so old conversations stay in the sidebar", async () => {
     const b = setup();
     const factory = b.factory();

@@ -1,23 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-export type HarnessPromptProfile = "lean" | "full";
+export type HarnessPromptProfile = "chat" | "work";
 
-const PROMPT_FILE_BY_PROFILE: Record<HarnessPromptProfile, string> = {
-  lean: "harness-lean.md",
-  full: "harness-full.md",
-};
-
-/**
- * Render one stable PI Coffee prompt increment for the original Pi Agent.
- *
- * The markdown files are the single source of prompt content. This module is
- * deliberately side-effect free: it only reads a packaged fixture, strips
- * author metadata, normalizes line endings, and rejects unresolved template
- * markers before a caller injects the result at the Pi extension seam.
- */
-export function renderHarnessPrompt(profile: HarnessPromptProfile): string {
-  const fileName = PROMPT_FILE_BY_PROFILE[profile];
+/** Packaged Work body; Chat never loads a system prompt. */
+export function renderHarnessPrompt(profile: HarnessPromptProfile = "work"): string {
+  if (profile === "chat") return "";
+  if (profile !== "work") throw new Error("Unknown prompt profile; use chat or work");
+  const fileName = "software-development.md";
   const sourcePath = fileURLToPath(new URL(`./prompts/${fileName}`, import.meta.url));
   const source = readFileSync(sourcePath, "utf8");
   const rendered = stripAuthorComments(source).replace(/\r\n/g, "\n").trim();

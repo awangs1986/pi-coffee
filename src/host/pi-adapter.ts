@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RpcClient, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
   CommandInfo,
+  ContextBreakdown,
   ExtensionInfo,
   HistoryEntry,
   ImageInput,
@@ -15,62 +17,12 @@ import type {
   UiResponse,
 } from "../shared/protocol.js";
 
-export interface PiHistory {
-  entries: HistoryEntry[];
-  leafId: string | null;
-}
+import type { AgentHistory as PiHistory, AgentSessionListing as PiSessionListing, AgentModels as PiModels, AgentSession as PiSession, AgentSessionFactory as PiSessionFactory } from "./agent-adapter.js";
+export type { AgentHistory as PiHistory, AgentSessionListing as PiSessionListing, AgentModels as PiModels, AgentSession as PiSession, AgentSessionFactory as PiSessionFactory } from "./agent-adapter.js";
 
-/** A conversation known to the durable session store; `running` is added by the Host. */
-export type PiSessionListing = Omit<SessionSummary, "running">;
-
-/**
- * The only Pi-specific seam in PI Coffee.  The Host and Web Server depend on
- * this small interface rather than on Pi's SDK or RPC implementation.
- */
-export interface PiModels {
-  models: ModelChoice[];
-  current: { provider: string; id: string } | null;
-  thinkingLevel: string;
-  thinkingLevels: string[];
-}
-
-export interface PiSession {
-  prompt(text: string, images?: ImageInput[]): Promise<void>;
-  /** Interrupt a running turn after its current tool calls. */
-  steer(text: string, images?: ImageInput[]): Promise<void>;
-  /** Queue a message for after the current run finishes. */
-  followUp(text: string, images?: ImageInput[]): Promise<void>;
-  abort(): Promise<void>;
-  getState(): Promise<SessionState>;
-  /** Completed conversation entries from the durable session, display-ready. */
-  getHistory(): Promise<PiHistory>;
-  rename(name: string): Promise<void>;
-  getModels(): Promise<PiModels>;
-  setModel(provider: string, id: string): Promise<void>;
-  setThinkingLevel(level: string): Promise<void>;
-  getCommands(): Promise<CommandInfo[]>;
-  /** Extensions, skills and prompt templates this Pi process actually loaded. */
-  getExtensions(): Promise<ExtensionInfo[]>;
-  getStats(): Promise<SessionStats>;
-  compact(): Promise<void>;
-  /** Answer a blocking extension dialog (select / confirm / input / editor). */
-  respondUi(response: UiResponse): Promise<void>;
-  onEvent(listener: (event: unknown) => void): () => void;
-  stop(): Promise<void>;
-}
-
-export interface PiSessionFactory {
-  /** Start (or resume, when the store already has it) the session with this id. */
-  create(options: { sessionId: string }): Promise<PiSession>;
-  /** Conversations in the durable store, newest first. */
-  list(): Promise<PiSessionListing[]>;
-  /** Remove a conversation from the durable store. Resolves false when unknown. */
-  delete(sessionId: string): Promise<boolean>;
-  /** Release anything the factory itself holds (e.g. a shared agent server process). */
-  close?(): Promise<void>;
-}
 
 export interface RpcPiSessionFactoryOptions {
+  runtimeIdForSession?: (id:string)=>string;
   cwd?: string;
   agentDir?: string;
   sessionDir?: string;
@@ -80,7 +32,11 @@ export interface RpcPiSessionFactoryOptions {
   args?: string[];
   /** Additional native Pi extensions loaded for every Host session. */
   extensions?: string[];
+  /** Additional Pi skills loaded for every Host session. */
+  skills?: string[];
   env?: Record<string, string>;
+  envForSession?: (id:string) => Promise<Record<string,string>>;
+  cwdForSession?: (id: string, existing: boolean) => Promise<string>;
 }
 
 /**
@@ -93,6 +49,8 @@ export const HOST_STRIPPED_ENV_KEYS = [
   "PI_COFFEE_SERPER_KEY",
   "PI_COFFEE_RELAY_TOKENS",
   "SERPER_API_KEY",
+  "PI_COFFEE_GITEA_CLIENT_SECRET",
+  "PI_COFFEE_HOST_TOKEN",
 ] as const;
 
 /**
@@ -117,7 +75,10 @@ export class RpcPiSessionFactory implements PiSessionFactory {
   }
 
   async create(options: { sessionId: string }): Promise<PiSession> {
-    const args = appendExtensionArgs([...(this.options.args ?? [])], this.options.extensions ?? []);
+    const args = appendSkillArgs(
+      appendExtensionArgs([...(this.options.args ?? [])], this.options.extensions ?? []),
+      this.options.skills ?? [],
+    );
     // Resume from the durable store when the conversation already exists there;
     // only a genuinely new conversation gets a fresh file with our id.
     const existing = (await this.listWithPaths()).find((session) => session.id === options.sessionId);
@@ -130,12 +91,13 @@ export class RpcPiSessionFactory implements PiSessionFactory {
     }
     const client = new RpcClient({
       cliPath: this.options.cliPath ?? resolvePiCliPath(),
-      cwd: this.options.cwd,
+      cwd: this.options.cwdForSession ? await this.options.cwdForSession(options.sessionId, existing !== undefined) : this.options.cwd,
       provider: this.options.provider,
       model: this.options.model,
       env: {
         ...(this.options.agentDir === undefined ? {} : { PI_CODING_AGENT_DIR: this.options.agentDir }),
-        ...buildHostChildEnv(this.options.env),
+        ...buildHostChildEnv({...this.options.env,...await this.options.envForSession?.(options.sessionId)}),
+        PI_COFFEE_ROOT_SESSION: this.options.runtimeIdForSession?.(options.sessionId) ?? options.sessionId,
       },
       args,
     });
@@ -198,6 +160,18 @@ export function appendExtensionArgs(args: string[], extensions: readonly string[
   return args;
 }
 
+/** Add `--skill path` pairs without duplicating explicitly supplied paths. */
+export function appendSkillArgs(args: string[], skills: readonly string[]): string[] {
+  for (const skill of skills) {
+    const trimmed = skill.trim();
+    if (trimmed.length === 0) continue;
+    const alreadyPresent = args.some((arg, index) => arg === "--skill" && args[index + 1] === trimmed)
+      || args.includes(`--skill=${trimmed}`);
+    if (!alreadyPresent) args.push("--skill", trimmed);
+  }
+  return args;
+}
+
 /** `--extension <path>` / `--extension=<path>` / `-e <path>` entries from a CLI arg list. */
 export function extensionPathsFromArgs(args: readonly string[]): string[] {
   const paths: string[] = [];
@@ -214,13 +188,49 @@ class RpcPiSession implements PiSession {
   private readonly configuredExtensions: readonly string[];
   private readonly listeners = new Set<(event: unknown) => void>();
   private unsubscribe?: () => void;
+  private healthTimer?: ReturnType<typeof setTimeout>;
+  private runGeneration = 0;
+  private running = false;
 
   constructor(client: RpcClient, configuredExtensions: readonly string[] = []) {
     this.client = client;
     this.configuredExtensions = configuredExtensions;
     this.unsubscribe = client.onEvent((event) => {
+      if (event.type === "agent_start") {
+        this.running = true;
+        this.watchActiveProcess();
+      } else if (event.type === "agent_settled") {
+        this.stopWatching();
+      }
       for (const listener of this.listeners) listener(event);
     });
+  }
+
+  // Pinned RpcClient has no public process-exit callback. Probe only active runs
+  // through its public RPC seam; transient RPC timeouts do not prove Pi died.
+  private watchActiveProcess(): void {
+    if (!this.running || this.healthTimer) return;
+    const generation = this.runGeneration;
+    this.healthTimer = setTimeout(async () => {
+      this.healthTimer = undefined;
+      try { await this.client.getState(); }
+      catch (error) {
+        if (this.running && generation === this.runGeneration && error instanceof Error && /^Agent process exited \(/.test(error.message)) {
+          this.stopWatching();
+          for (const listener of this.listeners) listener({type:"agent_interrupted"});
+          return;
+        }
+      }
+      if (generation === this.runGeneration) this.watchActiveProcess();
+    }, 1000);
+    this.healthTimer.unref();
+  }
+
+  private stopWatching(): void {
+    this.running = false;
+    this.runGeneration++;
+    if (this.healthTimer) clearTimeout(this.healthTimer);
+    this.healthTimer = undefined;
   }
 
   async start(): Promise<void> {
@@ -236,7 +246,10 @@ class RpcPiSession implements PiSession {
   async prompt(text: string, images?: ImageInput[]): Promise<void> {
     // The RPC package's wire image shape is intentionally the same compact
     // shape used by PI Coffee.  Keep the cast local to this adapter.
-    await this.client.prompt(text, images as never);
+    this.running = true;
+    this.watchActiveProcess();
+    try { await this.client.prompt(text, images as never); }
+    catch (error) {this.stopWatching();throw error;}
   }
 
   async steer(text: string, images?: ImageInput[]): Promise<void> {
@@ -260,6 +273,17 @@ class RpcPiSession implements PiSession {
     };
   }
 
+  async backgroundState():Promise<{known:boolean;active:number}> {
+    const commands=await this.client.getCommands();
+    if(!commands.some(c=>c.name==="coffee-workspace-jobs"))return {known:false,active:0};
+    const before=await this.client.getEntries();const since=before.entries.at(-1)?.id;
+    const nonce=randomUUID();await this.client.prompt(`/coffee-workspace-jobs ${nonce}`);
+    const result=await this.client.getEntries(since);
+    const entry=result.entries.find(e=>e.type==="custom" && e.customType==="coffee-workspace-jobs" && (e.data as any)?.nonce===nonce);
+    const value=entry?.type==="custom" ? entry.data as any : undefined;
+    return {known:value?.known===true && Number.isSafeInteger(value.active),active:value?.active ?? 0};
+  }
+
   async getHistory(): Promise<PiHistory> {
     const result = await this.client.getEntries();
     return projectHistory(result.entries as unknown[], result.leafId ?? null);
@@ -278,13 +302,14 @@ class RpcPiSession implements PiSession {
     const current = state.model as { provider?: unknown; id?: unknown } | undefined;
     return {
       models: available.map((model) => ({
+        source: (process.env.PI_COFFEE_RELAY_PROVIDERS ?? "cpa").split(",").map(v=>v.trim()).includes(model.provider) ? "relay" as const : "native" as const,
         provider: model.provider,
         id: model.id,
         contextWindow: model.contextWindow,
         reasoning: model.reasoning,
       })),
       current: current && typeof current.provider === "string" && typeof current.id === "string"
-        ? { provider: current.provider, id: current.id }
+        ? { provider: current.provider, id: current.id, source: (process.env.PI_COFFEE_RELAY_PROVIDERS ?? "cpa").split(",").map(v=>v.trim()).includes(current.provider) ? "relay" as const : "native" as const }
         : null,
       thinkingLevel: String(state.thinkingLevel),
       thinkingLevels: levels.map(String),
@@ -315,10 +340,28 @@ class RpcPiSession implements PiSession {
 
   async getStats(): Promise<SessionStats> {
     const stats = await this.client.getSessionStats() as unknown as Record<string, unknown>;
+    let contextBreakdown:ContextBreakdown | undefined;
+    const commands=await this.client.getCommands();
+    if(commands.some(command=>command.name==='coffee-context-usage')){
+      const before=await this.client.getEntries();const since=before.entries.at(-1)?.id;
+      const nonce=randomUUID();await this.client.prompt(`/coffee-context-usage ${nonce}`);
+      const result=await this.client.getEntries(since);
+      const value=result.entries.find(entry=>entry.type==='custom' && entry.customType==='coffee-context-usage' && (entry.data as any)?.nonce===nonce);
+      const data=value?.type==='custom'?(value.data as any)?.breakdown:undefined;
+      const ids=['system','tools','rules','skills','dynamic','subagents','conversation'] as const;
+      if(data?.version===1 && data.method==='o200k_base_estimate' && ['last_request','session_preview'].includes(data.basis)
+        && typeof data.model==='string' && data.model.length<=256 && typeof data.capturedAt==='string' && Number.isFinite(Date.parse(data.capturedAt))
+        && Number.isSafeInteger(data.contextWindow) && data.contextWindow>0 && data.categories?.length===7
+        && ids.every(id=>data.categories.some((c:any)=>c.id===id && Number.isSafeInteger(c.tokens) && c.tokens>=0))){
+        const categories=ids.map(id=>({id,tokens:data.categories.find((c:any)=>c.id===id).tokens as number}));
+        contextBreakdown={version:1,method:'o200k_base_estimate',basis:data.basis,model:data.model,capturedAt:data.capturedAt,contextWindow:data.contextWindow,totalTokens:categories.reduce((n,c)=>n+c.tokens,0),categories,mediaOmitted:data.mediaOmitted===true};
+      }
+    }
     const tokens = (stats.tokens ?? {}) as Record<string, unknown>;
     const usage = stats.contextUsage as Record<string, unknown> | undefined;
     const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
     return {
+      ...(contextBreakdown ? {contextBreakdown} : {}),
       userMessages: num(stats.userMessages),
       assistantMessages: num(stats.assistantMessages),
       toolCalls: num(stats.toolCalls),
@@ -341,6 +384,10 @@ class RpcPiSession implements PiSession {
   }
 
   async compact(): Promise<void> {
+    const commands = await this.client.getCommands();
+    if (!commands.some(command => command.name === "context-recovery")) {
+      throw new Error("Local recovery extension is not loaded. Restore the default context adapter before using Web compaction; no model summary was requested.");
+    }
     await this.client.compact();
   }
 
@@ -366,6 +413,7 @@ class RpcPiSession implements PiSession {
   }
 
   async stop(): Promise<void> {
+    this.stopWatching();
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     this.listeners.clear();

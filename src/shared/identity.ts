@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * Browser User identity as it crosses the Web Server → Host seam.
  *
@@ -30,3 +31,6 @@ export function parseAllowedUsers(value: string | undefined): string[] {
     .map((item) => normalizeUsername(item))
     .filter((item): item is string => item !== undefined);
 }
+
+/** Stable task runtime namespace across users sharing one OS account. */
+export function taskNamespace(user:string|undefined,id:string):string {return user===undefined ? id : createHash("sha256").update(JSON.stringify([user,id])).digest("hex");}

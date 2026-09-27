@@ -1,87 +1,35 @@
-# PI Coffee Web Search 插件
+# Web 搜索：短摘要、来源索引与 VM 证据文件
 
-状态：已实现代码切片；真实 Control Plane、Serper 和 User VM 运行验收仍需按 Gitea 工单执行。
+实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；产品只使用 Chat/Work；工具和委派分配已按 PA-Q01/04 落实。
 
 ## 边界
 
-Web 搜索是 Agent Host 中的 Pi-native extension。搜索请求经过 Control
-Plane Relay 的 `/v1/search/serper`，Serper key 只存在 Relay 进程；User VM
-只保存 Relay token、搜索结果 artifact 和 Pi session。
+搜索仍走 Relay `/v1/search/serper`，Serper Key 只在 Relay；VM 持客户端 Token。原生模型认证与搜索认证是不同路径。本地 `web_search` 和 `/websearch` 保留唯一搜索入口；官方 `pi-web-access` 的同名搜索与 curator 命令继续过滤。
 
-PI Coffee 的本地 `web_search` 是唯一搜索入口。官方
-[`pi-web-access`](https://github.com/nicobailon/pi-web-access) 通过本地
-Adapter 加载，保留其 `fetch_content`、`source_check` 和
-`get_search_content` 工具，但屏蔽同名的 `web_search` 注册以及官方
-`/websearch`、`/curator` 命令，避免绕过 Relay。PI Coffee 自己的
-`/websearch` 命令仍然可用。
+## 新的历史合同
 
-## 工具
+1. 搜索完成后，先将完整的有界来源、URL、snippets 存成所属 Conversation Workspace 的 `research/` Markdown 证据文件（Project Workspace 对应 `.pi-coffee/research/`；目录 0700、文件 0600）。这不是聊天历史，也不自动加载进模型上下文。
+2. 工具返回和会话 custom entry 只保存短摘要、精选来源索引、artifact 路径与元数据；工具文本最多 4096 字符。**完整结果不先进入当前轮历史。**
+3. 默认选择供应商排序中前三个不同 URL，保留短 snippets。这里“最优”是排序启发式，不是已核实事实；重要结论仍应打开原始来源验证。超长 URL 不截成错误引用，改指向证据文件。
+4. 不等待 `agent_end`，因此后续 turn、取消、没有最终回答也不会留下本次完整搜索结果在历史中。
+5. `research_seal` 变为可选的结论精炼：输入已有 responseId 和至多 2400 字符的已核实结论，生成新证据文件并更新该结果的上下文投影。精炼时应引用精选来源，勿重复来源全表。
+6. 写盘失败就明确失败，不用“把原始结果塞回历史”作降级。
+7. 已有旧会话只做兼容的 context projection，不破坏性清洗或重写旧 JSONL。已有原始历史不会因升级自动消失。
 
-| 工具 | 默认状态 | 作用 |
-|---|---|---|
-| `web_search` | Web capability 激活后可用 | 最多四个查询、Serper 结果、可选子 Agent research brief |
-| `research_seal` | 随 Web capability 激活 | 将搜索来源和最终结论写入 User VM Markdown |
-| `fetch_content` | `web-access` capability，默认未 conformed | 官方 pi-web-access 页面内容提取 |
-| `source_check` | `web-access` capability，默认未 conformed | 官方来源核验和结构化证据 |
-| `get_search_content` | `web-access` capability，默认未 conformed | 读取官方扩展保存的搜索内容 |
+用户若主动读取完整 artifact，仍可能再次引入数据；通用提示词要求按范围检索，大工具结果由上下文入口策略限量。
 
-这些工具不改变 Harness 的 V5 基础表：Simple 仍为 8，Full 仍为 10。通过
-`search_tools` 发现/激活 optional capability 后，schema 只在下一个 model
-request 生效。
+## Chat/Work 搜索边界
 
-## 子 Agent 路径
+Chat 常驻 web_search，始终直接搜索，即使参数 delegate=true 也不创建子任务。Work 按需激活 Web，沿用已有默认研究委派；delegate=false 显式直接搜索。Chat 不附加 Work 系统指令或子任务工具。
 
-Web extension 使用 `pi-subagents/delegation` 的
-`prompt-template:subagent:*` event bus 调用一个 configured Agent，默认
-`scout`。委托使用 `fresh` context 和 zero-tool budget，只分析已返回的
-Serper snippets。子 Agent 未加载、超时、取消或失败时，`web_search` 仍返回
-Serper 结果并显示有界降级信息。
+现有直接搜索、研究子 Pi、来源读取和短结论回传能力可复用。委派失败须明确报告，不能静默在父 Agent 重做；子进程不能递归委派。当前分派细节以 `src/extensions/web-access/extension.ts`、`src/harness/runtime-mode.ts` 和对应测试为准，旧产品分派文本已撤回 Git 历史（提交 `b027838`）。
 
-## Markdown 封盘和上下文
-
-每次搜索生成唯一 `responseId`。LLM 完成本轮后，Web extension 将当前
-agent run 的未封盘搜索写入 User VM：
-
-```text
-<agent_end>
-  research-<content-hash>.md  (目录 0700，文件 0600)
-<next provider request>
-  [Research sealed] pointer + conclusion
-```
-
-artifact 包含查询、provider、来源 URL、bounded snippets、结论、session ID
-和 SHA-256。Relay、Serper 和上游 key 会在写入前脱敏；同一份脱敏后的结论
-才会写入 Pi session 或发送到浏览器，避免凭据从模型回显路径泄露。完整搜索结果只在
-当前工具返回中可见；`context` handler 在下一次 provider request 前替换
-为 pointer + conclusion。关闭浏览器不会影响 User VM 文件或 Pi session。
-
-`research_seal` 可在模型希望提前建立 checkpoint 时显式调用。重复封盘是
-幂等的，未知 `responseId` 返回结构化错误。
+`fetch_content`、`source_check`、`get_search_content` 继续属于可选 web-access 能力。后者的上游缓存不等同于本地 Serper artifact，不能假定互通；获取已知 URL 正文与读取本地 evidence 文件应使用各自工具。搜索故障明确报告，不自动换供应商或帐号。
 
 ## 配置
 
-| 变量 | 所在进程 | 作用 |
-|---|---|---|
-| `PI_COFFEE_SERPER_KEY` | Control Plane Relay | 唯一 Serper credential |
-| `PI_COFFEE_SERPER_ENDPOINT` | Control Plane Relay | 可选兼容/测试 endpoint |
-| `PI_COFFEE_SEARCH_URL` | User VM Host | Web search Relay URL |
-| `PI_COFFEE_RELAY_TOKEN` | User VM Host | Relay bearer token |
-| `PI_COFFEE_RESEARCH_DIR` | User VM Host | Markdown artifact 根目录 |
-| `PI_COFFEE_WEB` | User VM Host | `off` 禁用本地 Web adapter |
-| `PI_COFFEE_WEB_ACCESS` | User VM Host | `off` 禁用官方 pi-web-access adapter |
-| `PI_COFFEE_WEB_SUBAGENT` | User VM Host | `off` 禁用默认子 Agent brief |
-| `PI_COFFEE_WEB_SUBAGENT_AGENT` | User VM Host | 选择 configured subagent 名称 |
-
-User VM 不应设置 `SERPER_API_KEY`，也不应把 Serper key 写入
-`~/.pi/web-search.json`。官方扩展的直接 Serper tool 已被 Adapter 屏蔽。
+保留 `PI_COFFEE_SERPER_KEY`（仅 Relay）、`PI_COFFEE_SEARCH_URL`、`PI_COFFEE_RELAY_TOKEN`、`PI_COFFEE_WEB`、`PI_COFFEE_WEB_ACCESS`、`PI_COFFEE_WEB_SUBAGENT_AGENT`。`PI_COFFEE_RESEARCH_DIR` 只允许旧无 Workspace Session 的兼容读取/迁移；已登记 Conversation 必须按 [Conversation Workspace SPEC](./conversation-workspaces.md)解析 `research/`，不能由全局环境变量覆盖到共享目录。
 
 ## 验证
 
-```bash
-npm run check
-npm run smoke:subagents
-```
-
-搜索真实验收还需验证 Relay key 隔离、子 Agent 生命周期、浏览器断开后
-继续和 Host 重启恢复；这些证据必须贴到 Web 工单，不能仅以离线 smoke
-代替。
+`test/web-extension.test.ts` 覆盖默认先委派且父不搜索、失败不静默回退、显式直接搜索与有界 brief、立即持久化短结果、多 turn/恢复、写盘失败和精炼脱敏。`test/research-artifact.test.ts` 覆盖 artifact 权限和路径边界。当前实现仍默认写全局 Agent research 目录；改为按 Conversation 解析和跨 Conversation 拒绝属于 PA-013 的待实现验收。真实 Serper 质量、原生帐号和两台部署 VM 尚需实际验收，不以本地 stub 代替。

@@ -1,14 +1,26 @@
+import { Workspaces } from "../src/host/workspaces.js";
+import { execFile } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { WebSocket } from "ws";
 import { TransferServer } from "../src/host/transfer.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HistoryEntry, ImageInput } from "../src/shared/protocol.js";
 import { decodeServerFrame, encodeFrame, type ServerFrame } from "../src/shared/protocol.js";
 import { HostServer } from "../src/host/server.js";
-import type { PiSession, PiSessionFactory } from "../src/host/pi-adapter.js";
+import { RpcPiSessionFactory, type PiSession, type PiSessionFactory } from "../src/host/pi-adapter.js";
+
+const exec=promisify(execFile);
+async function workspaceConversation(root:string,name:string) {
+  const source=join(root,`${name}-source`),remote=join(root,`${name}.git`);await mkdir(source);
+  await exec("git",["-c","user.name=Test","-c","user.email=test@localhost","init","-b","main"],{cwd:source});await writeFile(join(source,"README.md"),"base\n");
+  await exec("git",["-c","user.name=Test","-c","user.email=test@localhost","add","."],{cwd:source});await exec("git",["-c","user.name=Test","-c","user.email=test@localhost","commit","-m","base"],{cwd:source});await exec("git",["clone","--bare",source,remote],{cwd:root});
+  const workspaces=new Workspaces(join(root,`${name}-workspaces`),{ownerId:"vm-test"});const project=await workspaces.registerProject(name,remote);const conversation=await workspaces.createConversation(project.id);return {workspaces,project,conversation};
+}
 
 class FakePiSession implements PiSession {
   private readonly listeners = new Set<(event: unknown) => void>();
@@ -16,8 +28,13 @@ class FakePiSession implements PiSession {
   readonly history: HistoryEntry[] = [];
   /** When set, prompt() stops after the first delta so the message stays in flight. */
   holdAfterDelta = false;
+
   /** Simulates a turn driven by another process (terminal): state says streaming, no events arrive. */
   externallyBusy = false;
+
+  background={known:true,active:0};
+  async backgroundState(){return this.background;}
+
 
   async prompt(text: string, _images?: ImageInput[]): Promise<void> {
     this.state = { ...this.state, isStreaming: true };
@@ -221,6 +238,13 @@ async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void
 }
 
 describe("Host WebSocket seam", () => {
+  it("advertises the external protocol version on its health endpoint", async () => {
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory: new FakeFactory() });
+    await server.start();
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/healthz`);
+    expect(await response.json()).toMatchObject({ ok: true, role: "host", protocolVersion: 1, capabilities:{ownerEnvironment:true} });
+  });
+
   it("keeps a Pi session alive across browser disconnect and hands a new browser the durable history", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "127.0.0.1", factory, eventBufferSize: 32 });
@@ -448,6 +472,27 @@ describe("Host WebSocket seam", () => {
     second.close();
   });
 
+  it.each([{ known: true, active: 1 }, { known: false, active: 0 }])("keeps a disconnected parent alive until background work is known idle: %j", async (background) => {
+    const factory = new FakeFactory();
+    server = new HostServer({ port: 0, host: "127.0.0.1", factory, idleTimeoutMs: 30 });
+    await server.start();
+    const socket = await connect(server.address().port);
+    const frames = new FrameQueue(socket);
+    socket.send(encodeFrame({ v: 1, type: "open" }));
+    const opened = await frames.next();
+    if (opened.type !== "opened") throw new Error("expected opened");
+    await frames.next();
+    const pi = factory.sessions.get(opened.sessionId)!;
+    pi.background = background;
+    socket.close();
+    await once(socket, "close");
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(pi.stopped).toBe(false);
+    pi.background = { known: true, active: 0 };
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(pi.stopped).toBe(true);
+  });
+
   it("joins a busy run with steer/follow_up and falls back to a plain prompt when idle", async () => {
     const factory = new FakeFactory();
     server = new HostServer({ port: 0, host: "127.0.0.1", factory });
@@ -514,6 +559,9 @@ describe("Host WebSocket seam", () => {
     socket.send(encodeFrame({ v: 1, type: "compact", requestId: "c1" }));
     expect(await frames.next()).toMatchObject({ type: "ack", operation: "compact", requestId: "c1" });
     await waitFor(() => pi.compacted === 1);
+    pi.compact = async () => { throw new Error("Local compaction unavailable"); };
+    socket.send(encodeFrame({ v: 1, type: "compact", requestId: "c-fail" }));
+    expect(await frames.next()).toMatchObject({ type: "error", requestId: "c-fail" });
     socket.close();
   });
 
@@ -840,4 +888,95 @@ describe("Host WebSocket seam", () => {
     await expect(frames.next()).resolves.toMatchObject({ type: "error", code: "not_open" });
     socket.close();
   });
+  it("archives without stopping children and refuses deletion until all writers are quiescent",async()=>{
+    const root=mkdtempSync(join(tmpdir(),"coffee-lifecycle-"));
+    const factory=new FakeFactory();const {workspaces:ws,conversation}=await workspaceConversation(root,"safe");
+    const pi=await factory.create({sessionId:conversation.id}) as FakePiSession;
+    pi.background={known:true,active:1};
+    server=new HostServer({port:0,token:"lifecycle",factory,workspaces:ws});await server.start();
+    const post=(action:string,extra={})=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:"POST",headers:{authorization:"Bearer lifecycle","content-type":"application/json"},body:JSON.stringify({action,id:conversation.id,...extra})});
+    try {
+      expect((await post("archive")).status).toBe(200);expect(pi.stopped).toBe(false);
+      expect((await post("delete",{confirmation:conversation.id})).status).toBe(409);
+      const review=await post("changes");expect(review.status).toBe(200);expect((await review.json() as {sessionId:string}).sessionId).toBe(conversation.id);expect(pi.stopped).toBe(false);
+      expect((await post("status")).status).toBe(200);
+      pi.background={known:false,active:0};expect((await post("delete",{confirmation:conversation.id})).status).toBe(409);expect(pi.stopped).toBe(false);
+      pi.background={known:true,active:0};expect((await ws.lookup(conversation.id))?.archived).toBe(true);
+      expect((await post("delete",{confirmation:conversation.id})).status).toBe(200);
+      expect(await ws.lookup(conversation.id)).toBeUndefined();
+    }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+  });
+
+  it('creates a Chat directory idempotently through HTTP and grants its scoped inbox',async()=>{
+    const root=mkdtempSync(join(tmpdir(),'coffee-chat-api-')),factory=new FakeFactory(),workspaces=new Workspaces(join(root,'projects'));
+    const transfer=new TransferServer({host:'127.0.0.1',port:0,workdir:root,workspaces});await transfer.start();
+    server=new HostServer({port:0,token:'chat-api',factory,workspaces,transfer});await server.start();
+    const post=(value:unknown)=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:'POST',headers:{authorization:'Bearer chat-api','content-type':'application/json'},body:JSON.stringify(value)});
+    try{
+      const request={action:'conversation',id:'chat-api-task',workspaceKind:'chat'};
+      const first=await post(request);expect(first.status).toBe(200);const c=await first.json();expect(c).toMatchObject({id:request.id,workspaceKind:'chat',creationState:'ready',cwd:join(root,'chats',request.id)});
+      expect(await (await post(request)).json()).toEqual(c);
+      const grant=await (await post({action:'files',id:c.id})).json();expect(grant).toMatchObject({scope:c.id,inbox:'inbox'});
+      expect((await post({action:'files',id:'unknown'})).status).toBe(409);
+      expect(await (await post({action:'status',id:c.id})).json()).toMatchObject({state:'local'});
+    }finally{await server.close();server=undefined;await transfer.close();rmSync(root,{recursive:true,force:true});}
+  });
+
+  it("routes Checkout status and legacy migration actions through the Host API",async()=>{
+    const root=mkdtempSync(join(tmpdir(),"coffee-migration-api-"));const factory=new FakeFactory();const {workspaces:ws,conversation}=await workspaceConversation(root,"migration-api");
+    const plan=vi.spyOn(ws,"migrationPlan").mockResolvedValue({required:true,dirty:true,remoteBound:true,legacyCwd:"/legacy",branch:"coffee/legacy",runState:"idle"});
+    const migrate=vi.spyOn(ws,"migrateConversation").mockResolvedValue({...conversation,legacyCwd:"/legacy"});
+    server=new HostServer({port:0,token:"migration",factory,workspaces:ws});await server.start();
+    const post=(action:string)=>fetch(`http://127.0.0.1:${server!.address().port}/api/workspace`,{method:"POST",headers:{authorization:"Bearer migration","content-type":"application/json"},body:JSON.stringify({action,id:conversation.id})});
+    try {
+      const status=await post("status");expect(status.status).toBe(200);expect(await status.json()).toMatchObject({state:"synced",branch:conversation.branch});
+      const preview=await post("migration_plan");expect(preview.status).toBe(200);expect(await preview.json()).toMatchObject({required:true,dirty:true});expect(plan).toHaveBeenCalledWith(conversation.id);
+      const migrated=await post("migrate");expect(migrated.status).toBe(200);expect(await migrated.json()).toMatchObject({id:conversation.id,legacyCwd:"/legacy"});expect(migrate).toHaveBeenCalledWith(conversation.id);
+    }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+  });
+
+  it("persists interruption after a real RPC process dies and reopens without replaying its run",async()=>{
+    const root=mkdtempSync(join(tmpdir(),"coffee-host-crash-"));
+    const {workspaces,conversation}=await workspaceConversation(root,"demo");
+    const factory=new RpcPiSessionFactory({cliPath:resolve("test/fixtures/fake-pi-rpc.mjs"),sessionDir:join(root,"sessions"),cwd:conversation.cwd});
+    server=new HostServer({port:0,host:"127.0.0.1",factory,workspaces});await server.start();
+    try {
+      const socket=await connect(server.address().port),frames=new FrameQueue(socket);
+      socket.send(encodeFrame({v:1,type:"open",sessionId:conversation.id}));
+      expect(await frames.next()).toMatchObject({type:"opened"});await frames.next();
+      socket.send(encodeFrame({v:1,type:"prompt",requestId:"crash",text:"crash: after acceptance"}));
+      expect(await frames.next()).toMatchObject({type:"ack"});
+      expect(await frames.next()).toMatchObject({type:"event",event:{type:"agent_start"}});
+      expect(await frames.next()).toMatchObject({type:"error",code:"pi_interrupted",fatal:true});
+      await expect.poll(async()=> (await workspaces.list()).conversations.find(c=>c.id===conversation.id)?.runState).toBe("interrupted");
+      expect((await new Workspaces(join(root,"demo-workspaces"),{ownerId:"vm-test"}).lookup(conversation.id))?.runState).toBe("interrupted");
+      socket.close();await once(socket,"close");
+      const reopened=await connect(server.address().port),next=new FrameQueue(reopened);
+      reopened.send(encodeFrame({v:1,type:"open",sessionId:conversation.id}));
+      expect(await next.next()).toMatchObject({type:"opened",state:{isStreaming:false}});
+      expect(await next.next()).toMatchObject({type:"history"});
+      reopened.send(encodeFrame({v:1,type:"prompt",requestId:"explicit",text:"retry explicitly"}));
+      expect(await next.next()).toMatchObject({type:"ack",requestId:"explicit"});
+      for(let i=0;i<4;i++)await next.next();
+      await expect.poll(async()=> (await workspaces.lookup(conversation.id))?.runState).toBe("idle");
+      reopened.close();
+    }finally{await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
+  },10_000);
+
+});
+
+it("Skill reload retains running/background sessions and restarts only a verified idle Agent",async()=>{
+ const root=mkdtempSync(join(tmpdir(),"coffee-skill-reload-"));const factory=new FakeFactory();const ws=new Workspaces(join(root,'projects'),{chatRoot:join(root,'chats')});const task=await ws.createChatConversation();
+ const pi=await factory.create({sessionId:task.id}) as FakePiSession;
+ server=new HostServer({port:0,token:'skills',factory,workspaces:ws,skills:{home:join(root,'home')}});await server.start();
+ const socket=new WebSocket(`ws://127.0.0.1:${server.address().port}/host`,{headers:{authorization:'Bearer skills'}});await once(socket,'open');const frames=new FrameQueue(socket);
+ socket.send(encodeFrame({v:1,type:'open',sessionId:task.id}));await frames.next();
+ const reload=()=>fetch(`http://127.0.0.1:${server!.address().port}/api/skills`,{method:'POST',headers:{authorization:'Bearer skills','content-type':'application/json'},body:JSON.stringify({action:'reload',engine:'pi',scope:'user',conversationId:task.id})});
+ try{
+  pi.background={known:true,active:1};expect((await reload()).status).toBe(409);expect(pi.stopped).toBe(false);
+  pi.background={known:false,active:0};expect((await reload()).status).toBe(409);expect(pi.stopped).toBe(false);
+  pi.background={known:true,active:0};pi.holdAfterDelta=true;socket.send(encodeFrame({v:1,type:'prompt',requestId:'skill-reload-hold',text:'hold'}));await waitFor(()=>pi.history.length>0);
+  expect((await reload()).status).toBe(409);expect(pi.stopped).toBe(false);
+  pi.finish('done');expect((await reload()).status).toBe(200);expect(pi.stopped).toBe(true);expect(await ws.lookup(task.id)).toBeDefined();expect(pi.history.length).toBeGreaterThan(0);
+ }finally{socket.close();await server.close();server=undefined;rmSync(root,{recursive:true,force:true});}
 });

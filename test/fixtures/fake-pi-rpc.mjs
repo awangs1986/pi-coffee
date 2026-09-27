@@ -149,6 +149,12 @@ for await (const line of input) {
     }
     case "prompt": {
       response("prompt", command.id);
+      if (command.message === "crash: after acceptance") {
+        streaming = true;
+        send({ type: "agent_start" });
+        setTimeout(() => process.kill(process.pid, "SIGKILL"), 30);
+        break;
+      }
       if (command.message.startsWith("ask:") || command.message.startsWith("choose:")) {
         // Simulate an extension calling ctx.ui.confirm() / ctx.ui.select():
         // the run blocks until the client answers.
