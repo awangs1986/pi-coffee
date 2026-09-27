@@ -10,7 +10,7 @@ termdeck's `INVARIANTS.md`; the rules are ours.)
 |---|---|---|
 | INV-T1 | A download `fileId` resolves lexically under the scope's root; `..` and absolute paths are refused (403). | `transfer.ts` `download()`; `test/transfer-server.test.ts` |
 | INV-T2 | After resolving symlinks, the file's real path is still under the root's real path. A symlink inside the working directory that points outside it does not escape. | `withinRealRoot()`; same test (P4 case) |
-| INV-T3 | Credential-shaped names are never served or listed, wherever they sit inside the root: `auth.json`, `.credentials.json`, `.netrc`, `.env*`, `id_*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `credentials(.json)`, `known_hosts`. Defence in depth for a misconfigured root. | `isCredentialFileName()`; same test |
+| INV-T3 | Credential-shaped names are never served or listed, wherever they sit inside the root: `auth.json`, `.credentials.json`, `.netrc`, `.env*`, `id_*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `credentials(.json)`, `known_hosts`. Downloads check both the requested name and the resolved target name, so symlink aliases do not bypass the rule. Defence in depth for a misconfigured root. | `isCredentialFileName()`; same test |
 | INV-T4 | A transfer scope is `sha256([user, sessionId])` and bound to that user's root on first use; there is no anonymous or shared scope. | `server.ts` `open()`, `transfer.ts` `issueToken()`; `test/host-server.test.ts` |
 
 ## Sessions (Host `HostSession` / registry)

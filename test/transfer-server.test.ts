@@ -196,8 +196,13 @@ describe("TransferServer (LocalSend v2)", () => {
       mkdirSync(join(workdir, ".codex"), { recursive: true });
       writeFileSync(join(workdir, ".codex", "auth.json"), "secret");
       expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=.codex/auth.json`)).status).toBe(403);
+      // An innocuous symlink name must not disguise a credential target.
+      symlinkSync(join(workdir, ".codex", "auth.json"), join(workdir, "ordinary-report.txt"));
+      expect((await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=ordinary-report.txt`)).status).toBe(403);
       writeFileSync(join(workdir, "report.md"), "fine");
       expect(await (await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=report.md`)).text()).toBe("fine");
+      symlinkSync(join(workdir, "report.md"), join(workdir, "report-link.md"));
+      expect(await (await fetch(`${base}/download?scope=sess-1&token=${token}&fileId=report-link.md`)).text()).toBe("fine");
       // The inbox listing hides them too.
       const inbox = join(workdir, server!.inboxFor("sess-1"));
       mkdirSync(inbox, { recursive: true });
