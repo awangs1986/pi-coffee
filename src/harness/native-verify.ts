@@ -76,7 +76,7 @@ export function createNativeVerifyTool(options: VerifyToolOptions): ToolDefiniti
     label: "Verify",
     description:
       "Run the selected commands from .picode/verify.json in the User VM and report passed, failed, or not_run. " +
-      "This adapter does not create V5 Gate Evidence or Completion Labels; TDD actions remain advisory and return not-supported.",
+      "Verification reports observed results; it is not an automatic completion gate. TDD state-machine actions are unsupported.",
     promptSnippet: "Run the project's configured verification commands when evidence is needed.",
     parameters: Type.Object({
       action: Type.Union([
@@ -118,11 +118,11 @@ export function createNativeVerifyTool(options: VerifyToolOptions): ToolDefiniti
         const facts = run
           ? `${run.overall}; ${run.commands.filter((command) => command.status === "passed").length}/${run.commands.length} command(s) passed`
           : "not_run; no verification result exists";
-        return textResult(`completion: ${facts} (no V5 Completion Label is issued)`, { profile: state.profile, run });
+        return textResult(`completion: ${facts} (observed checks only; not an automatic completion gate)`, { profile: state.profile, run });
       }
       if (TDD_ACTIONS.has(action)) {
         return textResult(
-          `not-supported: ${action}. PI Coffee keeps TDD as prompt guidance; V5 Devloop, Guard, Gate Evidence, and Completion Labels are not installed. Run the configured profile with action=run instead.`,
+          `not-supported: ${action}. TDD is guidance, not an enforced state machine. Run the configured profile with action=run instead.`,
           { status: "not-supported", action },
         );
       }

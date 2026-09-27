@@ -1,6 +1,17 @@
+> Source authority and repository placement: superseded where conflicting by [ADR-0020](docs/adr/0020-unified-github-authority.md). GitHub pi-coffee-server owns Web and Host.
+
 # PI Coffee Backlog
 
-> 讨论汇总日期：2026-09-02  
+> **当前新增决策（2026-09-21）**：[ADR-0012](./docs/adr/0012-owner-privileges-and-gitea-checkouts.md) 接受 VM owner + 无限制 sudo、Gitea 代码权威与每 Conversation 独立 clone；[T0–T4](./docs/development/t0-t4-gitea-workspaces.md) 的 Agent/Server 代码、双 User VM、2 × 3 Conversation、VM 快照回滚与普通用户对称私库验收均已落地，[真实证据](./docs/reviews/t0-t4-implementation-20260921.md)已记录，T0–T4 已完成。替代以下历史工作区/本地合并条目时以该合同为准。
+
+> **2026-09-21 仓库拆分**：本文件保留历史产品 Backlog，但当前仓库的执行范围只包括 Agent Runtime。Web UI、统一网关、身份、固定路由、Relay 和 Server 部署进入 [`awangs/pi-coffee-server`](http://gitea:3000/awangs/pi-coffee-server)；新工作按两个仓库各自 Issue 追踪。
+
+> **工作台产品排期**：[P0–P5（仅 Pi Agent 讨论前的产品 SPEC）](./docs/development/product-priorities-20260916.md)。与下方 Pi/工具交接记录分开，以此安排产品增量开发。
+
+> **Pi Agent 当前规格入口**：[主 SPEC](./docs/spec/pi-agent.md)统一维护 PA 决定、Chat/Work、未决项、实现状态与验收；[Work 专项 SPEC](./docs/spec/harness-prompt.md)维护 WP 规则。下方 2026-09-02/03 的模式、工具表和完成记录是历史切片；被替代的设计不得重新作为当前要求。Gitea 已同步本轮实现和目标机证据；T0–T4 的未满足项以 #33–#36 的最新验收评论为准。
+
+
+> 讨论汇总日期：2026-09-02\
 > 本文件把今天多轮设计讨论整理成可执行、可验收、可追踪的 backlog。它不是聊天记录的逐字导出，也不包含任何密钥、Cookie、VM 凭据、完整对话或用户文件。
 
 ## 这份 Backlog 解决什么问题
@@ -38,8 +49,26 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `LATER` | 明确延后到 0.1 之后或另一个版本 |
 | `HOLD` | 明确不做，除非前提发生变化 |
 | `OPEN` | 需要补充一个具体工程选择；不能阻塞已确定的 MVP |
+| `SUPERSEDED` | 设计已由链接的新规格取代；保留追溯，不再作为目标要求。既有兼容实现是否保留另看源码与迁移计划 |
+
+## Pi Agent 持续维护入口（2026-09-20）
+
+- [PA 主规格](./docs/spec/pi-agent.md)：已确认决定与 PA-Q 未决项、PA-AC 验收与当前检出实现分别记录；PA-011 精简 Work 工具集合，PA-012 要求 Skill + CLI 的完整 LSP 中间层。
+- [LSP 中间层](./docs/spec/lsp-middle-layer.md)：V1 CLI、Skill、TS/Python Profile、按需复用和 3×3 真实模型门槛已完成；故障/性能矩阵与 V2 编辑仍有待办。不采用 MCP，不依赖 pi-lens。2026-09-21 Gitea 连接失败，实现证据与依赖待同步。
+- [WP 提示词规格](./docs/spec/harness-prompt.md)：唯一正文、稳定行为规则、工程预算与持续维护的验收样例。
+- 下一步只按已确认范围推进：模式/工具清单问题先逐项对齐；上下文统计与真实模型调用质量仍需代码/实测证据。Work 正文已做本地验证，不等于新模式已发布。
+- Gitea 同步待恢复；下方 `HARNESS-001/002` 等 `DONE` 是当时的切片记录，不表示 Chat/Work 已完成。不要在本 Backlog 复制一套主规格正文。
 
 ---
+
+## Native Codex and Claude Code integration (2026-09-23)
+
+- **D-046 / DECIDED**: support the user's own native Codex and Claude Code through Host Adapters; preserve their native design and official user authentication. Pi prompts, Chat/Work behavior, tools, LSP, plugins and context policies remain Pi-only.
+- **Implementation sequence**: [M0–M5](./docs/development/native-agents-m0-m5.md) defines six delivery Issues under Agent #48 and Server #6. M0 validates native interfaces; M1 establishes the shared contract; M2/M3 deliver Adapters; M4 adds Browser support; M5 proves and releases the integrated workflow. M0–M5 are merged and deployed on both User VMs and the separate Web host. See [M5 evidence](./docs/reviews/native-agents-m5-20260923.md) and the bounded [M0–M4 checks](./docs/reviews/native-agents-m0-m4-20260923.md).
+- **Owner-confirmed selection rule**: new Tasks choose Pi, Codex or Claude Code once at creation. The engine is immutable; model selection stays within that engine. Another engine requires a new Task.
+- **M0–M5 implemented and deployed**: [maintained SPEC](./docs/spec/native-agent-engines.md), [ADR-0013](./docs/adr/0013-native-agent-engines.md), Agent delivery [Agent #48](http://gitea:3000/awangs/pi-coffee/issues/48) and Server companion [Server #6](http://gitea:3000/awangs/pi-coffee-server/issues/6). Existing Pi behavior remains supported.
+- Reuse fixed User VM routing, one Conversation/Workspace, independent clones and Gitea Checkpoint/PR management. No platform worktree, new provider account system, subscription relay or wholesale UI redesign.
+- Primary acceptance remains the existing public Host HTTP/WebSocket seam plus a small real-engine workflow. Issues own implementation status; this entry records design and scope only.
 
 ## 1. 讨论结论登记（Decision Register）
 
@@ -69,7 +98,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-013` | `DECIDED` | Picode/PI Coffee 不管理 VM 生命周期。 | 不创建、销毁、快照、迁移或自动恢复 VM；这些是所有者的运维动作。 |
 | `D-014` | `DECIDED` | VM 快照是故障恢复手段；允许用户接受损坏并手动恢复快照。 | 0.1 要提供明确的 health、停止、恢复和验收步骤，而不是 VM 管理器。 |
 | `D-015` | `DECIDED` | VM 隔离是执行安全边界。 | 不复制 V5 的进程内 Guard、审批、权限等级或命令 sandbox。见 [ADR-0005](./docs/adr/0005-vm-isolation-replaces-in-process-sandbox.md)。 |
-| `D-016` | `DECIDED` | Worktree 是 Task/仓库组织机制，不是安全机制。 | Worktree 增强和 V5 worktree 迁移延后；不能用它替代 VM 隔离。 |
+| `D-016` | `SUPERSEDED` | 平台管理的 worktree 改为独立 Conversation clone；Gitea 负责协作和集成。 | ADR-0012 / GW-04～12 / T0–T4；V5 仍冻结。 |
 | `D-017` | `DECIDED` | 持久的上下文属于 User VM，不属于 Web VM/Control Plane。 | Transcript、Pi model context、Task 文件、插件状态和 worktree 内容不进控制面数据库。 |
 | `D-018` | `DECIDED` | Control Plane 只保留最小路由索引和有界 usage metadata。 | 可保存 user → fixed User VM、opaque ID、health、cursor、耗时/计数；不得保存 prompt、tool output、context 正文。 |
 | `D-019` | `DECIDED` | 术语中不引入独立的 “worker” 产品组件。 | 使用 **Agent Host** 表示 User VM 中的长期进程，使用 **Pi Session** 表示其会话；文档避免含义不清的 worker。 |
@@ -91,33 +120,34 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `D-025` | `DECIDED` | 一个浏览器标签页就是一个 Browser Shell。 | 不以多标签页作为主要交互模型；0.1 在一个 Shell 内切换多个 Task/Session。 |
 | `D-026` | `DECIDED` | 一个 Shell 可以有多个 Task、多个对话，体验类似本地 Codex/Cursor。 | Task/Session ID、cursor 和状态必须可恢复，不能只存在浏览器内存。 |
 | `D-027` | `DECIDED` | 刷新或关闭浏览器不打断 Host 中正在运行的 Pi Task。 | 浏览器断开只是 transport detach；重连后按 Session ID + Cursor replay/resync。 |
-| `D-028` | `DECIDED` | 同一 Task 的 worktree 写入串行；不同 Task 可以并行。 | 需要明确并发锁、冲突提示和 Task 生命周期，不把并行写入交给浏览器竞态。 |
+| `D-028` | `DECIDED` | 同一 Conversation 的 Checkout 写入串行，不同 Conversation 可并行。 | ADR-0012 取消项目级 merge 锁；跨主机接续新建独占分支，见 GW-06/10。 |
 | `D-029` | `DECIDED` | MVP 先做一个文本对话；多 Task/Session 属于 0.1。 | MVP 保持窄接口，避免提前引入复杂编排。 |
 
 ### 文件、图片和隐私
 
 | ID | 状态 | 结论 | 交付影响 |
 |---|---|---|---|
-| `D-030` | `DECIDED` | 上传文件直接流入 owning User VM 的当前 Task inbox，默认 `.picode/inbox/`。 | Control Plane 不做 durable body 存储；上传过程支持断线/失败状态。 |
+| `D-030` | `DECIDED` | 上传文件直接流入 owning User VM 的当前 Conversation inbox；路径由其 Workspace 解析。 | Control Plane 不做 durable body 存储；上传过程支持断线/失败状态。Chat/Work 布局见 `D-045`。 |
 | `D-031` | `DECIDED` | 初始限制为单文件 256 MiB、单批次 1 GiB。 | 服务端强制限制，不能只依赖前端校验。 |
 | `D-032` | `DECIDED` | 文件校验 name、MIME 和 SHA-256，并留下可审计的有限元数据。 | 文件名要安全化；hash 用于重试/去重/验收，不把正文复制到控制面。 |
 | `D-033` | `DECIDED` | 图片保留原始 bytes。模型支持时发送 image block，否则发送 User VM 中的安全路径/reference。 | 不假设所有模型都支持视觉；需要 capability negotiation 和清晰的 UI 状态。 |
 | `D-034` | `DECIDED` | 不生成额外的缩略图/图片归档。 | 原图只在 User VM 持久化；Control Plane 不建立 thumbnail archive。 |
-| `D-035` | `DECIDED` | 下载/引用链接必须限定 owning user 和 Task。 | 不能用可猜测的全局文件 URL；过期、撤销和错误状态要有测试。 |
+| `D-035` | `DECIDED` | 下载/引用链接必须限定 owning user 和 Conversation。 | 不能用可猜测的全局文件 URL；过期、撤销和错误状态要有测试。 |
+| `D-045` | `DECIDED` | 一个任务 = 一个 Conversation = 一个所属 VM 本地 Workspace；Chat 集中于 `chats/<conversation-id>/`，Work 使用独立 Gitea Checkout。 | 附件、搜索证据、图片和工具产物按 Conversation 归档；运行模式切换不移动或静默转换 Workspace。见 [`conversation-workspaces.md`](./docs/spec/conversation-workspaces.md)。 |
 
 ### 部署、模块化和后续演进
 
 | ID | 状态 | 结论 | 交付影响 |
 |---|---|---|---|
 | `D-036` | `DECIDED` | Deployment Skill 做成自动化、幂等的 PI Agent 原生 Skill。 | 安装 Pi 后可把 Skill 提供给 Pi Agent，完成 Host/systemd/enrollment/report；Skill 不管理 VM。 |
-| `D-037` | `DECIDED` | 尽量使用 Pi Agent 原生插件/扩展 seam，模块化优先。 | Pi-specific 代码留在 adapter；Web、Host、Relay、身份和文件模块分层。 |
+| `D-037` | `DECIDED` | 2026-09-20 owner 明确：Agent 增强只通过原版 Pi 插件扩展，保留上游升级能力。 | 当前合同归 [PA-001](./docs/spec/pi-agent.md)；不维护内核分叉，Host/Web 保持窄接缝。 |
 | `D-038` | `DISCOVERY` | 可参考/folk `pi-web`，但不承诺直接套用。 | 先评估许可证、协议、维护成本和可删减部分；必要时大量改造或重写，不能牺牲 PI Coffee 窄 seam。见 `ARCH-001`。 |
 | `D-039` | `DECIDED` | 尽量复用 Gitea 上已有代码，但只复用兼容且可验证的模块。 | 不为“复用”把 V5 的 Guard、Worktree 或领域对象偷偷带入 MVP/0.1。 |
 | `D-040` | `DECIDED` | Rust 只在测出实际性能瓶颈后引入。 | 第一实现使用 Node/TypeScript；Rust 模块必须有基准、边界和回滚方案。 |
 | `D-041` | `LATER` | 除已明确登记的 Harness 基础表外，V5 的插件、Worktree 增强及其他能力以后逐项拆分合并。 | 每个后续迁移必须单独评审、单独验收；不得借 Harness ticket 偷渡其他模块。 |
-| `D-042` | `DECIDED` | 当前 V3 提示词（含三次演化后的结果）是 PI Coffee Harness 的内容基线；PI Coffee 只做面向原版 Pi 的语义修补，交付 `lean` 与 `full` 两个 profile。 | Prompt 必须保持语义准确、只描述实际可用能力，不产生不存在的执行副作用。以 V3-derived、Pi-native 的 fixture 为唯一正文来源；CCB 只作为行为参考。见 `HARNESS-001`。 |
-| `D-043` | `DECIDED` | 第一项 V5 Harness 迁移以 Gitea `awangs/picode@778a3d534ba41f331210037a8c791bdfc0dabe7f` 为冻结基线；Simple 固定 8 个工具，Full 固定 10 个工具，并通过原版 Pi extension seam 接入。 | 只移植工具表/接口和可在 User VM 诚实执行的行为；不恢复 V5 Guard、权限、managed snapshot、Devloop 或 Completion Label。见 `HARNESS-002`。 |
-| `D-044` | `DECIDED` | Web 搜索使用 PI Coffee 本地 `web_search` + Control Plane Serper Relay；官方 `pi-web-access` 只保留非冲突内容工具；搜索结论写入 User VM Markdown，后续 context 只保留指针和结论。 | Serper key 不得进入 User VM；子 Agent 通过官方 delegation event 调用；Web capability 不改变 Harness 8/10 基础表。见 `WEB-001`。 |
+| `D-042` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 当前目标见 [PA-002/004 与 WP SPEC](./docs/spec/harness-prompt.md)：Chat/Work 与唯一 Work 正文；不以本条要求回读 V3。旧交付见 `HARNESS-001`。 |
+| `D-043` | `SUPERSEDED` | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | 运行时已迁移，当前模式与工具清单归 [PA-002/005、PA-Q01](./docs/spec/pi-agent.md)；不能把旧 8/10 当新设计。旧交付见 `HARNESS-002`。 |
+| `D-044` | `DECIDED` | 本地 Web 工具接 Serper Relay；有界完整证据先留 User VM，历史只保留摘要和索引。 | 实现/失败语义见 [Web SPEC](./docs/spec/web-search-plugin.md)；新模式工具/委派分配待 PA-Q01/04，旧基础表计数不是目标约束。 |
 
 ### 1.1 被替换的早期方案
 
@@ -158,8 +188,8 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
-| `HARNESS-001` | `DONE` | P0 | 交付原版 Pi 可用的 V3-derived Lean/Full prompt fixture、确定性渲染器和无虚假能力声明的测试。运行时 `/harness` 扩展接线另行 ticket。 | `MVP-005` | [#14](http://testpc:3000/awangs/pi-coffee/issues/14) |
-| `HARNESS-002` | `DONE` | P0 | 以冻结 V5 工具表实现原版 Pi Harness extension：Simple 8 / Full 10、V3 aliases、会话恢复、prompt 注入，以及 User VM-native `git`/`verify` 适配。 | `HARNESS-001`, `MVP-003` | [#15](http://testpc:3000/awangs/pi-coffee/issues/15) |
+| `HARNESS-001` | `DONE` | P0 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | `MVP-005` | [#14](http://testpc:3000/awangs/pi-coffee/issues/14) |
+| `HARNESS-002` | `DONE` | P0 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | `HARNESS-001`, `MVP-003` | [#15](http://testpc:3000/awangs/pi-coffee/issues/15) |
 | `CP-001` | `DONE` | P0 | Debian Control Plane 的透明 LLM Relay，唯一 key、双 API、JSON/SSE、models/compact、限量 metadata。**已随 `MVP-007` 提前交付**；`PERF-001`/`OBS-001` 仍归 0.1。 | `MVP-005` | [#7](http://testpc:3000/awangs/pi-coffee/issues/7) |
 | `ID-001` | `DONE` | P0 | 内部 Gitea OAuth、logout/cookie 生命周期、身份撤销（allow-list）和 fail-closed。**拓扑按 ADR-0010 调整**：公司只发一个企业模型帐号，因此改为 1 Web + 1 共享 User VM + 1 Host；Web 把 Gitea 登录名经私有 Host 传输转发，Host 按用户建独立 registry、`<WORKDIR>/<user>`、`<SESSION_DIR>/<user>` 与 inbox root，互相看不到对方会话与文件。"固定 User VM 路由" 退化为 `PI_COFFEE_ALLOWED_USERS`。 | `MVP-005` | [#8](http://testpc:3000/awangs/pi-coffee/issues/8) |
 | `AGENT-001` | `DONE` | P0 | **Codex CLI 兼容**（[ADR-0011](./docs/adr/0011-agent-seam-admits-codex-app-server.md)）：`src/host/codex-adapter.ts` 以 `codex app-server`（stdio JSON-RPC）实现同一个 `PiSessionFactory`/`PiSession` seam；`PI_COFFEE_AGENT=codex` 切换。每用户一个 app-server 子进程、共用一份 `CODEX_HOME` 登录，`thread/list {cwd}` 只列本人会话；不加占用锁。事件、工具、审批（confirm 对话框）、中断/追加、历史投影全部翻译到浏览器已有的协议。 | `ID-001` | — |
@@ -169,7 +199,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 | `SHELL-001b` | `DONE` | P0 | **会话列表与历史来自 User VM 的 Pi 会话存储**（ADR-0008）：Host `list_sessions` / `history` 帧，按 id 用 `--session <file>` 恢复，浏览器零本地缓存，空闲 Pi 进程自动停止并可恢复。owner 决策：计算全在 Host、记录永久存 VM、每次打开可见历史。 | `MVP-006` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001a` | `DONE` | P0 | **Extension UI 走通到浏览器**：`ui_response` 帧、confirm/select/input/editor 对话框（排队、`Esc` 取消、刷新/换设备后重发挂起对话）、notify/setStatus/setWidget/set_editor_text 呈现；Host 经 RPC 子协议回写 Pi。真实 Pi 扩展验证通过。V5 插件在网页上可"问"可"答"的前提已就位。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
 | `SHELL-001c` | `DONE` | P0 | **Codex 式体验 A/B/C**：完整 Markdown + 高亮 + 复制、工具卡（edit 用 Pi 记录的 patch）、工作过程折叠、重命名/删除/搜索/分组/列表推送、运行中排队与插话、模型/thinking 选择、斜杠命令面板、图片粘贴、用量与压缩、快捷键。缺口与排期见 [`docs/spec/web-shell-roadmap.md`](./docs/spec/web-shell-roadmap.md)。 | `SHELL-001b` | [#10](http://testpc:3000/awangs/pi-coffee/issues/10) |
-| `FILE-001` | `READY` | P0 | Task inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Task 限定下载引用。**第一切片已交付（`FILE-001a`）**：ADR-0009，Host 提供 LocalSend v2 传输 API（53317，明文 HTTP，CORS），浏览器直传 User VM，B 不经手字节；限额、文件名安全化、SHA-256、进度事件、inbox 引用随 prompt 发送、Download API 下载。剩余：按 Gitea 身份的作用域（`ID-001`）、inbox 浏览面板、大图 path fallback 的模型侧策略。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
+| `FILE-001` | `READY` | P0 | Conversation inbox 上传、文件校验/限额、原图保存、image block/path fallback、用户/Conversation 限定下载引用。**第一切片已交付（`FILE-001a`）**：ADR-0009，Host 提供 LocalSend v2 传输 API（53317，明文 HTTP，CORS），浏览器直传 User VM，B 不经手字节；限额、文件名安全化、SHA-256、进度事件、inbox 引用随 prompt 发送、Download API 下载。剩余：按 Gitea 身份的作用域（`ID-001`）、inbox 浏览面板、大图 path fallback 的模型侧策略，以及 `D-045` 的逐 Conversation 路径迁移。 | `ID-001`, `SHELL-001` | [#11](http://testpc:3000/awangs/pi-coffee/issues/11) |
 | `OPS-001` | `READY` | P0 | Web/Relay/Host/Gitea/VM 故障语义、健康检查、浏览器断线连续性、手动快照恢复和发布验收。 | `CP-001`, `ID-001`, `DEP-001`, `FILE-001` | [#12](http://testpc:3000/awangs/pi-coffee/issues/12) |
 
 ### 2.3 0.1 横切子任务
@@ -197,7 +227,7 @@ Gitea 入口：[Issue #13：PI Coffee 今日讨论全量 Backlog](http://testpc:
 
 | ID | 状态 | 优先级 | 目标 | 依赖 | Gitea |
 |---|---|---:|---|---|---|
-| `SUBAGENT-001` | `DONE` | P1 | 锁定并加载官方 `pi-subagents@0.63.0`；通过本地资源 Adapter 暴露其 skills/prompts；让 `search_tools` 可发现/按需激活 `subagent` 与 `bg_wait`，且 Harness Simple/Full 仍为 8/10。 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
+| `SUBAGENT-001` | `DONE` | P1 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | `HARNESS-002`, `MVP-003` | [#17](http://testpc:3000/awangs/pi-coffee/issues/17) |
 | `SUBAGENT-002` | `READY` | P1 | 在真实 Linux Mint User VM + Web Shell 验证 foreground/background child、完成通知、停止/取消、浏览器断开后继续、Host 重启恢复和资源清理；未通过前不宣称生产可靠。 | `SUBAGENT-001`, `HARNESS-003` | [#18](http://testpc:3000/awangs/pi-coffee/issues/18) |
 
 ### 2.6 Web Search 扩展切片
@@ -279,13 +309,14 @@ MVP-001..005 (已完成)
 2. 一个变更尽量对应一个 active ticket；新增范围先更新本 Backlog 和 Issue。
 3. 在公共 seam 先写失败测试，再实现最小垂直切片；每次提交前运行 `npm run check`。
 4. 完成不是“代码能跑”就算：必须有测试/部署/故障证据、Issue 评论和 fresh clone 或目标 VM 验证。
-5. 产品决定变化时更新 `docs/product/decisions.md` 与相关 ADR；单纯状态变化更新 Gitea Issue，不复制出第二份规范。
+5. Agent 讨论决定与行为变更按 [PA 主规格](./docs/spec/pi-agent.md)和 [WP 规格](./docs/spec/harness-prompt.md)维护；同步理由、未决项、实现状态与验收依据。需要架构决定时更新 ADR；Gitea 管工单状态，离线时标待同步，不复制第二份主规格。
 6. 除已登记并验收的 `HARNESS-002` 基础工具表外，V5 相关想法只能进入本文件的 `LATER/HOLD` 区，直到 0.1 release gate 通过。
 
 ## 7. 讨论主题到交付物的追踪
 
 | 讨论主题 | 当前权威文档 | 当前 backlog |
 |---|---|---|
+| 原版 Pi 插件扩展、Chat/Work、Work 提示词、上下文与工具调用、持续维护 | [Pi Agent 主 SPEC](./docs/spec/pi-agent.md)、[Work SPEC](./docs/spec/harness-prompt.md) | PA-001～008；PA-Q/PA-AC 与 WP 验收，不以历史 DONE 代替 |
 | PI Coffee 命名、V5 冻结、从原版 Pi 做 MVP | [`docs/product/decisions.md`](./docs/product/decisions.md)、ADR-0001/0002 | `D-001..D-004`, `MVP-001..005` |
 | 超强服务器、Debian Web/Control Plane、Linux Mint User VM、手动快照 | [`docs/architecture/topology.md`](./docs/architecture/topology.md)、[`docs/deployment/runbook.md`](./docs/deployment/runbook.md) | `D-010..D-016`, `DEP-001`, `OPS-001` |
 | 上下文归属、隐私和唯一 key | ADR-0003、[`docs/product/decisions.md`](./docs/product/decisions.md) | `D-017..D-024`, `CP-001`, `SEC-001` |
@@ -295,7 +326,7 @@ MVP-001..005 (已完成)
 | 自动化 Deployment Skill、Pi 原生插件、模块化、Rust | [`docs/development/workflow.md`](./docs/development/workflow.md) | `D-036..D-040`, `DEP-001`, `ARCH-002`, `PERF-001/002` |
 | pi-web fork/改造/重写 | README、架构 seam 约束 | `D-038`, `ARCH-001`, `OPEN-009` |
 | V5 worktree/插件/能力后续合并（Harness 基础表除外） | ADR-0002、0.1 non-goals、[`harness-plugin.md`](./docs/spec/harness-plugin.md) | `D-041`, `D-043`, `V5-001`, `WORK-001`, `PLUGIN-001`, `HARNESS-003` |
-| V3 提示词修补为 Pi Lean/Full，并接入 V5 Harness 工具表 | [`docs/spec/harness-prompt.md`](./docs/spec/harness-prompt.md)、[`docs/spec/harness-plugin.md`](./docs/spec/harness-plugin.md)、[`docs/research/harness-prompt-audit-20260902.md`](./docs/research/harness-prompt-audit-20260902.md) | `D-042..D-043`, `HARNESS-001..002` |
+| 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 | [Harness 兼容说明](./docs/spec/harness-plugin.md)与历史审计；设计已替代 | `D-042..D-043`（SUPERSEDED），`HARNESS-001..002` 历史切片 |
 | `pi-subagents` 上游扩展接入 Agent Host | [`docs/spec/subagents-plugin.md`](./docs/spec/subagents-plugin.md)、[`docs/research/pi-subagents-audit-20260903.md`](./docs/research/pi-subagents-audit-20260903.md) | `SUBAGENT-001..002`, `HARNESS-003` |
 | Web 搜索、Serper Relay、原生子 Agent 研究和 Markdown 封盘 | [`docs/spec/web-search-plugin.md`](./docs/spec/web-search-plugin.md)、[`docs/research/pi-web-access-audit-20260903.md`](./docs/research/pi-web-access-audit-20260903.md) | `D-044`, `WEB-001..002` |
 
@@ -305,7 +336,7 @@ MVP-001..005 (已完成)
 |---|---|
 | 2026-09-02 | 根据今天的多轮讨论建立本 Backlog；MVP 标记为当前 main 已实现，0.1 六个切片映射到 Gitea Issues #7–#12。 |
 | 2026-09-02 | 在项目 1 建立 `Backlog` 列并加入 Issue #13，作为后续功能 ticket 的默认入口。 |
-| 2026-09-02 | 根据 V3 三次提示词演化的维护者确认，完成 PI Coffee Lean/Full prompt fixture 与 `HARNESS-001`（Issue #14）。 |
+| 2026-09-02 | 该项模式方案已撤下；历史事实见 `git show b027838:BACKLOG.md`，当前设计只见 PA 主规格 |
 | 2026-09-03 | 复核 Gitea V5 基线 `778a3d5`，完成 PI-native Harness extension、8/10 工具表和 VM-native git/verify 适配，登记 `HARNESS-002`（Issue #15）。 |
 | 2026-09-02 | owner 补充 MVP 范围：包含 Codex 式白色主题 Web 界面（`MVP-006`）；MVP 部署形态为 User VM 内 Pi agent + 服务器端 Web/Relay（`MVP-007`），`CP-001` 由此提前进入 MVP。 |
 | 2026-09-03 | 建立 `HARNESS-003`（Issue #16）：先验证 10 个基础工具可靠性，再逐个接入扩展工具。 |
@@ -321,3 +352,31 @@ MVP-001..005 (已完成)
 | 2026-09-27 | owner 要求同一网页可驱动 VM 管理员登录的 **Codex CLI**（两位用户只碰网页、各自独立会话、明确不要占用锁）。交付 `AGENT-001`/ADR-0011：Codex app-server adapter、fake app-server 夹具与 `test/codex-adapter.test.ts`、`PI_COFFEE_AGENT`/`PI_COFFEE_CODEX_*` 配置与运行手册。 |
 | 2026-09-27 | owner 决策 ADR-0010：公司只分配一个企业模型帐号，放弃每人一台 VM；改为 1 Web Server + 1 共享 User VM + 1 Host。交付 `ID-001`：Gitea OAuth2 登录（`/login`、`/auth/*`、签名 HttpOnly cookie、allow-list、`/ws` fail-closed），登录名以 `x-pi-coffee-user` 头随 Host 传输转发，Host 每用户一个 registry + `<WORKDIR>/<user>` / `<SESSION_DIR>/<user>` / 每 scope 的 inbox root；浏览器侧显示当前用户并可退出。 |
 | 2026-09-03 | owner 目标：Web 端做成简化版 Codex。一次交付 A/B/C（`SHELL-001c`）：协议新增 `prompt.mode`、`rename/delete_session`、`get_models/set_model/set_thinking`、`get_commands`、`get_stats`、`compact`，Host 广播 `sessions`；shell 拆为 ES modules 并 vendored `marked`/`DOMPurify`。D/E/F/G 缺口登记在 `docs/spec/web-shell-roadmap.md`。 |
+| 2026-09-20 | 建立可持续维护的 Pi Agent 主 SPEC 与 WP 专项合同；标记 D-042/043 的旧模式设计已替代，D-037 升级为明确插件边界；保持工具清单等未决项，记录本地实现/验收差距。Gitea 不可达，尚未同步新决定或关闭工单。 |
+
+2026-09-22：HARNESS-001/002 完成 Chat/Work 运行时迁移、旧状态升级及请求边界验证；[证据](./docs/reviews/chat-work-migration-20260922.md)。T4 双用户门槛仍单独验收。
+
+2026-09-22：D-045 / PA-013 Conversation Workspace 已完成 Agent #46 / Server #3 联合实现与部署；[证据](./docs/reviews/conversation-workspaces-20260922.md)。Chat/Work 每任务独立目录，完整路径/分支/同步状态、原图及产物归属、归档保留与显式清理均进入公共 seam 验收。
+
+2026-09-23: D-046 records native Codex/Claude Code integration as an accepted design and ready implementation scope; no runtime changes or deployment are included.
+
+2026-09-23: M0–M5 native-engine integration is merged and deployed. The [M5 evidence](./docs/reviews/native-agents-m5-20260923.md) records real Browser/Gitea/file flows, the collaborator PR corrections, recovery, fixed routes and explicit native capability limits.
+
+## Context Usage attribution correction (2026-09-23)
+
+[Agent #58](http://gitea:3000/awangs/pi-coffee/issues/58) implements the
+[seven-category context contract](docs/spec/context-usage.md), consumed by Server #4.
+Local numeric estimates stay distinct from provider billing; native-engine contexts
+remain isolated. Delivery and clean-clone evidence are recorded in the Issue.
+
+## Pi-only Chat creation (2026-09-23)
+
+[Agent #60](http://gitea:3000/awangs/pi-coffee/issues/60): new Chat defaults to Pi; native engines use Work. Existing native local tasks are retained. Browser navigation is Server #4. Pi account import into Web Server remains a future consideration, not current scope.
+
+## Web-managed Skills (2026-09-23)
+
+Agent #62 / Server #14 implement the accepted [Skill management contract](docs/spec/skill-management.md).
+The Web owns management controls; each User VM owns native Skill files and execution.
+This delivers the Skill portion of ARCH-002; generic extension installation and a
+central marketplace remain outside this change. Deployment evidence is recorded in
+the linked Issues rather than inferred from this decision.

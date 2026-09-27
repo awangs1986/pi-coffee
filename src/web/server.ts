@@ -1,17 +1,13 @@
+import { USER_HEADER } from "../shared/identity.js";
+import type { GiteaAuth } from "./auth.js";
+import { readJson, json } from "../shared/http.js";
+import { Identity, type IdentityOptions } from "./identity.js";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import {
-  decodeClientFrame,
-  encodeFrame,
-  type ClientFrame,
-  type ServerFrame,
-} from "../shared/protocol.js";
-import { USER_HEADER } from "../shared/identity.js";
-import type { GiteaAuth } from "./auth.js";
 import { HostClient } from "./host-client.js";
 
 /** PEM material for the optional HTTPS route (internal CA); HTTP when omitted. */
@@ -27,20 +23,19 @@ export interface WebServerOptions {
   hostToken?: string;
   publicDir?: string;
   tls?: TlsMaterial;
-  /**
-   * Gitea login (ADR-0004). When present, the shell and `/ws` require a valid
-   * session cookie and the Gitea login name is forwarded to the Host, which
-   * keeps each user's conversations and files apart (ADR-0010).
-   */
+  identity?: IdentityOptions;
   auth?: GiteaAuth;
-  /** Identity forwarded when `auth` is off (local smoke on a shared VM); none by default. */
   defaultUser?: string;
+  /** Deliberate single-user LAN/demo compatibility, never a multi-user deployment. */
+  allowUnauthenticated?: boolean;
 }
 
 export interface WebAddress {
   host: string;
   port: number;
 }
+
+const SUPPORTED_HOST_PROTOCOL = 1;
 
 /** Browser-facing HTTP and WebSocket server. */
 export class WebServer {
@@ -49,34 +44,44 @@ export class WebServer {
   private readonly hostUrl: string;
   private readonly hostToken?: string;
   private readonly publicDir: string;
-  private readonly auth?: GiteaAuth;
-  private readonly defaultUser?: string;
   private readonly http: HttpServer;
   private readonly wsServer: WebSocketServer;
   private readonly bridges = new Set<BrowserBridge>();
   private readonly secure: boolean;
   private started = false;
+  private readonly identity?: Identity;
+  private readonly auth?: GiteaAuth;
+  private readonly defaultUser?:string;
+  private readonly allowUnauthenticated: boolean;
 
   constructor(options: WebServerOptions) {
+    this.auth=options.auth;this.defaultUser=options.defaultUser;
+    this.allowUnauthenticated = options.allowUnauthenticated ?? false;
+    this.identity = options.identity ? new Identity(options.identity) : undefined;
     this.host = options.host ?? "127.0.0.1";
     this.port = options.port ?? 3000;
     this.hostUrl = options.hostUrl;
     this.hostToken = options.hostToken;
     this.publicDir = options.publicDir ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../public");
     this.secure = options.tls !== undefined;
-    this.auth = options.auth;
-    this.defaultUser = options.defaultUser;
     const handler = (request: IncomingMessage, response: ServerResponse) => void this.handleHttp(request, response);
     this.http = options.tls ? createHttpsServer({ cert: options.tls.cert, key: options.tls.key }, handler) : createServer(handler);
     this.wsServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
     this.http.on("upgrade", (request, socket, head) => this.handleUpgrade(request, socket, head));
-    this.wsServer.on("connection", (socket, request: IncomingMessage) => {
-      const user = this.userOf(request);
-      const bridge = new BrowserBridge(socket, {
-        url: this.hostUrl,
-        token: this.hostToken,
-        ...(user === undefined ? {} : { user }),
-      });
+    this.wsServer.on("connection", (socket, request) => {
+      const route = (request as IncomingMessage & { coffeeRoute?: { hostUrl: string; hostToken: string; user?:string } }).coffeeRoute;
+      const bridge = new BrowserBridge(socket, { url: route?.hostUrl ?? this.hostUrl, token: route?.hostToken ?? this.hostToken, user:route?.user ?? this.defaultUser, authorize:async()=>this.identity ? Boolean(await this.identity.authorize(request)) : this.auth ? Boolean(this.auth.principalOf(request)) : true });
+      if (this.identity || this.auth) {
+        let checking = false;
+        const timer = setInterval(async () => {
+          if(checking) return; checking = true;
+          try { if (this.identity ? !await this.identity.authorize(request) : !this.auth!.principalOf(request)) {
+            bridge.close();
+            if(route) await this.hostApi(route,"/api/revoke-files","POST",{}).catch(()=>undefined);
+          } } finally { checking=false; }
+        }, 5000);
+        timer.unref(); socket.once("close", () => clearInterval(timer));
+      }
       this.bridges.add(bridge);
       bridge.onClose = () => this.bridges.delete(bridge);
     });
@@ -84,6 +89,7 @@ export class WebServer {
 
   async start(): Promise<void> {
     if (this.started) return;
+    if(!this.identity && !this.auth && !this.allowUnauthenticated && !["127.0.0.1","::1","localhost"].includes(this.host))throw new Error("Public Web binding requires Gitea identity. Explicit single-user demo mode is not multi-user isolation.");
     await new Promise<void>((resolvePromise, reject) => {
       const onError = (error: Error) => {
         this.http.off("listening", onListening);
@@ -124,12 +130,6 @@ export class WebServer {
     this.started = false;
   }
 
-  /** The Browser User behind a request: the Gitea cookie, or the configured default. */
-  private userOf(request: IncomingMessage): string | undefined {
-    if (this.auth) return this.auth.principalOf(request)?.user;
-    return this.defaultUser;
-  }
-
   private async handleHttp(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     if (path === "/healthz") {
@@ -137,22 +137,52 @@ export class WebServer {
       response.end(JSON.stringify({ ok: true, role: "web" }));
       return;
     }
-    if (this.auth) {
-      if (await this.auth.handle(request, response)) return;
-    } else if (path === "/auth/me") {
-      response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      response.end(JSON.stringify({ auth: false, user: this.defaultUser ?? null }));
+    if(path === "/auth/logout" && request.method === "POST" && this.identity?.originAllowed(request)) {
+      const session=await this.identity.authorize(request);
+      // End the local login before contacting a VM that may be unavailable.
+      await this.identity.handle(request,response);
+      if(session) void this.hostApi(session.route,"/api/revoke-files","POST",{}).catch(()=>undefined);
       return;
+    }
+    if (this.identity && await this.identity.handle(request, response)) return;
+    if(path==="/auth/logout" && request.method==="POST" && this.auth?.originAllowed(request)){
+      const principal=this.auth.principalOf(request);
+      await this.auth.handle(request,response);
+      if(principal){
+        for(const bridge of this.bridges)if(bridge.user===principal.user)bridge.close();
+        void this.hostApi({hostUrl:this.hostUrl,hostToken:this.hostToken ?? "",user:principal.user},"/api/revoke-files","POST",{}).catch(()=>undefined);
+      }
+      return;
+    }
+    if (this.auth && await this.auth.handle(request,response)) return;
+    if (path==="/auth/me") {
+      const session=await this.identity?.authorize(request);
+      if(this.identity && !session){json(response,401,{error:"Login required"});return;}
+      json(response,200,{auth:Boolean(this.identity),user:session?{id:session.id,login:session.login}:this.defaultUser??null});return;
+    }
+    if (this.auth && !this.auth.principalOf(request) && (path.startsWith('/api/') || path==='/' || path==='/index.html')) {
+      if(path.startsWith('/api/'))json(response,401,{error:"Login required"});
+      else {response.writeHead(302,{location:'/login'});response.end();}return;
+    }
+    if(path === "/api/workspace" || path === "/api/engines" || path === "/api/skills") {
+      try {
+        const session=await this.identity?.authorize(request);
+        if(this.identity && !session) {json(response,401,{error:"Login required"});return;}
+        if(path === "/api/engines" && request.method !== "GET") {json(response,405,{error:"Method not allowed"});return;}
+        if(request.method === "POST" && (this.identity ? !this.identity.originAllowed(request) : this.auth ? !this.auth.originAllowed(request) : request.headers.origin !== `${this.scheme}://${request.headers.host}`)) {json(response,403,{error:"Invalid origin"});return;}
+        if(!["GET","POST"].includes(request.method ?? "")) {json(response,405,{error:"Method not allowed"});return;}
+        const route=session?.route ?? {hostUrl:this.hostUrl,hostToken:this.hostToken ?? "",user:this.auth?.principalOf(request)?.user ?? this.defaultUser};
+        const result=await this.hostApi(route,path,request.method!,request.method==="POST" ? await readJson(request) : undefined);
+        json(response,result.status,await result.json());
+      } catch {json(response,502,{error:"VM unavailable or invalid request"});}
+      return;
+    }
+    if (this.identity && (path === "/" || path === "/index.html") && !await this.identity.authorize(request)) {
+      response.writeHead(302,{location:"/auth/login"});response.end();return;
     }
     const asset = resolveAsset(path);
     if (asset === undefined) {
       response.writeHead(404);
-      response.end();
-      return;
-    }
-    // The shell itself is behind the login; its static assets are inert.
-    if (this.auth && asset.file === "index.html" && this.auth.principalOf(request) === undefined) {
-      response.writeHead(302, { location: "/login", "cache-control": "no-store" });
       response.end();
       return;
     }
@@ -166,18 +196,52 @@ export class WebServer {
     }
   }
 
-  private handleUpgrade(request: IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): void {
+  private hostApi(route: { hostUrl:string;hostToken:string;user?:string }, path:string, method:string, value?:unknown) {
+    const url=new URL(route.hostUrl);url.protocol=url.protocol==="wss:" ? "https:" : "http:";url.pathname=path;url.search="";
+    return fetch(url,{method,headers:{authorization:`Bearer ${route.hostToken}`,"content-type":"application/json",...(route.user?{[USER_HEADER]:route.user}:{})},...(value===undefined ? {} : {body:JSON.stringify(value)}),signal:AbortSignal.timeout(125000),redirect:"error"});
+  }
+
+  private async assertHostCompatibility(route: { hostUrl: string; hostToken: string; user?:string }): Promise<void> {
+    const response = await this.hostApi(route, "/healthz", "GET");
+    if (!response.ok) throw new Error("Host health check failed");
+    const health = await response.json() as { protocolVersion?: unknown };
+    if (health.protocolVersion !== SUPPORTED_HOST_PROTOCOL) {
+      throw new Error(`Unsupported Host protocol version: ${String(health.protocolVersion)}`);
+    }
+  }
+
+  private async handleUpgrade(request: IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): Promise<void> {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     if (path !== "/ws") {
       socket.destroy();
       return;
     }
-    // Fail closed: no cookie, no conversation stream.
-    if (this.auth && this.auth.principalOf(request) === undefined) {
-      socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
-      socket.destroy();
+    let route:{hostUrl:string;hostToken:string;user?:string} = { hostUrl: this.hostUrl, hostToken: this.hostToken ?? "",user:this.defaultUser };
+    if(this.auth){
+      const principal=this.auth.principalOf(request);
+      if(!principal){socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");return;}
+      if(!this.auth.originAllowed(request)){socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");return;}
+      route.user=principal.user;
+    }
+    if (this.identity) {
+      if (!this.identity.originAllowed(request)) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; }
+      const session = await this.identity.authorize(request);
+      if (!session) { socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n"); return; }
+      route = session.route;
+      try {
+        const readiness=await this.hostApi(route,"/api/workspace","GET");
+        await readiness.body?.cancel();
+        if(!readiness.ok)throw new Error("VM workspace mode required");
+      } catch {socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");return;}
+      (request as IncomingMessage & { coffeeRoute?: unknown }).coffeeRoute = session.route;
+    }
+    try {
+      await this.assertHostCompatibility(route);
+    } catch {
+      socket.end("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
       return;
     }
+    (request as IncomingMessage & { coffeeRoute?: unknown }).coffeeRoute=route;
     this.wsServer.handleUpgrade(request, socket, head, (websocket) => {
       this.wsServer.emit("connection", websocket, request);
     });
@@ -185,34 +249,35 @@ export class WebServer {
 }
 
 interface BrowserBridgeOptions {
+  authorize?:()=>Promise<boolean>;
+  user?: string;
   url: string;
   token?: string;
-  user?: string;
 }
 
 class BrowserBridge {
+  readonly user?:string;
+  private readonly authorize?:()=>Promise<boolean>;
   private readonly browser: WebSocket;
   private readonly host: HostClient;
   private hostUnsubscribe?: () => void;
   private connected = false;
-  private opened = false;
   private closed = false;
   private messageQueue: Promise<void> = Promise.resolve();
   onClose: () => void = () => undefined;
 
   constructor(browser: WebSocket, options: BrowserBridgeOptions) {
     this.browser = browser;
+    this.user=options.user;this.authorize=options.authorize;
     this.host = new HostClient({
-      url: options.url,
-      token: options.token,
-      ...(options.user === undefined ? {} : { headers: { [USER_HEADER]: options.user } }),
+      ...options,
       onUnavailable: (error) => {
-        this.send({ v: 1, type: "error", code: "host_unavailable", message: error.message });
+        this.sendGatewayError("host_unavailable", error.message);
         this.close();
       },
     });
-    browser.on("message", (data: RawData) => {
-      this.messageQueue = this.messageQueue.then(() => this.handleMessage(data)).catch(() => undefined);
+    browser.on("message", (data: RawData, isBinary: boolean) => {
+      this.messageQueue = this.messageQueue.then(() => this.handleMessage(data, isBinary)).catch(() => undefined);
     });
     browser.on("close", () => this.close());
     browser.on("error", () => this.close());
@@ -228,67 +293,31 @@ class BrowserBridge {
     this.onClose();
   }
 
-  private send(frame: ServerFrame): void {
+  private send(data: RawData | string, isBinary = false): void {
     if (this.closed || this.browser.readyState !== WebSocket.OPEN) return;
     try {
-      this.browser.send(encodeFrame(frame));
+      this.browser.send(data, { binary: isBinary });
     } catch {
       this.close();
     }
   }
 
-  private async handleMessage(data: RawData): Promise<void> {
+  private sendGatewayError(code: string, message: string): void {
+    this.send(JSON.stringify({ v: 1, type: "error", code, message }));
+  }
+
+  private async handleMessage(data: RawData, isBinary: boolean): Promise<void> {
     if (this.closed) return;
-    let frame: ClientFrame;
     try {
-      frame = decodeClientFrame(rawDataToBytes(data));
-    } catch (error) {
-      this.send({
-        v: 1,
-        type: "error",
-        code: error instanceof Error && "code" in error ? String(error.code) : "invalid_frame",
-        message: error instanceof Error ? error.message : "Invalid frame",
-        fatal: true,
-      });
-      this.browser.close(1008, "invalid frame");
-      return;
-    }
-
-    if (frame.type === "close") {
-      this.close();
-      return;
-    }
-    if (frame.type === "ping") {
-      this.send({ v: 1, type: "pong", nonce: frame.nonce });
-      return;
-    }
-    // Sidebar commands may arrive before a session is chosen; everything else
-    // needs an open Session on the Host.
-    const sidebarCommand = frame.type === "list_sessions" || frame.type === "delete_session" || frame.type === "rename_session";
-    if (frame.type !== "open" && !sidebarCommand && !this.opened) {
-      this.send({ v: 1, type: "error", code: "not_open", message: "Send open before other commands" });
-      return;
-    }
-
-    try {
-      if (frame.type === "open" && this.opened) {
-        this.send({ v: 1, type: "error", code: "already_open", message: "Connection is already open" });
-        return;
-      }
+      if(this.authorize && !await this.authorize()){this.close();return;}
       if (!this.connected) {
         await this.host.connect();
-        this.hostUnsubscribe = this.host.onFrame((hostFrame) => this.send(hostFrame));
+        this.hostUnsubscribe = this.host.onFrame((hostData, hostBinary) => this.send(hostData, hostBinary));
         this.connected = true;
       }
-      if (frame.type === "open") this.opened = true;
-      this.host.send(frame);
+      this.host.send(data, isBinary);
     } catch (error) {
-      this.send({
-        v: 1,
-        type: "error",
-        code: "host_unavailable",
-        message: error instanceof Error ? error.message : "Host is unavailable",
-      });
+      this.sendGatewayError("host_unavailable", error instanceof Error ? error.message : "Host is unavailable");
     }
   }
 }
@@ -315,11 +344,4 @@ function resolveAsset(path: string): { file: string; contentType: string } | und
   const contentType = ASSET_TYPES[match[2]];
   if (contentType === undefined) return undefined;
   return { file: `${match[1]}.${match[2]}`, contentType };
-}
-
-function rawDataToBytes(data: RawData): Uint8Array {
-  if (typeof data === "string") return new TextEncoder().encode(data);
-  if (data instanceof ArrayBuffer) return new Uint8Array(data);
-  if (Array.isArray(data)) return Buffer.concat(data);
-  return data;
 }

@@ -1,3 +1,7 @@
+> Historical evidence and deployment instructions. For current source authority and deployment, use [ADR-0020](../adr/0020-unified-github-authority.md) and [the unified release procedure](../deployment/unified-release.md).
+
+> Source authority and repository placement: superseded where conflicting by [ADR-0020](../adr/0020-unified-github-authority.md). GitHub pi-coffee-server owns Web and Host.
+
 # PI Coffee deployment runbook
 
 This runbook covers the MVP deployment shape — **original Pi + Agent Host in a
@@ -161,7 +165,7 @@ User VM research directory and future model context keeps its pointer and
 conclusion. `fetch_content`, `source_check`, and `get_search_content` from
 `pi-web-access` remain optional until their runner conformance is recorded.
 The `subagent` and `bg_wait` tools remain optional until activated through
-Harness `search_tools`, so the frozen Simple/Full base counts stay 8/10. Set
+Harness `search_tools`, so the frozen Chat/Work base counts stay 8/10. Set
 `PI_COFFEE_WEB=off` or `PI_COFFEE_WEB_ACCESS=off` to disable either Web layer;
 set `PI_COFFEE_SUBAGENTS=off` to keep only Harness; set
 `PI_COFFEE_EXTENSIONS=off` for a transport-only diagnostic, or provide a

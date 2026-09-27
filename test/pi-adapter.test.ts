@@ -2,9 +2,34 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { appendExtensionArgs, buildHostChildEnv, extensionPathsFromArgs, HOST_STRIPPED_ENV_KEYS, projectExtensions, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
+import { HostSessionRegistry } from "../src/host/session.js";
+import type { ServerFrame } from "../src/shared/protocol.js";
+import { appendExtensionArgs, appendSkillArgs, buildHostChildEnv, extensionPathsFromArgs, HOST_STRIPPED_ENV_KEYS, projectExtensions, projectHistory, RpcPiSessionFactory } from "../src/host/pi-adapter.js";
 
 describe("original Pi RPC adapter", () => {
+  it("reports Pi death after prompt acknowledgement and permits explicit reopening without replay", async () => {
+    const sessionDir=mkdtempSync(join(tmpdir(),"coffee-pi-crash-"));
+    const factory = new RpcPiSessionFactory({cliPath: resolve("test/fixtures/fake-pi-rpc.mjs"), cwd: process.cwd(),sessionDir});
+    const registry = new HostSessionRegistry({factory,idleTimeoutMs:0});
+    const {session}=await registry.open("crash-recovery");
+    const frames:ServerFrame[]=[];
+    session.attach({send:frame=>frames.push(frame)});
+    try {
+      session.reservePrompt("crash-request");
+      await session.prompt("crash-request","crash: after acceptance");
+      await waitFor(()=>frames.some(frame=>frame.type==="error" && frame.code==="pi_interrupted"));
+      expect(session.isBusy).toBe(false);
+      expect(frames).toContainEqual(expect.objectContaining({type:"error",fatal:true,message:expect.stringContaining("not replayed")}));
+      const [reopened,otherWindow]=await Promise.all([registry.open(session.id),registry.open(session.id)]);
+      expect(otherWindow.session).toBe(reopened.session);
+      expect(reopened.session.isBusy).toBe(false);
+      expect(reopened.history.entries).toEqual([]);
+      expect(reopened.replay).toEqual([]);
+      const events:ServerFrame[]=[];reopened.session.attach({send:frame=>events.push(frame)});
+      reopened.session.reservePrompt("explicit-request");await reopened.session.prompt("explicit-request","hello after recovery");
+      await waitFor(()=>events.some(frame=>frame.type==="event" && isEvent(frame.event,"agent_settled")));
+    }finally{await registry.close();rmSync(sessionDir,{recursive:true,force:true});}
+  },10_000);
   it("strips Relay credentials from the spawned Host Pi environment", () => {
     const env = buildHostChildEnv({ PI_COFFEE_UPSTREAM_KEY: "override", SAFE_SETTING: "kept" });
     expect(env.SAFE_SETTING).toBe("kept");
@@ -17,6 +42,15 @@ describe("original Pi RPC adapter", () => {
       "./existing.js",
       "--extension",
       "./harness.js",
+    ]);
+  });
+
+  it("adds configured Pi skills once while preserving explicit CLI args", () => {
+    expect(appendSkillArgs(["--skill", "./existing"], ["./existing", "./lsp", ""])).toEqual([
+      "--skill",
+      "./existing",
+      "--skill",
+      "./lsp",
     ]);
   });
 
@@ -69,7 +103,7 @@ describe("original Pi RPC adapter", () => {
       await session.steer("focus");
       await session.followUp("then summarize");
       await waitFor(() => events.filter((event) => isEvent(event, "queue_update")).length === 2);
-      await session.compact();
+      await expect(session.compact()).rejects.toThrow("Local recovery extension is not loaded");
 
       // Extension dialog round trip: the request arrives as an event, the
       // answer goes back over the RPC sub-protocol and unblocks the run.

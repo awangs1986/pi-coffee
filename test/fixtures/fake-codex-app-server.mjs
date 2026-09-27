@@ -77,6 +77,12 @@ async function runTurn(thread, input, options) {
     return;
   }
 
+  let questionAnswer='';
+  if(text==='ask structured'){
+    const id='question-'+uid('request');
+    const answer=await new Promise(resolve=>{pendingServerRequests.set(id,resolve);send({id,method:'item/tool/requestUserInput',params:{threadId:thread.id,turnId,questions:[{id:'color',question:'Choose a color',options:[{label:'Blue',description:'A blue result'}]}]}});});
+    questionAnswer=' '+(answer.answers?.color?.answers?.[0] ?? 'MISSING');
+  }
   if (text.startsWith("run ")) {
     const command = text.slice(4);
     const item = { type: "commandExecution", id: uid("item"), pluginId: null, scriptPath: null, command, cwd: thread.cwd, processId: null, source: "agent", status: "inProgress", commandActions: [], aggregatedOutput: null, exitCode: null, durationMs: null };
@@ -112,7 +118,7 @@ async function runTurn(thread, input, options) {
     notify("turn/completed", { threadId: thread.id, turn: { ...turn, items: [] } });
     return;
   }
-  const reply = `echo: ${text}${images > 0 ? ` (+${images} image)` : ""}`;
+  const reply = `echo: ${text}${questionAnswer}${images > 0 ? ` (+${images} image)` : ""}`;
   const message = { type: "agentMessage", id: uid("item"), text: reply, phase: null, memoryCitation: null, delivery: null, questions: null };
   notify("item/started", { item: { ...message, text: "" }, threadId: thread.id, turnId, startedAtMs: Date.now() });
   const half = Math.ceil(reply.length / 2);
@@ -139,7 +145,7 @@ rl.on("line", (line) => {
   try { message = JSON.parse(line); } catch { return; }
   if (message.method === undefined && message.id !== undefined) {
     const resolve = pendingServerRequests.get(message.id);
-    if (resolve) { pendingServerRequests.delete(message.id); resolve(message.result?.decision); }
+    if (resolve) { pendingServerRequests.delete(message.id); resolve(message.result?.decision ?? message.result); }
     return;
   }
   const { id, method, params = {} } = message;

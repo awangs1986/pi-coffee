@@ -5,6 +5,16 @@ import { fileURLToPath } from "node:url";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { resolvePiExtensions } from "../dist/src/pi-extensions.js";
 
+if (process.platform !== "linux") {
+  console.log(JSON.stringify({
+    ok: true,
+    skipped: true,
+    platform: process.platform,
+    reason: "native subagent admission requires the Linux User VM (/proc, fcntl, and POSIX signals)",
+  }, null, 2));
+  process.exit(0);
+}
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const smokeRoot = await mkdtemp(join(tmpdir(), "pi-coffee-subagents-smoke-"));
 const agentDir = join(smokeRoot, "agent");
@@ -41,7 +51,7 @@ try {
   const names = new Set(commands.map((command) => command.name));
   const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold", "websearch", "subagents-model"];
   const missing = required.filter((name) => !names.has(name));
-  const expectedSimple = ["read", "bash", "edit", "write", "grep", "find", "ls", "search_tools"];
+  const expectedWork = ["read", "edit", "write", "bash", "git", "search_tools", "recall_folded"];
   if (inspection.all.includes("subagent") !== true || inspection.all.includes("bg_wait") !== true) {
     throw new Error(`pi-subagents tools were not registered: ${JSON.stringify(inspection)}`);
   }
@@ -53,8 +63,8 @@ try {
   if (!inspection.all.includes("recall_folded") || !inspection.all.includes("unfold")) {
     throw new Error(`context-fold tools were not registered: ${JSON.stringify(inspection)}`);
   }
-  if (JSON.stringify(inspection.active) !== JSON.stringify(expectedSimple)) {
-    throw new Error(`Harness Simple table changed: ${JSON.stringify(inspection.active)}`);
+  if (JSON.stringify(inspection.active) !== JSON.stringify(expectedWork)) {
+    throw new Error(`Harness Work table changed: ${JSON.stringify(inspection.active)}`);
   }
   if (extensionErrors.length > 0) throw new Error(`Pi extension errors: ${JSON.stringify(extensionErrors)}`);
   if (missing.length > 0) throw new Error(`Missing pi-subagents commands: ${missing.join(", ")}`);
@@ -63,7 +73,7 @@ try {
     piSubagents: "0.63.0",
     contextFold: "0.4.0",
     extensions,
-    harnessSimpleActive: inspection.active,
+    harnessWorkActive: inspection.active,
     optionalToolsRegistered: ["subagent", "bg_wait"].filter((name) => inspection.all.includes(name)),
     commands: required,
   }, null, 2));

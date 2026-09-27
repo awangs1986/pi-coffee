@@ -1,3 +1,5 @@
+> Source authority and repository placement: superseded where conflicting by [ADR-0020](../adr/0020-unified-github-authority.md). GitHub pi-coffee-server owns Web and Host.
+
 # PI Coffee target topology
 
 ## Modules and seams

@@ -1,3 +1,5 @@
+import { NativeQuestions } from "./native/questions.js";
+import { nativeEnvironment } from "./native/process.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type {
@@ -45,6 +47,8 @@ const RATE_LIMIT_TTL_MS = 60_000;
   cwd: string;
   /** `codex` executable; `codex` on PATH by default. */
   cliPath?: string;
+  commandArgs?: string[];
+  onBound?: (sessionId:string,threadId:string)=>Promise<void>;
   /** Shared Codex home (auth, config, session rollouts); Codex's default when omitted. */
   codexHome?: string;
   model?: string;
@@ -97,10 +101,9 @@ export class CodexSessionFactory implements PiSessionFactory {
   private async connection(): Promise<CodexAppServer> {
     this.cancelIdleStop();
     if (this.server && this.server.alive) return this.server;
-    const args = ["app-server", ...(this.options.args ?? [])];
+    const args = [...(this.options.commandArgs ?? []), "app-server", ...(this.options.args ?? [])];
     const env: Record<string, string | undefined> = {
-      ...process.env,
-      ...buildHostChildEnv(this.options.env),
+      ...nativeEnvironment(this.options.env),
       ...(this.options.codexHome === undefined ? {} : { CODEX_HOME: this.options.codexHome }),
     };
     const server = new CodexAppServer({
@@ -149,13 +152,13 @@ export class CodexSessionFactory implements PiSessionFactory {
   }
 
   /** Every thread recorded under this user's cwd, following `nextCursor` to the end. */
-  private async threads(): Promise<Obj[]> {
+  private async threads(cwd=this.options.cwd): Promise<Obj[]> {
     const server = await this.connection();
     const threads: Obj[] = [];
     let cursor: Json | undefined;
     for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
       const result = await server.request("thread/list", {
-        cwd: this.options.cwd,
+        cwd,
         limit: LIST_PAGE_SIZE,
         sortKey: "updated_at",
         sourceKinds: ["appServer", "vscode", "cli", "exec"],
@@ -197,6 +200,7 @@ export class CodexSessionFactory implements PiSessionFactory {
       if (typeof thread.id === "string" && thread.id !== options.sessionId) await this.remember(options.sessionId, thread.id);
     }
     const thread = response.thread as Obj;
+    await this.options.onBound?.(options.sessionId,String(thread.id));
     const session = new CodexSession(server, String(thread.id), {
       model: typeof response.model === "string" ? response.model : this.options.model,
       reasoningEffort: typeof response.reasoningEffort === "string" ? response.reasoningEffort : this.options.reasoningEffort,
@@ -227,8 +231,11 @@ export class CodexSessionFactory implements PiSessionFactory {
   }
 
   /** Rejects when Codex cannot answer: an empty sidebar must mean "no conversations", not "app-server down". */
-  async list(): Promise<PiSessionListing[]> {
-    const threads = await this.threads();
+  async list(): Promise<PiSessionListing[]> {return this.listForCwd(this.options.cwd);}
+
+  /** Host-owned workspace paths only; never accepts a browser-supplied directory. */
+  async listForCwd(cwd:string): Promise<PiSessionListing[]> {
+    const threads = await this.threads(cwd);
     const mapping = await this.loadMapping();
     const reverse = new Map<string, string>();
     for (const [sessionId, threadId] of mapping) reverse.set(threadId, sessionId);
@@ -335,6 +342,7 @@ class CodexSession implements PiSession {
   /** Command output streamed so far per item, so the browser can show it live. */
   private readonly toolOutput = new Map<string, string>();
   private readonly followUps: Array<{ text: string; images?: ImageInput[] }> = [];
+  private readonly questions = new NativeQuestions(event=>this.emit(event as Json));
   private readonly pendingApprovals = new Map<string, PendingServerRequest>();
   private readonly readRateLimits?: () => Promise<RateLimits | undefined>;
   private stopped = false;
@@ -409,6 +417,20 @@ class CodexSession implements PiSession {
     this.followUps.length = 0;
     if (this.activeTurnId === undefined) return;
     await this.server.request("turn/interrupt", { threadId: this.threadId, turnId: this.activeTurnId });
+  }
+
+  async backgroundState():Promise<{known:boolean;active:number}> {
+    const result=await this.server.request("thread/read",{threadId:this.threadId,includeTurns:true}) as Obj;
+    const thread=result.thread as Obj;
+    let active=this.streaming?1:0,known=(thread.status as Obj)?.type==="idle";
+    for(const turn of (Array.isArray(thread.turns)?thread.turns:[]) as Obj[]){
+      if(turn.status==="inProgress"){known=false;active++;}
+      for(const item of (Array.isArray(turn.items)?turn.items:[]) as Obj[]){
+        if(item.type==="commandExecution" && (item.status==="inProgress" || item.processId && item.exitCode==null)){known=false;active++;}
+        if(item.type==="collabAgentToolCall")for(const child of Object.values((item.agentsStates??{}) as Obj))if(!["completed","shutdown"].includes(String((child as Obj)?.status))){known=false;active++;}
+      }
+    }
+    return {known,active};
   }
 
   async getState(): Promise<SessionState> {
@@ -544,6 +566,7 @@ class CodexSession implements PiSession {
   }
 
   async respondUi(response: UiResponse): Promise<void> {
+    if(this.questions.answer(response))return;
     const pending = this.pendingApprovals.get(response.id);
     if (!pending) return;
     this.pendingApprovals.delete(response.id);
@@ -552,6 +575,7 @@ class CodexSession implements PiSession {
   }
 
   async stop(): Promise<void> {
+    this.questions.clear();
     if (this.stopped) return;
     this.stopped = true;
     this.unsubscribe();
@@ -703,6 +727,9 @@ class CodexSession implements PiSession {
     let title: string;
     let message: string;
     switch (request.method) {
+      case "item/tool/requestUserInput":
+        this.questions.ask(Array.isArray(params.questions)?params.questions:[],(answers)=>this.server.respond(request.id,{answers:Object.fromEntries(Object.entries(answers).map(([id,answer])=>[id,{answers:[answer]}]))}));
+        return true;
       case "item/commandExecution/requestApproval":
       case "execCommandApproval": {
         const command = typeof params.command === "string" ? params.command : Array.isArray(params.command) ? (params.command as Json[]).map(String).join(" ") : "";
@@ -732,6 +759,7 @@ class CodexSession implements PiSession {
   }
 
   private onServerExit(): void {
+    this.questions.clear();
     if (this.streaming) {
       this.emit({ type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "Codex app-server exited" } });
       this.streaming = false;

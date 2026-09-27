@@ -1,5 +1,7 @@
 # PI Coffee Gitea 全量代码与合并申请审计报告
 
+> 2026-09-20 文档清理：本页涉及旧模式的段落/表项已撤下，未改写为 Chat/Work 的实现证据。原始记录用 `git show b027838:docs/reviews/gitea-full-audit-20260903.md` 追溯；当前模式只见 [Pi Agent 主规格](../spec/pi-agent.md)。其余内容仍是标题日期的历史快照。
+
 审计日期：2026-09-03（Asia/Hong_Kong）
 
 审计对象：`awangs/pi-coffee` 当前 `main`，以及 Gitea Issues/PRs 记录
@@ -34,10 +36,9 @@ Issue 验收；在这些证据产生前，不应把 0.1 或 Web Search 称为生
 | Browser/Web | 静态 Codex 式 Shell、对话列表/历史、流式事件、断线重连、UI dialog、模型和用量操作 | `public/`、`src/web/server.ts`、`src/host/server.ts`、`test/web-server.test.ts`、`test/host-server.test.ts` |
 | Host/Pi | 原版 `@earendil-works/pi-coding-agent@0.84.4` RPC adapter、Session registry、原生 transcript 恢复 | `src/host/pi-adapter.ts`、`src/host/session.ts` |
 | Relay | Chat Completions/Responses 的 JSON/SSE 透传、models、compact、Serper route、限额和 token seam | `src/relay/server.ts`、`test/relay-server.test.ts` |
-| Harness | V3-derived Lean/Full prompt；冻结 V5 Simple 8 / Full 10 工具表；native `git`/`verify` | `src/harness/`、`docs/spec/harness-*.md` |
 | Native extensions | `context-fold@0.4.0`、可选 `pi-lens`/`rpiv-todo`/`pi-mcp-adapter`、`pi-subagents@0.63.0` | `src/pi-extensions.ts`、`package.json` |
-| Web research | 本地 `web_search` → Control Plane Serper Relay；可选 native child brief；User VM Markdown 封盘；后续 context 使用 pointer + conclusion | `src/web/extension.ts`、`src/web/research-artifact.ts`、`src/web/search.ts` |
-| pi-web-access | 通过 Pi 原生 extension manager + Jiti adapter 加载；冲突的 `web_search`、`/websearch`、`/curator` 注册被屏蔽，内容工具保留 | `src/web/pi-web-access-adapter.ts`、`docs/research/pi-web-access-audit-20260903.md` |
+| Web research | 本地 `web_search` → Control Plane Serper Relay；可选 native child brief；User VM Markdown 封盘；后续 context 使用 pointer + conclusion | `src/extensions/web-access/extension.ts`、`src/extensions/web-access/research-artifact.ts`、`src/extensions/web-access/search.ts` |
+| pi-web-access | 通过 Pi 原生 extension manager + Jiti adapter 加载；冲突的 `web_search`、`/websearch`、`/curator` 注册被屏蔽，内容工具保留 | `src/extensions/web-access/pi-web-access-adapter.ts`、`docs/research/pi-web-access-audit-20260903.md` |
 | Capability registry | manifest、trust/readiness、schema budget、执行 epoch 和持久设置 seam | `src/capabilities/` |
 | Deployment | systemd/env 模板和 Podman 两机 smoke 材料；不管理 VM 生命周期 | `deploy/`、`scripts/smoke-podman.mjs` |
 
@@ -48,7 +49,6 @@ Issue 验收；在这些证据产生前，不应把 0.1 或 Web Search 称为生
 | `npm ci --ignore-scripts --no-audit --no-fund` | 通过 | 安装 532 packages；仅有上游弃用提示 |
 | `npm run check` | 通过 | TypeScript build；15 个 test files、90 个 tests 全绿 |
 | `npm run smoke:web` | 通过 | Web/Harness/pi-subagents/pi-web-access/context-fold 注册、工具和 `/websearch` 命令均符合预期 |
-| `npm run smoke:subagents` | 通过 | `subagent`/`bg_wait` 可发现；Harness Simple=8、Full 基线不被改变 |
 | `git diff --check` | 通过 | 当前工作树无空白错误 |
 | `npm audit --omit=dev --audit-level=high` | 通过 | 生产依赖报告 0 vulnerabilities |
 | `scripts/smoke-real-model.mjs` | 通过 | 已在 `server-test` → `client-test` 两 VM 真实模型链路运行；证据见 [`vm-smoke-evidence-20260903.md`](./vm-smoke-evidence-20260903.md) |
@@ -64,7 +64,7 @@ Issue 验收；在这些证据产生前，不应把 0.1 或 Web Search 称为生
 
 1. **研究封盘脱敏（PR #28）**：`redactSecrets()` 现在覆盖
    `PI_COFFEE_UPSTREAM_KEY`、`PI_COFFEE_RELAY_TOKEN`、
-   `PI_COFFEE_SERPER_KEY` 和 `SERPER_API_KEY`。`src/web/extension.ts` 在
+   `PI_COFFEE_SERPER_KEY` 和 `SERPER_API_KEY`。`src/extensions/web-access/extension.ts` 在
    `pi.appendEntry` 或浏览器 custom message 之前也先脱敏结论，不再只有 Markdown
    文件被清洗。
 2. **Host 子进程密钥继承（PR #28）**：`buildHostChildEnv()` 使用显式
@@ -106,7 +106,6 @@ PR 记录在下一节单独列出；下面只列实际 Issue。
 | #11 | open | 文件上传、图片消息、下载引用尚未实现 |
 | #12 | open | 全栈故障、快照恢复和发布验收尚未完成 |
 | #13 | open | 全量 Backlog；正文中的早期测试提交号已过时，应以本报告和当前 main 为准 |
-| #14 | open | Lean/Full prompt 已在代码中；按工单留下最终验收证据后关闭 |
 | #15 | open | V5 8/10 Harness 已在代码中；工具可靠性仍由 #16 验证 |
 | #16 | open | 基础工具可靠性与扩展工具未来计划；尚未完成实 VM 矩阵 |
 | #17 | open | `pi-subagents@0.63.0` 已接入；Issue 本身仍需验收关闭 |

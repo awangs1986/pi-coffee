@@ -1,6 +1,6 @@
 # File transfer is LocalSend v2, browser to User VM, never through the Web Server
 
-Status: accepted (owner decision, 2026-09-03)
+Status: superseded in part (2026-09-19). [ADR-0010](./0010-unified-web-gateway-private-user-vms.md) replaces mandatory browser-to-VM direct transport with authenticated streaming through a unified gateway. VM persistence and reuse of the transfer implementation remain. The text below preserves the historical decision, not the new deployment default.
 
 Files move directly between the user's browser (C) and the user's VM (A). The Agent Host exposes the [LocalSend v2](https://github.com/localsend/protocol) transfer API over plain HTTP on the User VM's LAN interface (default port 53317, `protocol: http`, CORS enabled): `prepare-upload` → `upload` → `cancel` for browser-to-VM, `prepare-download` → `download` for VM-to-browser. Uploaded files land in the conversation's inbox under the Pi working directory, so the agent reads them with its ordinary tools; the Host computes SHA-256 while receiving and reports progress through the existing Host → Web → browser event stream. The Web Server (B) never carries or stores a file byte; its only part is telling the browser where A listens and with which per-Session token.
 

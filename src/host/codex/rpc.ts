@@ -68,7 +68,7 @@ export class CodexAppServer {
     const exit = new Promise<never>((_, reject) => {
       child.once("error", (error) => { this.onExit(`codex app-server failed to start: ${error.message}`); reject(error); });
       child.once("exit", (code, signal) => {
-        const reason = `codex app-server exited (${signal ?? code}): ${this.stderrTail.trim().split("\n").at(-1) ?? ""}`;
+        const reason = `codex app-server exited (${signal ?? code}); inspect native diagnostics on the VM`;
         this.onExit(reason);
         reject(new Error(reason));
       });

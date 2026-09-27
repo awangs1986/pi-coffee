@@ -45,7 +45,7 @@ export function createNativeGitTool(options: GitToolOptions): ToolDefinition {
     label: "Git",
     description:
       "Inspect the User VM's native Git workspace (status and diff) and manage native worktrees. " +
-      "The V5 checkpoint, undo, transfer, and adopt actions are reported as unavailable because PI Coffee does not run V5's managed-snapshot or Guard layer.",
+      "Checkpoint, undo, transfer, and adopt are unsupported legacy actions; use native Git and explicit user-authorized workflows.",
     promptSnippet: "Inspect Git status or diff when the task needs repository state.",
     parameters: Type.Object({
       action: Type.Union([
@@ -152,7 +152,7 @@ async function worktree(
     return unsupported("worktree register-workspace (no PI Coffee registry)");
   }
   if (op === "lease" || op === "release") {
-    return unsupported(`worktree ${op} (native Git has no V5 lease service)`);
+    return unsupported(`worktree ${op} (native Git has no lease service)`);
   }
   return unsupported(`worktree ${op}`);
 }
@@ -195,7 +195,7 @@ function unsupported(action: string): ToolResult {
   return {
     content: [{
       type: "text",
-      text: `not-supported: ${action}. PI Coffee uses the owner-managed User VM boundary; no V5 managed snapshot, Guard, permission grant, transfer, or adoption operation is run here.`,
+      text: `not-supported: ${action}. This adapter only provides native status, diff, and basic worktree operations.`,
     }],
     details: { backend: "native-git", status: "not-supported", action },
   };

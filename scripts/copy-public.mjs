@@ -1,4 +1,4 @@
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,12 +16,8 @@ const vendor = [
 ];
 for (const [source, target] of vendor) {
   const from = fileURLToPath(import.meta.resolve(source));
-  await cp(from, resolve(root, "dist/public", target));
+  const moduleText = (await readFile(from, "utf8")).replace(/^\/\/# sourceMappingURL=.*$/gm, "");
+  await writeFile(resolve(root, "dist/public", target), moduleText);
   // Keep the source public/ usable for the vitest Web Server too.
-  await cp(from, resolve(root, "public", target));
+  await writeFile(resolve(root, "public", target), moduleText);
 }
-
-// Prompt fixtures are source-controlled markdown so they remain reviewable;
-// copy them beside the compiled renderer for packaged/runtime use.
-await mkdir(resolve(root, "dist/src/harness/prompts"), { recursive: true });
-await cp(resolve(root, "src/harness/prompts"), resolve(root, "dist/src/harness/prompts"), { recursive: true });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MemorySearchTransport, RelaySearchTransport, normalizeWebSearchQuery, parseSearchBatch } from "../src/web/search.js";
+import { MemorySearchTransport, RelaySearchTransport, normalizeWebSearchQuery, parseSearchBatch } from "../src/extensions/web-access/search.js";
 
 describe("PI Coffee web search adapter", () => {
   it("normalizes bounded multi-query input", () => {
@@ -43,6 +43,16 @@ describe("PI Coffee web search adapter", () => {
     expect(seen?.url).toBe("http://relay.test/v1/search/serper");
     expect((seen?.init.headers as Record<string, string>).authorization).toBe("Bearer relay-token");
     expect(JSON.stringify(seen?.init)).not.toContain("SERPER");
+  });
+
+  it("bounds the raw Relay body before parsing and always sets a cancellation deadline", async () => {
+    let seenSignal: AbortSignal | null | undefined;
+    const transport = new RelaySearchTransport("http://relay.test", undefined, async (_url, init) => {
+      seenSignal = init?.signal;
+      return new Response("x".repeat(600_000));
+    });
+    await expect(transport.search({ queries: ["q"], numResults: 1, domainFilter: [] })).rejects.toThrow("512 KiB");
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
   });
 
   it("filters malformed result entries and bounds the in-memory transport", async () => {

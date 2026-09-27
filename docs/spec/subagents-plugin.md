@@ -1,128 +1,62 @@
-# PI Coffee `pi-subagents` 插件
+# 原生子 Agent：默认研究、独立模型、VM 并发准入
 
-状态：已接入当前 `main` 的 Agent Host；真实模型/真实 User VM 的子 Agent
-可靠性仍由后续工单验收。
+实现合同更新：2026-09-22。子 Agent 仅在 Work 按需激活；Chat 的直接工具和命令路径均拒绝委派。保留已有 3/5 准入、独立模型和输出界限；模式分配见 [Pi Agent 主 SPEC](./pi-agent.md) PA-Q04。
 
-## 集成目标
+## 可复用的执行合同
 
-PI Coffee 复用上游 [`nicobailon/pi-subagents`](https://github.com/nicobailon/pi-subagents)
-的 delegation Module，而不是复制它的内部实现。当前锁定
-`pi-subagents@0.63.0`；审计记录、上游 commit 和兼容性证据见
-[`pi-subagents-audit-20260903.md`](../research/pi-subagents-audit-20260903.md)。
+Chat 不由本插件增加工具；Work 是否默认研究委派、是否按需激活子任务，见 PA-Q01/04。当前模式限制不再作为目标设计复述；历史证据保存在 Git 提交 `b027838`。
 
-PI Coffee 的外部 Seam 是现有的 `RpcPiSessionFactoryOptions.extensions`：
+以下是已存在的执行器约束，不等于新的模式分配已验收：
 
-```text
-Agent Host
-  └─ RpcPiSessionFactory
-      ├─ PI Coffee Web adapter             (本地 Relay/search seam)
-      ├─ PI Coffee Harness extension       (本地实现)
-      ├─ pi-subagents/index.ts             (上游实现，由 Pi loader 加载)
-      ├─ pi-web-access adapter             (上游内容工具，屏蔽同名 web_search)
-      └─ subagents/extension.js            (本地资源 Adapter)
+- 研究子 Pi 实际搜索并按需读取来源；父 Agent 接收短结论、URL 与证据索引，不先搜索再委派摘要。
+- 简单查询只启动一个子任务；独立问题可并行。每个主对话最多 **3** 个正在运行的子 Pi，每个 User VM 最多 **5** 个；主 Agent 不计数。多出的启动请求等待名额，不是直接报“并发超限”。
+- 默认 fresh context，不复制父会话的完整历史。当前本地适配器禁止所有嵌套子 Agent（研究子任务当然不能递归委派）；复杂分解回到主 Agent。
+- 保留 Pi 原生登录、provider/model registry、上游执行器、后台作业和取消协议。没有添加安全沙箱、权限内核或自动 worktree 策略。
+
+## 实现边界
+
+`src/pi-extensions.ts` 默认加载本地 `subagents/native-adapter.js`，它通过 jiti 加载锁定的 `pi-subagents@0.63.0`。只缩小模型可见 schema、接入原生二进制启动接口、归档输出和注册能力，不复制上游执行器。
+
+`subagent` 支持：单个 `{agent,task,model?,cwd?,async?}`；最多 12 个 `tasks` 的批次（转换为原生 `runs.all` workflow）；`list/get/models/status/stop` 管理操作；`pending/reply` 转发原生 supervisor。`async` 默认 true；研究工具的事件委派使用前台等待。12 是单次批量输入上限，不是运行并发上限。默认不暴露任意 workflowScript、worktree 与并发覆盖参数。`bg_wait` 保留原生后台等待语义；普通异步子任务优先使用完成通知，不轮询。
+
+`subagent` 与 `bg_wait` 是两个模型工具，不因属于同一能力包而只计一个。准入状态、公开事件总线和原生 supervisor 继续复用；后者通过 `subagent` 的 pending/reply 操作提供，不增加常驻工具。新模式的切换与在途任务规则须在 PA-Q03 中确定，不能以隐藏工具代替执行侧限制。
+
+## 硬并发与排队
+
+`PI_SUBAGENT_PI_BINARY` 指向随构建复制的 `launch.py`。上游前台、后台 runner、事件委派最终启动子 Pi 都经过此接口。
+
+Linux `flock` 同时取得一个主对话槽（共 3）和一个 VM 槽（共 5），持锁文件描述符随 `exec` 进入真实 Node/Pi。锁由实际子 Pi 生命周期持有：父端超时不提前释放；子进程退出或 SIGKILL 后内核释放。等待中的启动器不计运行子 Agent。等待超过 10 分钟以明确错误退出；研究调用总超时 15 分钟（包含等待）。取消等待中的启动器不会占用名额或后台偷偷继续启动。竞争采用随机退避，不保证 FIFO 或无饥饿。
+
+Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作业继承根标识。默认命名空间 `/tmp/pi-coffee-subagents-<uid>`。所有同一 VM 的 Host/CLI 必须使用同一操作系统用户和同一准入目录。管理员可设 `PI_COFFEE_SCHEDULER_DIR`，但不能为每个会话设置不同值。运行中**不得删除锁目录/文件**，否则不同 inode 会破坏排他性。目录 0700，锁文件 0600。
+
+这是产品启动路径的资源调度，不是安全边界：可信用户手工启动的其他 CLI、外部 runner、绕开适配器的显式扩展列表/直接命令不在计量范围。不能将 3/5 宣称为任意 VM 进程的强制沙箱限额。重启不自动重放任务；现有 Host 中断恢复策略不变。
+
+## 独立模型
+
+```
+/subagents-model                  # 查看
+/subagents-model provider/model   # 设置用户级子任务默认模型
+/subagents-model off              # 清除默认，恢复上游继承行为
+/subagents-policy                 # 查看并发和队列约束
 ```
 
-`src/pi-extensions.ts` 负责解析这些入口；`src/subagents/extension.ts`
-只把上游包自带的 `skills/` 和 `prompts/` 目录接到 Pi 的
-`resources_discover` seam。上游 child launch、workflow、background run、
-result handoff 和 supervision 都留在上游 Module 内，因此调用方只需知道
-一个扩展入口，模块仍保持较深的行为封装和较小的 PI Coffee 接口。
+保存到用户 Pi `settings.json` 的 `subagents.defaultModel`；父模型不变。原生文件 Agent 的显式模型/agentOverrides 保留上游优先级；每次调用明确的 `model` 优先。运行时 `coffee-research` 单次、批次与 Web 委派每次读取用户默认，命令修改后无需重启。无可用凭证/模型时报告错误，不自动换账号、供应商或父模型；Web 不静默退回父搜索。`delegate=false` 是调用者明确选择的直接搜索路径。
 
-## Harness 计数不变
+## 输出与证据
 
-`pi-subagents` 注册的 `subagent` 与 `bg_wait` 是可发现的扩展工具，但不会
-自动塞进冻结 V5 Harness 基础表：
+搜索子进程把完整有界搜索结果先存 VM 独立证据文件，只向模型提供精选摘要与索引。父对话只收到子结论和 artifact 索引；来源抓取结果也受本地上下文入口限量。
 
-| 模式 | V5 基础工具数 | `pi-subagents` 工具 | 运行时行为 |
-|---|---:|---|---|
-| `simple` | 8 | 已注册、默认未激活 | 用 `search_tools` 搜索并按需激活 |
-| `full` | 10 | 已注册、默认未激活 | 基础表仍为 10；可额外激活扩展工具 |
+单次/批次/状态/bg_wait 输出及异步完成通知在父端入口限量。目标路径是父 Conversation Workspace 的 `artifacts/subagents/<sha256>.json`（Project Workspace 对应 `.pi-coffee/artifacts/subagents/`，文件 0600），返回短预览、runId 和相对路径；子进程不能用调用参数改写归属。写盘失败只返回短错误，不把原输出塞回历史。完整上游子会话/执行 artifact 仍在 VM，不能将 UI/history 中的短索引当作原始证据已删除。既有大历史只做上下文投影，不破坏性重写。
 
-这样 `/harness` 的 8/10 合约仍然可验证，同时允许后续逐个扩展工具做可靠性
-验收。`/harness` 状态消息会区分 V5 base count 与 effective active count。
+当前适配器仍默认使用 `getAgentDir()/pi-coffee/subagent-results/`；这是 PA-013 的已知实现差距，只能作为旧 Session 的兼容读取来源，不能作为新 Conversation 的最终合同。
 
-### 使用方式
+## 部署与验证
 
-在对话中让 Pi 使用子 Agent，或先让它调用：
+要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。在依赖研究委派的配置中关闭 subagents 或替换扩展列表时，默认 Web 委派会明确失败；可恢复配置，或显式 `delegate=false`。原生认证仍由用户在 VM 终端配置。
 
-```text
-请使用 search_tools 查找 subagent，然后在确认任务适合并行后激活它。
-```
+- `test/subagent-launcher.test.ts`：14 个独立进程/两个根对话，观测峰值 5、每根不超过 3；排队、等待中取消、SIGKILL 释放、禁止嵌套。
+- `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖Chat/Work 分派的能力激活、拒绝与直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。
+- `test/subagent-result.test.ts`：Unicode/details 限量、0600 归档、写盘失败；其余测试覆盖事件注册、模型配置、失败无静默回退。
+- `npm run check`、`npm run smoke:subagents`、`npm run smoke:web`。
 
-上游命令（例如 `/subagents`、`/subagents-doctor`、`/subagents-fleet`、
-`/subagents-stop`、`/subagents-models`、`/parallel-review` 和
-`/review-loop`）会在 RPC command/resource 列表中出现。命令是否能完成具体
-操作，仍取决于 User VM 的模型、目录和资源；没有凭据的离线 smoke 只验证
-加载与注册，不声称子 Agent 已执行成功。
-
-Web Shell 会把 Pi `display: true` 的 custom message（包括可见的
-foreground 子 Agent 结果和 slash-command 报告）显示为通知；`display: false`
-的 context-only 内容不会写入浏览器显示缓存。后台完成结果是否需要主动
-推送到浏览器，列入 [`SUBAGENT-002`](http://testpc:3000/awangs/pi-coffee/issues/18)
-的真实 User VM 观察性验收。
-
-## 配置和回退
-
-| 变量 | 默认 | 作用 |
-|---|---|---|
-| `PI_COFFEE_EXTENSIONS` | 内置 Web + Harness + `pi-subagents` + `pi-web-access` | 冒号分隔的显式替换列表；设为 `off` 关闭全部扩展 |
-| `PI_COFFEE_SUBAGENTS` | 启用 | 设为 `off`、`0`、`false` 或 `no`，只关闭内置 `pi-subagents`，保留 Harness |
-| `PI_COFFEE_AGENT_DIR` | Pi 默认 | 上游配置、session 和异步结果仍归 User VM 的 Pi 目录 |
-
-### 全局模型
-
-PI Coffee 提供 `/subagents-model` 命令管理用户级 Pi 配置中的
-`subagents.defaultModel`：
-
-```text
-/subagents-model                 # 查看当前全局模型
-/subagents-model provider/model  # 设置所有未显式指定模型的 subagent
-/subagents-model off             # 清除设置，恢复继承当前父 agent 模型
-```
-
-配置写入 `PI_COFFEE_AGENT_DIR/settings.json`（未设置时使用 Pi 默认 agent
-目录），保留文件中的其他字段，并使用 0700 目录/0600 文件权限和原子替换。
-该设置对内置、包、用户和项目 agent 的默认模型均生效；单次调用、agent
-frontmatter、`agentOverrides` 仍按上游 `pi-subagents` 优先级覆盖全局默认。
-本阶段只提供一个全局模型；第二模型与父模型回退链保留为后续扩展。
-
-显式 `PI_COFFEE_EXTENSIONS` 优先级最高：一旦设置，它不会隐式追加
-`pi-subagents`。这给部署和故障诊断一个可预测的回退点。
-
-## 安全和数据归属
-
-- VM isolation 仍是 PI Coffee 的执行 Seam；本次集成没有恢复 V5 Guard、
-  sandbox、permission tier 或 VM manager。
-- 上游 worktree 选项只是它自己的任务组织能力，不等同于 PI Coffee 的
-  Worktree 安全机制，也不改变 User VM 的所有权。
-- 子 Agent 的 session、transcript、artifact 和上传文件继续写入 owning
-  User VM；Web Server/Control Plane 不保存这些正文。
-- 上游包是锁定依赖，升级必须重新做版本/commit 审计、lockfile 检查和
-  Pi 兼容性 smoke，不使用 `^` 或 `latest`。
-
-## 验证
-
-```bash
-npm ci
-npm run check
-npm run smoke:subagents
-```
-
-`smoke:subagents` 使用临时 Pi 配置目录和离线 RPC，只验证 extension 加载、
-resource discovery 与命令注册，不访问上游模型，也不会写入 User VM 或
-Control Plane。
-
-加载级 smoke（无外部模型）应满足：
-
-1. Pi CLI 使用三条 extension 路径退出码为 0；
-2. RPC `get_commands` 包含 `subagents-*`、`parallel-review` 和
-   `review-loop`；
-3. Harness 测试仍断言 Simple=8、Full=10，且 `search_tools` 能发现/激活
-   `subagent`；
-4. `PI_COFFEE_SUBAGENTS=off` 只留下 Harness，`PI_COFFEE_EXTENSIONS=off`
-   不加载任何扩展。
-
-真实 User VM 的 foreground/background child、取消、浏览器断开后继续、Host
-重启恢复和资源清理不在本次加载切片中；它们记录在
-[`SUBAGENT-002`](http://testpc:3000/awangs/pi-coffee/issues/18)，完成前不能
-把本插件称为生产可靠。
+这些是本地协议和执行路径验证，不替代真实 provider 登录/额度、真实 Serper 搜索质量、两台部署 VM、多窗口/浏览器通知和重启连续性验收。没有访问或更新未连通的外部需求单。

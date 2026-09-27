@@ -10,7 +10,7 @@ import type {
   SessionSummary,
   UiResponse,
 } from "../shared/protocol.js";
-import type { PiHistory, PiModels, PiSessionFactory, PiSession } from "./pi-adapter.js";
+import type { AgentHistory as PiHistory, AgentModels as PiModels, AgentSessionFactory as PiSessionFactory, AgentSession as PiSession } from "./agent-adapter.js";
 
 export interface SessionSink {
   send(frame: ServerFrame): void;
@@ -63,7 +63,10 @@ export class HostSession {
   private activeRequestId?: string;
   /** Extension dialogs awaiting an answer, keyed by request id. */
   private readonly pendingUi = new Map<string, ServerFrame>();
+  private readonly answeringUi = new Set<string>();
   private started = false;
+  private interrupted = false;
+  private recoveryPromise?: Promise<void>;
   private startPromise?: Promise<void>;
   private idleTimer?: ReturnType<typeof setTimeout>;
   /** A run settled while no browser was attached; cleared when one attaches. */
@@ -107,6 +110,10 @@ export class HostSession {
   }
 
   async prepare(after?: number): Promise<SessionOpenResult> {
+    if (this.interrupted) {
+      this.recoveryPromise ??= this.stop().then(()=>{this.interrupted=false;});
+      try {await this.recoveryPromise;} finally {this.recoveryPromise=undefined;}
+    }
     await this.start();
     if (!this.pi) throw new Error("Session is not ready");
     const history = await this.pi.getHistory();
@@ -154,14 +161,20 @@ export class HostSession {
     return this.sinks.size > 0;
   }
 
+
   /** What the conversation list should say about this session's need for the user. */
   get attention(): "waiting" | "finished" | undefined {
     if (this.pendingUi.size > 0) return "waiting";
     if (this.unseenSettle) return "finished";
     return undefined;
   }
+  get isBusy(): boolean { return this.state.isStreaming || this.activeRequestId !== undefined; }
+  get wasInterrupted(): boolean { return this.interrupted; }
+  releasePrompt(requestId: string): void { if(this.activeRequestId===requestId)this.activeRequestId=undefined; }
+
 
   reservePrompt(requestId: string): void {
+    if (this.interrupted) throw new Error("Agent was interrupted. Reopen the conversation before retrying; the previous request was not replayed.");
     if (!this.pi || !this.started) throw new Error("Session is not ready");
     if (this.activeRequestId !== undefined || this.state.isStreaming) {
       throw new SessionBusyError();
@@ -213,18 +226,19 @@ export class HostSession {
 
   /** Answer a pending extension dialog; unknown ids are ignored (already answered or timed out). */
   async respondUi(response: UiResponse): Promise<boolean> {
-    if (!this.pendingUi.has(response.id)) return false;
-    // Remove first so a duplicate answer racing with Pi's follow-on events is rejected.
-    this.pendingUi.delete(response.id);
-    this.onLifecycle?.(this);
-    await this.ready().respondUi(response);
-    return true;
+    if (!this.pendingUi.has(response.id) || this.answeringUi.has(response.id)) return false;
+    this.answeringUi.add(response.id);
+    try {await this.ready().respondUi(response);this.pendingUi.delete(response.id);this.onLifecycle?.(this);return true;}
+    finally {this.answeringUi.delete(response.id);}
+
   }
 
   /** Dialogs Pi is still blocked on; re-sent to every browser that opens the Session. */
   get pendingUiRequests(): ServerFrame[] {
     return [...this.pendingUi.values()];
   }
+
+  backgroundState():Promise<{known:boolean;active:number}> {return this.ready().backgroundState?.() ?? Promise.resolve({known:false,active:0});}
 
   getModels(): Promise<PiModels> { return this.ready().getModels(); }
   setModel(provider: string, id: string): Promise<void> { return this.ready().setModel(provider, id); }
@@ -288,13 +302,25 @@ export class HostSession {
 
   private scheduleIdleCheck(): void {
     this.clearIdleTimer();
-    if (this.idleTimeoutMs === 0 || this.onIdle === undefined) return;
+    if (!this.started || this.idleTimeoutMs === 0 || this.onIdle === undefined) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = undefined;
-      if (this.sinks.size === 0 && !this.state.isStreaming && this.activeRequestId === undefined) {
-        this.onIdle?.(this);
-      }
+      void this.checkIdle();
     }, this.idleTimeoutMs);
+  }
+
+  private async checkIdle(): Promise<void> {
+    if (!this.started || this.hasSinks || this.isBusy) return;
+    let background: { known: boolean; active: number };
+    try {
+      background = await this.backgroundState();
+    } catch {
+      background = { known: false, active: 0 };
+    }
+    // A browser may reconnect or a child may resume the parent during the probe.
+    if (!this.started || this.hasSinks || this.isBusy) return;
+    if (background.known && background.active === 0) this.onIdle?.(this);
+    else this.scheduleIdleCheck();
   }
 
   private clearIdleTimer(): void {
@@ -307,11 +333,24 @@ export class HostSession {
     let settled = false;
     let lifecycle = false;
     if (isRecord(safeEvent) && typeof safeEvent.type === "string") {
-      if (safeEvent.type === "agent_start") {
+      if ((safeEvent.type === "agent_interrupted" || safeEvent.type === "run_interrupted")) {
+        this.interrupted = true;
+        this.state = {...this.state,isStreaming:false};
+        this.activeRequestId = undefined;
+        this.pendingUi.clear();
+        // A reopened browser must not replay the dead run's agent_start/deltas
+        // as though it were still streaming; durable history remains authoritative.
+        this.lastMessageEndCursor = this.cursor;
+        this.clearIdleTimer();
+        this.onLifecycle?.(this);
+        for (const sink of this.sinks) sink.send({v:1,type:"error",code:safeEvent.type==="agent_interrupted"?"pi_interrupted":"agent_interrupted",fatal:true,message:"Agent exited unexpectedly. This run was interrupted and was not replayed. Reopen the conversation, inspect the saved results, and retry explicitly."});
+        return;
+      }
+      if ((safeEvent.type === "agent_start" || safeEvent.type === "run_started")) {
         this.state = { ...this.state, isStreaming: true };
         lifecycle = true;
       }
-      if (safeEvent.type === "agent_settled") {
+      if ((safeEvent.type === "agent_settled" || safeEvent.type === "run_completed")) {
         this.state = { ...this.state, isStreaming: false };
         this.activeRequestId = undefined;
         settled = true;
@@ -325,7 +364,7 @@ export class HostSession {
     this.cursor += 1;
     // Pi appends a message to its session file when the message ends, so from
     // this cursor on the durable history is complete up to and including it.
-    if (isRecord(safeEvent) && (safeEvent.type === "message_end" || safeEvent.type === "agent_settled")) {
+    if (isRecord(safeEvent) && (safeEvent.type === "message_end" || (safeEvent.type === "agent_settled" || safeEvent.type === "run_completed"))) {
       this.lastMessageEndCursor = this.cursor;
     }
     const frame: ServerFrame = {
@@ -338,7 +377,7 @@ export class HostSession {
     };
     this.events.push(frame);
     while (this.events.length > this.eventBufferSize) this.events.shift();
-    if (isRecord(safeEvent) && safeEvent.type === "extension_ui_request" && typeof safeEvent.id === "string" && isDialogMethod(safeEvent.method)) {
+    if (isRecord(safeEvent) && (safeEvent.type === "extension_ui_request" || safeEvent.type === "native_request") && typeof safeEvent.id === "string" && isDialogMethod(safeEvent.method)) {
       this.pendingUi.set(safeEvent.id, frame);
       lifecycle = true; // the list's "waiting" flag changed
     }
@@ -370,7 +409,7 @@ export class HostSessionRegistry {
   private readonly eventBufferSize: number;
   private readonly idleTimeoutMs: number;
   private readonly sessions = new Map<string, HostSession>();
-  private readonly changeListeners = new Set<() => void>();
+  private readonly changeListeners = new Set<(session?:HostSession) => void>();
 
   private readonly externalPollMs?: number;
 
@@ -382,14 +421,14 @@ export class HostSessionRegistry {
   }
 
   /** Fires whenever the conversation list may have changed (new, settled, renamed, deleted, retired). */
-  onChange(listener: () => void): () => void {
+  onChange(listener: (session?:HostSession) => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
   }
 
-  private notifyChange(): void {
+  private notifyChange(session?:HostSession): void {
     for (const listener of this.changeListeners) {
-      try { listener(); } catch { /* a bad listener must not break the registry */ }
+      try { listener(session); } catch { /* a bad listener must not break the registry */ }
     }
   }
 
@@ -402,7 +441,7 @@ export class HostSessionRegistry {
       idleTimeoutMs: this.idleTimeoutMs,
       ...(this.externalPollMs === undefined ? {} : { externalPollMs: this.externalPollMs }),
       onIdle: (idle) => void this.retire(idle),
-      onLifecycle: () => this.notifyChange(),
+      onLifecycle: (session) => this.notifyChange(session),
     });
     this.sessions.set(session.id, session);
     try {
@@ -427,6 +466,7 @@ export class HostSessionRegistry {
 
   /** Delete a conversation from the store, stopping its Pi process first. */
   async delete(id: string): Promise<boolean> {
+    if (this.sessions.get(id)?.isBusy) throw new SessionBusyError();
     const live = this.sessions.get(id);
     if (live) {
       this.sessions.delete(id);
@@ -444,12 +484,14 @@ export class HostSessionRegistry {
     // Pi writes the session file at startup; a conversation nobody has spoken
     // in yet is noise in a shared list (the opening browser shows it locally).
     const summaries: SessionSummary[] = stored
-      .filter((item) => item.messageCount > 0)
+
+      .filter((item) => item.messageCount > 0 || item.engine && item.engine!=="pi")
       .map((item) => {
         const live = this.sessions.get(item.id);
         const attention = live?.attention;
         return { ...item, running: live?.isStreaming ?? false, ...(attention === undefined ? {} : { attention }) };
       });
+
     // A conversation that was just opened has no file yet (Pi writes it with
     // the first message). Like Codex, it only appears in everyone's list once
     // it has content; the browser that opened it shows it locally meanwhile.
@@ -467,6 +509,12 @@ export class HostSessionRegistry {
       });
     }
     return summaries;
+  }
+
+  async stopIdle(id:string):Promise<void> {
+    const session=this.sessions.get(id);if(!session)return;
+    if(session.isBusy)throw new SessionBusyError();
+    await session.stop();this.sessions.delete(id);this.notifyChange();
   }
 
   get(id: string): HostSession | undefined {

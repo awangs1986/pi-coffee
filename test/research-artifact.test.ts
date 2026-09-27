@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ResearchArtifactStore, pointerContext, renderResearchMarkdown } from "../src/web/research-artifact.js";
+import { ResearchArtifactStore, pointerContext, renderResearchMarkdown } from "../src/extensions/web-access/research-artifact.js";
 
 describe("research Markdown closure", () => {
   it("writes a User VM artifact atomically and returns a pointer", async () => {
@@ -20,7 +20,7 @@ describe("research Markdown closure", () => {
     expect(markdown).toContain("# PI Coffee Research Closure");
     expect(markdown).toContain("The answer is [safe].");
     expect(store.read(ref)).toBe(markdown);
-    expect((await stat(ref.path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(ref.path)).mode & 0o777).toBe(0o600);
     expect(pointerContext(ref, "answer")).toContain(ref.artifactId);
   });
 

@@ -15,9 +15,8 @@ const resolvePackage = createRequire(import.meta.url).resolve;
  * pi-subagents entry, official pi-web-access, its resource Adapter, and
  * context-fold. context-fold is deliberately last:
  * Pi keeps the last non-empty `session_before_compact` result, so its
- * deterministic summary wins over any companion extension. If context-fold
- * cannot produce a result it returns void, which leaves Pi's native
- * compaction path as the fail-open fallback.
+ * deterministic summary wins over companion extensions. Its local adapter
+ * cancels compaction on failure instead of silently requesting a model summary.
  *
  * pi-lens is installed as an opt-in, non-visible integration. It is not added
  * to the default list and therefore does not initialize LSP/diagnostic work or
@@ -36,8 +35,8 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
 
   const harness = resolveHarnessExtension();
   const extensions = isDisabled(env.PI_COFFEE_WEB)
-    ? [harness]
-    : [resolveWebExtension(), harness];
+    ? []
+    : [resolveWebExtension()];
   if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) {
     extensions.push(resolvePiSubagentsExtension());
   }
@@ -47,6 +46,9 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
   if (isEnabled(env.PI_COFFEE_RPIV_TODO)) extensions.push(resolveRpivTodoExtension(env));
   if (isEnabled(env.PI_COFFEE_PI_MCP_ADAPTER)) extensions.push(resolvePiMcpAdapterExtension(env));
   if (!isDisabled(env.PI_COFFEE_CONTEXT_FOLD)) extensions.push(resolveContextFoldExtension(env));
+  extensions.push(harness);
+  // Observe the final payload after the Harness has removed Chat system fields.
+  extensions.push(resolveContextUsageExtension());
   return extensions;
 }
 
@@ -55,17 +57,17 @@ export function resolveHarnessExtension(): string {
 }
 
 export function resolveWebExtension(): string {
-  return join(moduleDirectory, "web", "extension.js");
+  return join(moduleDirectory, "extensions", "web-access", "extension.js");
 }
 
 /** Resolve the official package entry; Pi's loader handles its TypeScript source. */
 export function resolvePiSubagentsExtension(): string {
-  return resolvePackage("pi-subagents");
+  return join(moduleDirectory, "subagents", "native-adapter.js");
 }
 
 /** Resolve the official pi-web-access package entry. */
 export function resolvePiWebAccessExtension(): string {
-  return join(moduleDirectory, "web", "pi-web-access-adapter.js");
+  return join(moduleDirectory, "extensions", "web-access", "pi-web-access-adapter.js");
 }
 
 export function resolvePiWebAccessPackage(): string {
@@ -77,16 +79,12 @@ export function resolvePiSubagentsResourceExtension(): string {
 }
 
 /** Resolve context-fold's native Pi package entry; Pi loads its TypeScript source through jiti. */
-export function resolveContextFoldExtension(env: NodeJS.ProcessEnv = process.env): string {
-  // context-fold intentionally ships only a Pi manifest (no Node `main` or
-  // `exports` entry), so resolve the manifest's declared TypeScript entry
-  // explicitly. Pi's loader then transpiles it through jiti.
-  // Prefer the Agent Host's Pi-managed copy when present. Pi auto-discovers
-  // that path before explicit `--extension` entries; using the same path lets
-  // Pi's canonical-path de-duplicator load it exactly once.
-  const agentDir = env.PI_COFFEE_AGENT_DIR ?? env.PI_CODING_AGENT_DIR ?? getAgentDir();
-  const managedEntry = join(agentDir, "npm", "node_modules", "context-fold", "index.ts");
-  if (existsSync(managedEntry)) return managedEntry;
+export function resolveContextFoldExtension(_env: NodeJS.ProcessEnv = process.env): string {
+  return join(moduleDirectory, "context", "extension.js");
+}
+
+export function resolveContextFoldPackage(env: NodeJS.ProcessEnv = process.env): string {
+  // Use the tested lockfile version; user-managed copies must not silently replace recovery semantics.
   return resolvePackage("context-fold/index.ts");
 }
 
@@ -123,3 +121,6 @@ function isEnabled(value: string | undefined): boolean {
   if (value === undefined) return false;
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
+
+/** Read-only observer, after all payload-changing extensions. */
+export function resolveContextUsageExtension(): string { return join(moduleDirectory,"context","usage-extension.js"); }
