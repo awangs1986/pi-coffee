@@ -108,6 +108,13 @@ describe("Codex app-server adapter", () => {
     expect(state.messageCount).toBe(2);
   });
 
+  it("never creates a replacement when a durable task binding points to unavailable native history", async () => {
+    const b = setup();
+    const factory = b.factory();
+    await expect(factory.create({ sessionId: "11111111-1111-4111-8111-111111111111", requireExisting: true })).rejects.toThrow(/Native conversation is unavailable/);
+    expect(await factory.list()).toEqual([]);
+  });
+
   it("delivers structured native questions and returns the browser answer to Codex",async()=>{
     const b=setup(),session=await b.factory().create({sessionId:"question-task"});
     const rec=recorder(session);await session.prompt("ask structured");

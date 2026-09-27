@@ -76,7 +76,7 @@ export interface AgentSessionFactory {
   capabilities?(id:string):Promise<import("../shared/protocol.js").AgentCapabilities>;
   engines?(): Promise<EngineAvailability[]>;
   /** Start (or resume, when the store already has it) the session with this id. */
-  create(options: { sessionId: string }): Promise<AgentSession>;
+  create(options: { sessionId: string; requireExisting?: boolean }): Promise<AgentSession>;
   /** Conversations in the durable store, newest first. */
   list(): Promise<AgentSessionListing[]>;
   /** Remove a conversation from the durable store. Resolves false when unknown. */

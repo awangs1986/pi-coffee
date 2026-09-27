@@ -72,7 +72,7 @@ export class NativeAgentFactory implements AgentSessionFactory {
     const nativeId=task.nativeBinding?.id;
     if(!nativeId)await this.options.workspaces.setNativeBinding(sessionId,{state:"starting"});
     const advanced=this.codexFactory(sessionId,cwd);
-    if(advanced)return advanced.create({sessionId:nativeId ?? sessionId});
+    if(advanced)return advanced.create({sessionId:nativeId ?? sessionId,requireExisting:Boolean(nativeId)});
     const session=new CodexSession(config,cwd);
     try{return await session.start(nativeId,id=>this.options.workspaces.setNativeBinding(sessionId,{state:"bound",id}));}
     catch(error){await session.stop();throw error;}
