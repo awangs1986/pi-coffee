@@ -20,7 +20,7 @@ import {
   type TrustState,
 } from "../capabilities/settings.js";
 import { createSubagentsManifest } from "../subagents/capability.js";
-import { createWebAccessManifest } from "../extensions/web-access/capability.js";
+import { createWebAccessManifest, createWebSearchManifest } from "../extensions/web-access/capability.js";
 import {
   WORK_TOOLS,
   CHAT_TOOLS,
@@ -137,6 +137,8 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
     const subagents = registrations.some(item => item.manifest.id === "subagent") ? undefined : createSubagentsManifest(pi, conformedCapabilities);
     if (subagents !== undefined) next.register(subagents, "trusted");
 
+    const webSearch = createWebSearchManifest(pi);
+    if (webSearch !== undefined) next.register(webSearch, "trusted");
     const webAccess = createWebAccessManifest(pi, conformedCapabilities);
     if (webAccess !== undefined) next.register(webAccess, "enabled-untrusted");
 

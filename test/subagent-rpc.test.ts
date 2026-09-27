@@ -15,19 +15,19 @@ function completion(res: any, model: string, tool?: { name: string; args: unknow
  res.end('data: [DONE]\n\n');
 }
 
-describe.skipIf(process.platform !== 'linux')('real native subagents and delegated search (Linux User VM)', () => {
- it.each(['subagent', 'web', 'batch', 'background', 'background-guard', 'work', 'override', 'chat-web', 'chat-no-subagent'] as const)('honors harness policy for %s with real native execution and bounded results', async (route) => {
+describe.skipIf(process.platform !== 'linux')('real native subagents and official direct search (Linux User VM)', () => {
+ it.each(['subagent', 'web', 'batch', 'background', 'background-guard', 'work', 'override', 'chat-web', 'chat-no-subagent', 'web-multi', 'web-error'] as const)('honors harness policy for %s with real native execution and bounded results', async (route) => {
   const chat = route.startsWith('chat-') || route === 'chat-web';
-  const webRoute = route === 'web' || route.endsWith('-web');
+  const webRoute = route === 'web' || route.startsWith('web-') || route.endsWith('-web');
   const root = await mkdtemp(join(tmpdir(), 'pi-subagent-rpc-'));
-  const agentDir = join(root, 'agent'); await mkdir(agentDir);
+  const agentDir = join(root, 'agent'); await mkdir(agentDir); await writeFile(join(agentDir,'web-search.json'),JSON.stringify({searchProvider:'serper',workflow:'none',maxInlineContentChars:4000}));
   let releaseChild!:()=>void;const childGate=new Promise<void>(r=>{releaseChild=r;});
   const requests: any[] = []; let searches = 0; let heldPermits = 0;
   const server = createServer(async (req, res) => {
    let text = ''; for await (const chunk of req) text += chunk;
    const input = JSON.parse(text || '{}');
    if (req.url === '/v1/search/serper') {
-    searches++; res.setHeader('content-type','application/json'); res.end(JSON.stringify({ organic: [{ title: 'Primary', link: 'https://example.com/primary', snippet: 'evidence '.repeat(70)+'RAW_SEARCH_TAIL_NOT_FOR_PARENT' }] })); return;
+    searches++; if(route==='web-error'){res.writeHead(400,{'content-type':'application/json'});res.end(JSON.stringify({message:'fixture query rejected'}));return;} res.setHeader('content-type','application/json'); res.end(JSON.stringify({ organic: [{ title: 'Primary', link: 'https://example.com/primary', snippet: 'evidence '.repeat(6000)+'RAW_SEARCH_TAIL_NOT_FOR_PARENT' }] })); return;
    }
    requests.push(input);
    if (requests.length > 12) { res.writeHead(500); res.end('loop'); return; }
@@ -47,7 +47,7 @@ for p in glob.glob(${JSON.stringify(join(root,'admission','vm','*'))}):
 print(n)`], {encoding:'utf8'});
     heldPermits = Math.max(heldPermits, Number(probe.stdout.trim()));
     if (hasResult('web_search')) {if(route==='background-guard')await childGate;completion(res, input.model);}
-    else completion(res, input.model, { name: 'web_search', args: { query: 'capacity test', delegate: true } }); // nested delegation must become a direct child search
+    else completion(res, input.model, { name: 'web_search', args: { query: 'capacity test'} }); // Explicit researcher uses the same official tool.
     return;
    }
    if (route === 'chat-no-subagent') {
@@ -64,7 +64,7 @@ print(n)`], {encoding:'utf8'});
    if (!input.tools?.some((t: any) => t.function?.name === finalTool)) {
     completion(res, input.model, { name: 'search_tools', args: { action: 'activate', capability_id: webRoute ? 'web' : 'subagent' } }); return;
    }
-   completion(res, input.model, { name: finalTool, args: webRoute ? { query: 'capacity test', ...(chat ? { delegate: true } : {}) } : route === 'batch' ? { tasks: [1,2].map(i => ({ agent: 'coffee-research', task: `Search capacity test ${i} and cite a primary source` })), async: false } : { agent: 'coffee-research', task: 'Search capacity test and cite a primary source', async: route.startsWith('background'), ...(route === 'override' ? { model: 'localtest/child' } : {}) } });
+   completion(res, input.model, { name: finalTool, args: webRoute ? (route==='web-multi'?{queries:['capacity one','capacity two']}:{ query: 'capacity test' }) : route === 'batch' ? { tasks: [1,2].map(i => ({ agent: 'coffee-research', task: `Search capacity test ${i} and cite a primary source` })), async: false } : { agent: 'coffee-research', task: 'Search capacity test and cite a primary source', async: route.startsWith('background'), ...(route === 'override' ? { model: 'localtest/child' } : {}) } });
   });
   await new Promise<void>(r => server.listen(0,'127.0.0.1',r));
   const port = (server.address() as {port:number}).port;
@@ -112,10 +112,13 @@ print(n)`], {encoding:'utf8'});
     return;
    }
    expect(JSON.stringify(events), `events: ${JSON.stringify(events).slice(-4000)}`).not.toContain('Activation failed');
-   expect(searches, `events: ${JSON.stringify(events).slice(-5000)}`).toBe(route === 'batch' ? 2 : 1);
+   expect(searches, `events: ${JSON.stringify(events).slice(-5000)}`).toBe(route === 'batch' || route === 'web-multi' ? 2 : 1);
+   if(route==='web-error')expect(JSON.stringify(events)).toMatch(/400|fixture query rejected/);
    expect(requests[0].tools.map((t:any)=>t.function.name)).toHaveLength(chat ? 5 : 7);
-   if (chat) {
-    expect(requests.every(r => !r.messages.some((m:any) => ['system','developer'].includes(m.role)))).toBe(true);
+   const entries=JSON.stringify((await client.getEntries()).entries.filter((e:any)=>e.type==='message' && e.message?.role==='toolResult'));
+   expect(entries).not.toContain('RAW_SEARCH_TAIL_NOT_FOR_PARENT');
+   if (chat || webRoute) {
+    if(chat) expect(requests.every(r => !r.messages.some((m:any) => ['system','developer'].includes(m.role)))).toBe(true);
     expect(heldPermits).toBe(0);
     expect(requests.every(r => r.model === 'parent')).toBe(true);
     expect(JSON.stringify(requests)).not.toContain('RAW_SEARCH_TAIL_NOT_FOR_PARENT');

@@ -21,7 +21,7 @@ async function probe(lensEnabled) {
   const root = await mkdtemp(join(tmpdir(), 'coffee-toolchain-'));
   const workspace = join(root, 'workspace');
   const agentDir = join(root, 'agent');
-  await mkdir(workspace); await mkdir(agentDir); await mkdir(join(workspace, '.picode'));
+  await mkdir(workspace); await mkdir(agentDir); await writeFile(join(agentDir,'web-search.json'),JSON.stringify({searchProvider:'serper',workflow:'none',maxInlineContentChars:4000})); await mkdir(join(workspace, '.picode'));
   execFileSync('git', ['init', '-q', workspace]);
   const steps = [
     { name: 'write', args: { path: 'marker.txt', content: 'alpha\n' }, expected: /wrote/i },
@@ -34,7 +34,7 @@ async function probe(lensEnabled) {
     { name: 'git', args: { action: 'status' }, expected: /marker.txt/ },
     { name: 'search_tools', args: { action: 'search', query: 'web' }, expected: /web:/ },
     { name: 'search_tools', args: { action: 'activate', capability_id: 'web' }, expected: /Activated web/ },
-    { name: 'web_search', args: { query: 'fixture evidence', delegate: false }, expected: /example.com/ },
+    { name: 'web_search', args: { query: 'fixture evidence' }, expected: /example.com/ },
     { name: 'search_tools', args: { action: 'activate', capability_id: 'subagent' }, expected: /Activated subagent/ },
   ];
   let cursor = 0; let calls = 0; const missing = []; const observed = []; const requestTools = [];

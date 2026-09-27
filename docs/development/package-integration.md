@@ -14,7 +14,7 @@ Import from `pi-coffee`:
 
 The native Pi package manifest loads `dist/src/pi-extension.js`, which installs the same ordered extensions. Use either the manifest entry or the individual integration paths, once per Pi process. Consumer code must not import private `dist/src` implementation files.
 
-Host owns authenticated scope, Conversation directories, sessions and lifetime. Server's Pi adapter continues to use Pi RPC; Codex and Claude adapters remain unchanged. Under [PA-014](../spec/web-search-plugin.md), this package will load the official `pi-web-access` extension directly and will no longer own a Coffee-specific search implementation. Any separate Server Relay remains Server-owned and is not the target Pi search path. Context attribution production belongs here; the Web panel and wire validation belong to Server.
+Host owns authenticated scope, Conversation directories, sessions and lifetime. Server's Pi adapter continues to use Pi RPC; Codex and Claude adapters remain unchanged. Under [PA-014](../spec/web-search-plugin.md), this package loads the official `pi-web-access` extension directly and no longer owns a Coffee-specific search implementation. Any separate Server Relay remains Server-owned and is not the target Pi search path. Context attribution production belongs here; the Web panel and wire validation belong to Server.
 
 ## Consumer upgrade
 
@@ -27,3 +27,7 @@ Baseline: Server `112ef53a0e2b04bd9d7cf283faa04754bc84c9ab`. Local checks pass 2
 The packaging gate was red before extraction. An initial concurrent packaging check revealed that npm invokes `prepare` even for the inspected dry-run command, racing RPC tests that read the build directory. The package-content test now runs after runtime tests, preserving both checks. Source history and unmerged Gitea branches remain available; no old Host tree was used to replace Server.
 
 Fresh-clone results and the final pair of repository identities are recorded in Pi #70 and Server #19. No production service is restarted by this source migration.
+
+## Web extension ownership
+
+The consumer loads the pinned official `pi-web-access/index.ts` through `resolvePiExtensions()` exactly once. Do not also autoload a separately installed global copy: use Pi's documented package resource filter (`extensions: []`) on that global entry. This keeps the package installed but disables its extension in standalone Pi too; use a separate explicit configuration when standalone Pi should own Web tools. Both legacy `PI_COFFEE_WEB=off` and `PI_COFFEE_WEB_ACCESS=off` now disable the single official integration. `/websearch` and `/curator` are native commands; the Coffee `delegate` argument and `research_seal` no longer exist.

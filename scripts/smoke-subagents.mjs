@@ -55,7 +55,7 @@ try {
   if (inspection.all.includes("subagent") !== true || inspection.all.includes("bg_wait") !== true) {
     throw new Error(`pi-subagents tools were not registered: ${JSON.stringify(inspection)}`);
   }
-  const requiredWebTools = ["web_search", "research_seal", "fetch_content", "source_check", "get_search_content"];
+  const requiredWebTools = ["web_search", "fetch_content", "source_check", "get_search_content"];
   const missingWebTools = requiredWebTools.filter((name) => !inspection.all.includes(name));
   if (missingWebTools.length > 0) {
     throw new Error(`web extension tools were not registered: ${missingWebTools.join(", ")}`);

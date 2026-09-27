@@ -3,10 +3,10 @@ import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { boundSubagentResult } from "../subagents/result-artifact.js";
-import { redactSecrets } from "../extensions/web-access/research-artifact.js";
+import { redactSecrets } from "../context/redact.js";
 
 // Parent-facing subagent output is always bounded, including failure details.
-const BOUNDED_TOOLS = new Set(["read", "bash", "grep", "find", "ls", "git", "verify", "fetch_content", "source_check", "get_search_content"]);
+const BOUNDED_TOOLS = new Set(["read", "bash", "grep", "find", "ls", "git", "verify", "web_search", "fetch_content", "source_check", "get_search_content"]);
 const MAX_RESULT_BYTES = 12_000;
 
 /** Wrap the upstream deterministic compaction hook; never silently request a model summary. */

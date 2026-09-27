@@ -5,14 +5,11 @@ import { describe, expect, it } from "vitest";
 import { installContextPolicy, protectLocalCompaction } from "../src/context/policy.js";
 
 describe("bounded context and local recovery", () => {
-  it('routes research and large tool/child output to the Conversation data root',async()=>{
+  it('routes large tool/child output to the Conversation data root',async()=>{
     const root=await mkdtemp(join(tmpdir(),'coffee-owned-artifacts-')),previous=process.env.PI_COFFEE_DATA_ROOT;
     process.env.PI_COFFEE_DATA_ROOT=root;
     try{
-      const {ResearchArtifactStore}=await import('../src/extensions/web-access/research-artifact.js');
       const {boundSubagentResult}=await import('../src/subagents/result-artifact.js');
-      const ref=new ResearchArtifactStore().seal({responseId:'probe',queries:['test'],provider:'fixture',results:[],conclusion:'research evidence'});
-      expect(ref.path).toContain(join(root,'research'));expect(await readFile(ref.path,'utf8')).toContain('research evidence');
       const child=boundSubagentResult('child evidence'.repeat(2000));expect(child.details.artifactPath).toContain(join(root,'artifacts','subagents'));
       const handlers=new Map<string,Function>();installContextPolicy({on:(event:string,handler:Function)=>handlers.set(event,handler)} as never);
       const result=await handlers.get('tool_result')!({toolName:'bash',content:[{type:'text',text:'tool evidence'.repeat(10000)}]},{});
@@ -35,7 +32,7 @@ describe("bounded context and local recovery", () => {
     const handlers = new Map<string, Function>();
     installContextPolicy({ on: (event: string, handler: Function) => handlers.set(event, handler) } as never);
     try {
-      const result = await handlers.get("tool_result")!({ toolName: "bash", toolCallId: "t", content: [{ type: "text", text: "RAW-LOG\n".repeat(10000) }], details: { big: "d".repeat(40000) }, isError: true }, { sessionManager: { getSessionDir: () => root } });
+      const result = await handlers.get("tool_result")!({ toolName: "web_search", toolCallId: "t", content: [{ type: "text", text: "RAW-LOG\n".repeat(10000) }], details: { big: "d".repeat(40000) }, isError: true }, { sessionManager: { getSessionDir: () => root } });
       expect(result.content[0].text.length).toBeLessThan(7000);
       expect(result.isError).toBe(true);
       expect(result.details.big).toBeUndefined();

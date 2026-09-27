@@ -31,3 +31,15 @@ export function createWebAccessManifest(
     supportsProxyCall: false,
   };
 }
+
+/** Visibility metadata only: the official extension owns schema and execution. */
+export function createWebSearchManifest(pi: ExtensionAPI): CapabilityManifest | undefined {
+ const tool=pi.getAllTools().find(tool=>tool.name==='web_search');
+ if(!tool)return undefined;
+ return {id:'web',kind:'pi-extension',origin:'suite',title:'Official Web search',
+ summary:'Search the web using the native pi-web-access provider configuration',
+ keywords:['web','search','internet','serper','research','sources'],
+ tools:[{name:tool.name,description:tool.description,parameters:tool.parameters}],
+ supportedHarness:['chat','work'],permissionSummary:'Provider credentials and native cache remain on the owning VM',
+ runnerConformance:'passed',supportsProxyCall:false};
+}
