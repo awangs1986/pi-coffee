@@ -4,15 +4,17 @@
 
 实现合同更新：2026-09-22。子 Agent 仅在 Work 按需激活；Chat 的直接工具和命令路径均拒绝委派。保留已有 3/5 准入、独立模型和输出界限；模式分配见 [Pi Agent 主 SPEC](./pi-agent.md) PA-Q04。
 
+**PA-014 supersession (2026-09-27):** official `pi-web-access` no longer delegates Web research automatically through Coffee. Work may explicitly use the independent subagent capability for research; Chat has no subagent capability. The Web-specific delegation text below records the current implementation until migration, not the accepted target. See [Web search](./web-search-plugin.md).
+
 ## 可复用的执行合同
 
-Chat 不由本插件增加工具；Work 是否默认研究委派、是否按需激活子任务，见 PA-Q01/04。当前模式限制不再作为目标设计复述；历史证据保存在 Git 提交 `b027838`。
+Chat 不由本插件增加工具；Work 按需激活子任务，见 PA-Q01/04 与 PA-014。默认 Web 研究委派已退出目标设计；历史证据保存在 Git 提交 `b027838`。
 
 以下是已存在的执行器约束，不等于新的模式分配已验收：
 
 - 研究子 Pi 实际搜索并按需读取来源；父 Agent 接收短结论、URL 与证据索引，不先搜索再委派摘要。
 - 简单查询只启动一个子任务；独立问题可并行。每个主对话最多 **3** 个正在运行的子 Pi，每个 User VM 最多 **5** 个；主 Agent 不计数。多出的启动请求等待名额，不是直接报“并发超限”。
-- 默认 fresh context，不复制父会话的完整历史。当前本地适配器禁止所有嵌套子 Agent（研究子任务当然不能递归委派）；复杂分解回到主 Agent。
+- 默认 fresh context，不复制父会话的完整历史。当前本地适配器禁止所有嵌套子 Agent；复杂分解回到主 Agent。
 - 保留 Pi 原生登录、provider/model registry、上游执行器、后台作业和取消协议。没有添加安全沙箱、权限内核或自动 worktree 策略。
 
 ## 实现边界
@@ -42,11 +44,11 @@ Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作�
 /subagents-policy                 # 查看并发和队列约束
 ```
 
-保存到用户 Pi `settings.json` 的 `subagents.defaultModel`；父模型不变。原生文件 Agent 的显式模型/agentOverrides 保留上游优先级；每次调用明确的 `model` 优先。运行时 `coffee-research` 单次、批次与 Web 委派每次读取用户默认，命令修改后无需重启。无可用凭证/模型时报告错误，不自动换账号、供应商或父模型；Web 不静默退回父搜索。`delegate=false` 是调用者明确选择的直接搜索路径。
+保存到用户 Pi `settings.json` 的 `subagents.defaultModel`；父模型不变。原生文件 Agent 的显式模型/agentOverrides 保留上游优先级；每次调用明确的 `model` 优先。运行时 `coffee-research` 单次、批次每次读取用户默认，命令修改后无需重启。无可用凭证/模型时报告错误，不自动换账号、供应商或父模型。当前 Web 委派和 `delegate=false` 路径将在 PA-014 迁移时移除。
 
 ## 输出与证据
 
-搜索子进程把完整有界搜索结果先存 VM 独立证据文件，只向模型提供精选摘要与索引。父对话只收到子结论和 artifact 索引；来源抓取结果也受本地上下文入口限量。
+Current Coffee research children store bounded search results in a VM evidence file and return a brief to the parent. Under PA-014, an explicitly requested research child uses the official Web tool; generic child-output and context limits still apply, but the old Coffee search artifact format is no longer a target requirement.
 
 单次/批次/状态/bg_wait 输出及异步完成通知在父端入口限量。目标路径是父 Conversation Workspace 的 `artifacts/subagents/<sha256>.json`（Project Workspace 对应 `.pi-coffee/artifacts/subagents/`，文件 0600），返回短预览、runId 和相对路径；子进程不能用调用参数改写归属。写盘失败只返回短错误，不把原输出塞回历史。完整上游子会话/执行 artifact 仍在 VM，不能将 UI/history 中的短索引当作原始证据已删除。既有大历史只做上下文投影，不破坏性重写。
 
@@ -54,7 +56,7 @@ Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作�
 
 ## 部署与验证
 
-要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。在依赖研究委派的配置中关闭 subagents 或替换扩展列表时，默认 Web 委派会明确失败；可恢复配置，或显式 `delegate=false`。原生认证仍由用户在 VM 终端配置。
+要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。Current main fails its default Web delegation when subagents are disabled and requires an explicit direct-search override. Under PA-014, official Web search does not depend on subagents. 原生认证仍由用户在 VM 终端配置。
 
 - `test/subagent-launcher.test.ts`：14 个独立进程/两个根对话，观测峰值 5、每根不超过 3；排队、等待中取消、SIGKILL 释放、禁止嵌套。
 - `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖Chat/Work 分派的能力激活、拒绝与直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。

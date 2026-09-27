@@ -4,6 +4,8 @@
 
 状态：2026-09-22 已完成运行时迁移。owner 在实际工具链测试后批准精简基础集合，并要求使用 Skill + CLI 的 LSP 中间层。2026-09-20 的原表继承决定已被本轮明确精简取代，已有执行器与按需发现架构继续复用。
 
+**PA-014 Web target (2026-09-27):** use only the official `pi-web-access` extension. Chat keeps its native `web_search` visible; Work discovers official Web tools on demand, with search and content/source visibility allowed to stay separate. The native package owns `web_search`, `fetch_content`, `source_check`, `get_search_content`, `/websearch`, and `/curator`. Coffee's `research_seal`, search-specific adapter, and default Web delegation are retired in the target design. The tables below describe current main until that migration is implemented and verified; see [Web search](./web-search-plugin.md).
+
 ## 已确认的目标集合
 
 | 分组 | 常驻模型工具 | 理由 |
@@ -21,7 +23,7 @@ LSP 的定义/引用/类型信息由语义查询提供；Bash + rg 只承担文�
 
 | 入口 | 目标行为 | 当前状态 |
 |---|---|---|
-| `search_tools` → Web | 搜索与必要网页内容读取按需使用 | 现有 `web` 与 `web-access` 分包；是否合包及信任/就绪策略仍待讨论 |
+| `search_tools` → Web | 搜索与必要网页内容读取按需使用 | Current main has separate `web` and `web-access` visibility groups; PA-014 keeps their implementations in the one official plugin |
 | `search_tools` → Subagent | 委派与等待按需使用 | 已有 `subagent` / `bg_wait`，保留其执行合同 |
 | Pi 原生 `lsp` Skill → Bash CLI | 获取项目可用能力，执行诊断、定义、引用、类型与符号查询 | V1 CLI/Skill 与 TS/Python Profile 已实现并实测；不用 MCP，不新增 LSP 模型工具 |
 
@@ -47,7 +49,7 @@ Work 预先看见 LSP Skill 的名称、用途和真实路径，按需读取正�
 2. Git schema 收紧到执行器实际支持的动作。checkpoint、undo、transfer、adopt 等占位动作不得继续误导模型；本轮只有设计结论，代码未改。
 3. LSP CLI、原生 Skill 加载和默认不启用 pi-lens 已完成；Chat 不收到自动 Skill 元数据已在真实 Pi 请求中验证。
 4. VM 需要可用 Bash、Git、rg、文件发现命令、Node 及语言服务器运行时。普通与登录 shell 的环境必须分别验证；不把本机临时绝对路径固化成部署约定。
-5. Web 与网页内容仍分包。Chat 直接搜索；Work 延续已有研究委派策略，delegate=false 直接搜索。激活能力仅在 Work 的下一请求生效；切换模式或模型会撤销。
+5. Current main still splits Web and content and automatically delegates Work search. PA-014 replaces that with the native official tool and independent subagent choice. The existing activation-on-next-request and mode/model revocation rules remain the target.
 
 ## 实测证据与下一次验收
 
