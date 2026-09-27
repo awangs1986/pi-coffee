@@ -1,37 +1,34 @@
-> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+> Source boundary: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi search behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence does not certify current main.
 
-# Web 搜索：短摘要、来源索引与 VM 证据文件
+# Web search: bounded context and local evidence
 
-实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；产品只使用 Chat/Work；工具和委派分配已按 PA-Q01/04 落实。
+This specification supersedes the earlier Relay-only Serper design. The owner chose the official `pi-web-access` Serper implementation as the default search provider. PI Coffee retains its `web_search` tool and evidence adapter because the upstream tool writes complete search results into Pi history, contrary to the bounded-context contract. The official package is pinned in `package.json`; Coffee calls its `searchWithSerper` provider without copying its request implementation.
 
-## 边界
+## Search and credential boundary
 
-搜索仍走 Relay `/v1/search/serper`，Serper Key 只在 Relay；VM 持客户端 Token。原生模型认证与搜索认证是不同路径。本地 `web_search` 和 `/websearch` 保留唯一搜索入口；官方 `pi-web-access` 的同名搜索与 curator 命令继续过滤。
+`web_search` and `/websearch` use Serper on the User VM. The official package reads `serperApiKey` from `web-search.json` or `SERPER_API_KEY` from the process environment. Its configuration path is `$PI_CODING_AGENT_DIR/web-search.json` when that variable is set, otherwise `$XDG_CONFIG_HOME/pi/web-search.json` or `~/.pi/web-search.json`. Set `searchProvider` to `serper` for the official package's other search surfaces. Keep the configuration file outside Git with mode 0600. Do not put the key in prompts, tool arguments, research files, session history, logs, or Issues.
 
-## 新的历史合同
+Coffee filters the official extension's `web_search`, `/websearch`, and `/curator` registrations so searches initiated through the Coffee harness cannot bypass evidence limits. Other opt-in upstream content/source tools remain available under the capability policy. Search errors are reported; Coffee does not silently switch provider or account.
 
-1. 搜索完成后，先将完整的有界来源、URL、snippets 存成所属 Conversation Workspace 的 `research/` Markdown 证据文件（Project Workspace 对应 `.pi-coffee/research/`；目录 0700、文件 0600）。这不是聊天历史，也不自动加载进模型上下文。
-2. 工具返回和会话 custom entry 只保存短摘要、精选来源索引、artifact 路径与元数据；工具文本最多 4096 字符。**完整结果不先进入当前轮历史。**
-3. 默认选择供应商排序中前三个不同 URL，保留短 snippets。这里“最优”是排序启发式，不是已核实事实；重要结论仍应打开原始来源验证。超长 URL 不截成错误引用，改指向证据文件。
-4. 不等待 `agent_end`，因此后续 turn、取消、没有最终回答也不会留下本次完整搜索结果在历史中。
-5. `research_seal` 变为可选的结论精炼：输入已有 responseId 和至多 2400 字符的已核实结论，生成新证据文件并更新该结果的上下文投影。精炼时应引用精选来源，勿重复来源全表。
-6. 写盘失败就明确失败，不用“把原始结果塞回历史”作降级。
-7. 已有旧会话只做兼容的 context projection，不破坏性清洗或重写旧 JSONL。已有原始历史不会因升级自动消失。
+The prior `PI_COFFEE_SEARCH_URL`, `PI_COFFEE_RELAY_TOKEN`, and Relay-only `PI_COFFEE_SERPER_KEY` search path is no longer used by this Pi adapter. Server deployments that still expose a Relay route must reconcile that separate surface before treating the earlier Relay acceptance criteria as complete. Model authentication and Serper authentication remain separate.
 
-用户若主动读取完整 artifact，仍可能再次引入数据；通用提示词要求按范围检索，大工具结果由上下文入口策略限量。
+## Evidence and context contract
 
-## Chat/Work 搜索边界
+1. Before a successful tool return, save the bounded source list, URLs, and snippets to the owning Conversation Workspace's `research/` Markdown evidence file (Project Workspace: `.pi-coffee/research/`). Directories use 0700 and files 0600. Evidence is not loaded into model context automatically.
+2. Return only a short ranked brief, selected source index, artifact path, and metadata. Tool text is limited to 4096 characters. Complete search results never enter the current turn first.
+3. Select the first three distinct URLs in provider order and retain short snippets. Ranking is a heuristic, not verification; open primary sources before making consequential claims. An overlong URL is referenced through the evidence file rather than truncated into a broken link.
+4. Save immediately rather than waiting for `agent_end`, so cancellation or a later turn cannot leave complete search results in history. Failed disk writes fail the tool; they do not fall back to returning raw results.
+5. `research_seal` may add a verified conclusion of at most 2400 characters to a new evidence file and update the context projection for an existing response ID. It should cite selected sources without repeating the source table.
+6. Old sessions receive a compatible context projection. Existing JSONL is not destructively rewritten. A user-requested read of an entire evidence file can still reintroduce its contents, so source reading should stay targeted.
 
-Chat 常驻 web_search，始终直接搜索，即使参数 delegate=true 也不创建子任务。Work 按需激活 Web，沿用已有默认研究委派；delegate=false 显式直接搜索。Chat 不附加 Work 系统指令或子任务工具。
+## Chat and Work
 
-现有直接搜索、研究子 Pi、来源读取和短结论回传能力可复用。委派失败须明确报告，不能静默在父 Agent 重做；子进程不能递归委派。当前分派细节以 `src/extensions/web-access/extension.ts`、`src/harness/runtime-mode.ts` 和对应测试为准，旧产品分派文本已撤回 Git 历史（提交 `b027838`）。
+Chat keeps `web_search` visible and searches directly, even if `delegate=true`. Work activates Web on demand and delegates research to a native child by default; `delegate=false` searches directly. A child cannot delegate recursively. A failed delegation is reported without silently repeating the search in the parent. Chat receives neither Work-only system instructions nor subagent tools.
 
-`fetch_content`、`source_check`、`get_search_content` 继续属于可选 web-access 能力。后者的上游缓存不等同于本地 Serper artifact，不能假定互通；获取已知 URL 正文与读取本地 evidence 文件应使用各自工具。搜索故障明确报告，不自动换供应商或帐号。
+`fetch_content`, `source_check`, and `get_search_content` remain optional official web-access capabilities. The upstream cache used by `get_search_content` is distinct from Coffee's local Serper evidence artifact. Fetching a known URL and reading a local artifact have separate purposes.
 
-## 配置
+`PI_COFFEE_WEB`, `PI_COFFEE_WEB_ACCESS`, and `PI_COFFEE_WEB_SUBAGENT_AGENT` still control Coffee's extension and delegation behavior. `PI_COFFEE_RESEARCH_DIR` is only for compatibility with old sessions lacking a Workspace; a registered Conversation must resolve its own `research/` directory as specified in the [Conversation Workspace contract](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/conversation-workspaces.md).
 
-保留 `PI_COFFEE_SERPER_KEY`（仅 Relay）、`PI_COFFEE_SEARCH_URL`、`PI_COFFEE_RELAY_TOKEN`、`PI_COFFEE_WEB`、`PI_COFFEE_WEB_ACCESS`、`PI_COFFEE_WEB_SUBAGENT_AGENT`。`PI_COFFEE_RESEARCH_DIR` 只允许旧无 Workspace Session 的兼容读取/迁移；已登记 Conversation 必须按 [Conversation Workspace SPEC](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/conversation-workspaces.md)解析 `research/`，不能由全局环境变量覆盖到共享目录。
+## Acceptance
 
-## 验证
-
-`test/web-extension.test.ts` 覆盖默认先委派且父不搜索、失败不静默回退、显式直接搜索与有界 brief、立即持久化短结果、多 turn/恢复、写盘失败和精炼脱敏。`test/research-artifact.test.ts` 覆盖 artifact 权限和路径边界。当前实现仍默认写全局 Agent research 目录；改为按 Conversation 解析和跨 Conversation 拒绝属于 PA-013 的待实现验收。真实 Serper 质量、原生帐号和两台部署 VM 尚需实际验收，不以本地 stub 代替。
+The search adapter and Pi RPC tests cover the official provider boundary, source filtering, Chat/Work behavior, immediate evidence persistence, short context projection, and failure semantics. `npm run check` validates the package. A real model probe must separately show that the model chooses `web_search`, Serper returns sources, and the tool result/session retain only a brief and evidence pointer. A fixture probe does not establish live credential validity. Cross-Conversation workspace isolation remains a separate PA-013 acceptance item.

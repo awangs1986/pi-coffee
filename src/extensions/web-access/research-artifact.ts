@@ -117,6 +117,7 @@ function markdownLabel(value: string): string {
 
 function safeUrl(value: string): string {
   try {
+    if (redactSecrets(value) !== value) return "about:blank";
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") return "about:blank";
     return url.toString().replace(/[()]/g, (char) => encodeURIComponent(char));
@@ -131,6 +132,20 @@ export function redactSecrets(value: string): string {
     process.env.PI_COFFEE_RELAY_TOKEN,
     process.env.PI_COFFEE_SERPER_KEY,
     process.env.SERPER_API_KEY,
+    configuredSerperKey(),
   ].filter((secret): secret is string => typeof secret === "string" && secret.length > 3);
   return secrets.reduce((text, secret) => text.split(secret).join("[REDACTED]"), value);
+}
+
+function configuredSerperKey(): string | undefined {
+  const configDir = process.env.PI_CODING_AGENT_DIR
+    || (process.env.XDG_CONFIG_HOME ? join(process.env.XDG_CONFIG_HOME, "pi") : join(homedir(), ".pi"));
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(configDir, "web-search.json"), "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const key = (parsed as Record<string, unknown>).serperApiKey;
+    return typeof key === "string" ? key.trim() : undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -31,7 +31,9 @@ const searchUrl = `http://127.0.0.1:${server.address().port}`;
 const commonEnvironment = {
   PI_COFFEE_CONFORMED_CAPABILITIES: "web,web-access,subagent",
   PI_COFFEE_CAPABILITY_SETTINGS: "off",
-  PI_COFFEE_SEARCH_URL: searchUrl,
+  SERPER_API_KEY: "fixture-only",
+  PI_COFFEE_SERPER_FIXTURE_URL: `${searchUrl}/v1/search/serper`,
+  NODE_OPTIONS: `--import ${join(repo, "test/fixtures/serper-preload.mjs")}`,
   PI_COFFEE_SCHEDULER_DIR: join(root, "admission"),
   PI_SUBAGENTS_TEMP_ROOT: join(root, "children"),
   PI_LENS_HOME: join(root, "lens-home"),
@@ -383,14 +385,11 @@ function createFixtureSearchServer() {
     let body = "";
     for await (const chunk of request) body += chunk;
     if (request.url === "/v1/search/serper") {
-      const parsed = JSON.parse(body || "{}");
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
-        responseId: "real-agent-probe",
-        queries: parsed.queries ?? ["PI Coffee compatibility fixture"],
-        results: [{
+        organic: [{
           title: "PI Coffee compatibility fixture",
-          url: "https://example.com/pi-coffee-toolchain-fixture",
+          link: "https://example.com/pi-coffee-toolchain-fixture",
           snippet: "Local synthetic search result used only to verify the web tool adapter.",
         }],
       }));

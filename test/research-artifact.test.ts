@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -47,6 +47,28 @@ describe("research Markdown closure", () => {
       else process.env.PI_COFFEE_RELAY_TOKEN = previous;
       if (previousSerper === undefined) delete process.env.PI_COFFEE_SERPER_KEY;
       else process.env.PI_COFFEE_SERPER_KEY = previousSerper;
+    }
+  });
+
+  it("redacts an official Serper config key from evidence and context", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-coffee-serper-redaction-"));
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = root;
+    await writeFile(join(root, "web-search.json"), JSON.stringify({ serperApiKey: "configured-serper-secret" }), { mode: 0o600 });
+    try {
+      const store = new ResearchArtifactStore(root);
+      const ref = store.seal({
+        responseId: "response-3",
+        queries: ["configured-serper-secret"],
+        provider: "serper",
+        results: [{ title: "configured-serper-secret", url: "https://example.com/?key=configured-serper-secret", snippet: "configured-serper-secret" }],
+        conclusion: "configured-serper-secret",
+      });
+      expect(await readFile(ref.path, "utf8")).not.toContain("configured-serper-secret");
+      expect(pointerContext(ref, "configured-serper-secret")).not.toContain("configured-serper-secret");
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previous;
     }
   });
 

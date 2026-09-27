@@ -44,7 +44,7 @@ async function probe(lensEnabled) {
       const input = JSON.parse(body || '{}');
       if (req.url === '/v1/search/serper') {
         res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ responseId: 'probe', queries: ['fixture evidence'], results: [{ title: 'Fixture evidence', url: 'https://example.com/fixture', snippet: 'Synthetic local evidence' }] })); return;
+        res.end(JSON.stringify({ organic: [{ title: 'Fixture evidence', link: 'https://example.com/fixture', snippet: 'Synthetic local evidence' }] })); return;
       }
       if (++calls > 35) { res.writeHead(500); res.end('probe request limit'); return; }
       const names = (input.tools ?? []).map(t => t.function?.name).filter(Boolean);
@@ -65,7 +65,7 @@ async function probe(lensEnabled) {
   await writeFile(inspection, `import {writeFileSync} from 'node:fs'; export default function(pi){const snapshots=[]; const save=(label)=>{snapshots.push({label,active:pi.getActiveTools(),registered:pi.getAllTools().map(t=>t.name)});writeFileSync(${JSON.stringify(snapshotsPath)},JSON.stringify(snapshots));};pi.on('session_start',()=>save('session_start'));pi.registerCommand('toolchain-inspect',{description:'Local probe snapshot',handler:async(args)=>save(args)});}`);
   const extensions = resolvePiExtensions({ PI_COFFEE_AGENT_DIR: agentDir, PI_COFFEE_PI_LENS: lensEnabled ? 'on' : 'off' });
   const client = new RpcClient({ cliPath: join(repo, 'node_modules/@earendil-works/pi-coding-agent/dist/cli.js'), cwd: workspace, provider: 'probe', model: 'fixture',
-    env: { PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: '1', PI_COFFEE_SEARCH_URL: baseUrl, PI_COFFEE_SCHEDULER_DIR: join(root, 'admission'), PI_SUBAGENTS_TEMP_ROOT: join(root, 'children'), PI_LENS_HOME: join(root, 'lens-home'), PILENS_DATA_DIR: join(root, 'lens-data'), PI_LENS_DISABLE_LSP_INSTALL: '1', PI_LENS_DISABLE_TOOL_INSTALL: '1' },
+    env: { PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: '1', SERPER_API_KEY: 'fixture-only', PI_COFFEE_SERPER_FIXTURE_URL: baseUrl + '/v1/search/serper', NODE_OPTIONS: `--import ${join(repo, 'test/fixtures/serper-preload.mjs')}`, PI_COFFEE_SCHEDULER_DIR: join(root, 'admission'), PI_SUBAGENTS_TEMP_ROOT: join(root, 'children'), PI_LENS_HOME: join(root, 'lens-home'), PILENS_DATA_DIR: join(root, 'lens-data'), PI_LENS_DISABLE_LSP_INSTALL: '1', PI_LENS_DISABLE_TOOL_INSTALL: '1' },
     args: ['--offline', '--no-session', ...extensions.flatMap(p => ['--extension', p]), '--extension', inspection] });
   const errors = [];
   const unsubscribe = client.onEvent(event => {

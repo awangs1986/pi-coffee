@@ -56,8 +56,8 @@ try {
   }
   const websearch = commands.find((command) => command.name === "websearch");
   if (!websearch) throw new Error("Missing /websearch command");
-  if (!websearch.description.includes("PI Coffee Control Plane")) {
-    throw new Error(`Official curator command replaced PI Coffee /websearch: ${websearch.description}`);
+  if (!websearch.description.includes("official pi-web-access Serper")) {
+    throw new Error(`Official curator command replaced Coffee /websearch: ${websearch.description}`);
   }
   if (extensionErrors.length > 0) throw new Error(`Pi extension errors: ${JSON.stringify(extensionErrors)}`);
   console.log(JSON.stringify({
