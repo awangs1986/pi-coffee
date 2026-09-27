@@ -1397,14 +1397,23 @@ it("reports deadline failure visibly and uses one native summary instead", async
  }finally{await c.stop();await f.cleanup();}
 },60000);
 
-it("rejects invalid cadence instead of silently using native recovery", async () => {
+it("performs repeated immediate Handoffs when configured with zero native successes", async () => {
  const f=await fixture(undefined,undefined,["--handoff-native-limit","0"]),c=f.client();
  try{
-  await c.start();await c.promptAndWait("Preserve protected.txt.",undefined,15000);
-  await expect(c.compact()).rejects.toThrow();
-  const es=(await c.getEntries()).entries;
-  expect(es.filter((e:any)=>e.type==="compaction")).toHaveLength(0);
-  expect(JSON.stringify(es)).toContain("handoff-native-limit must be an integer");
+  await c.start();
+  await c.promptAndWait("Preserve protected.txt. Read it when requested.",undefined,15000);
+  await c.compact();
+  let es=(await c.getEntries()).entries;
+  expect(handoffs(es)).toHaveLength(1);
+  expect(nativeCompactions(es)).toHaveLength(0);
+  expect(handoffs(es)[0].details.nativeLimit).toBe(0);
+  expect((await c.getState()).sessionId).toBe(f.id);
+
+  await c.promptAndWait("Continue the authorized inspection.",undefined,15000);
+  await c.compact();
+  es=(await c.getEntries()).entries;
+  expect(handoffs(es)).toHaveLength(2);
+  expect(nativeCompactions(es)).toHaveLength(0);
  }finally{await c.stop();await f.cleanup();}
 },60000);
 

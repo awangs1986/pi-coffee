@@ -114,7 +114,7 @@ Pi RPC conversation seam. No Pi core changes or production deployment were made.
 
 ### Changes and regression evidence
 
-- Native success cadence is configurable (1–100, default 3). Tests distinguish the
+- Native success cadence is configurable (0–100, default 3). Tests distinguish the
   configured next boundary from immediate switching after the preceding success.
 - Concise source references replace model-generated quotation/metadata copying.
   The program binds hashes/timestamps, records bounded project observations in

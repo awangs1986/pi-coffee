@@ -1,9 +1,19 @@
 # Drift probe question bank (design, 2026-09-26)
 
-Status: **designed, not yet run.** Items: `test/fixtures/drift-probes.json`.
+Status: **designed and evaluated in two live cohorts.** Items: `test/fixtures/drift-probes.json`.
 Pure helpers (workspace/turn generation, scoring, wording lint):
 `scripts/drift-probes.mjs`, covered by `test/drift-probes.test.ts`. The paid
-Pi runner is intentionally not written yet; items should be reviewed first.
+Pi runner is `scripts/evaluate-drift.mjs`, with cohort, uniform rescore and
+aggregation scripts. See the [first cohort report](drift-probe-live-2026-09-26.md)
+and the [complete Muse medium comparison](drift-probe-muse-medium-2026-09-26.md).
+
+## Owner-confirmed acceptance scope (2026-09-26)
+
+The owner confirmed that evaluation must measure actual task outcomes and
+process violations after context transitions. The 13-item question bank is
+frozen in `test/fixtures/drift-probes.json`; the live reports record which
+cohorts ran, their actual transition schedules and remaining limitations.
+The later 250k ABCD protocol is documented separately in [测试方法.md](../测试方法.md).
 
 ## Why a new bank
 
@@ -41,14 +51,17 @@ product code to recognize that wording, which revision 4 removed.
   re-measured here.
 - The final turn is sent after the last boundary; the scorer inspects the
   resulting workspace.
-- **Drift curve (tests the cadence premise).** The owner's premise is that a few
-  native summaries are acceptable and drift grows with repetition. Run the native
-  arm at 3 and 7 intermediate turns (and optionally 11 via `extraNoise`, where the
-  handoff arm performs two Handoffs). If native accuracy at 3 is already clearly
-  below 7-turn Handoff accuracy, the default cadence should be revisited.
-- Pilot size: 13 items x 2 arms x 3 repetitions = 78 runs at 7 turns, plus 39
-  native runs at 3 turns. Report per-item outcomes. With this sample, report
-  counts and paired differences, not significance claims.
+- **Deferred drift curve.** A later study can investigate whether drift grows
+  across 3, 7 and 11 actual compaction boundaries. It must retain all core user
+  turns, corrections and checkpoints, predeclare the boundary schedule, and
+  describe added noise where used. Truncating the seven-turn task to three turns
+  changes the requirements and is not a valid cadence comparison. The current
+  staged batch does not establish an optimal cadence.
+- **Original pilot-size proposal (superseded):** 13 items x 2 arms x 3 repetitions
+  = 78 runs at seven boundaries, plus 39 native runs for the proposed shorter
+  curve. The later Muse medium cohort completed the 78-run comparison; the extra
+  3/7/11-boundary curve remains deferred. Report per-item counts and paired
+  differences, not significance claims from this small pilot.
 
 ## Items
 
@@ -99,8 +112,9 @@ point of the item, not a scorer artifact.
 
 ## Next step
 
-After owner review, add `scripts/evaluate-drift.mjs` reusing the recording proxy
-from `evaluate-paired.mjs`, materializing each item into an artifact directory
-outside Git, applying `changes` before the specified turns, checking checkpoints,
-and writing `score.json` with `scoreDriftProbe`. Add a cohort driver and aggregate
-report in the same style as `run-paired.mjs`.
+The runner, uniform rescore and cohort summary are in place. The Gemini/NewAPI
+cohort remains quota-interrupted; its 403 attempts are preserved. A separate
+Muse medium cohort completed all 78 planned runs under its own frozen settings.
+D03 still needs an execution-budget/model-behavior diagnosis because no run
+reached a valid final turn. Neither cohort establishes automatic continuation,
+an optimal native-compaction cadence or a general fidelity advantage.

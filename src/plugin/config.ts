@@ -16,7 +16,7 @@ export function registerPolicy(pi: ExtensionAPI) {
     return n;
   };
   return {
-    nativeLimit: () => integer("handoff-native-limit", 3, 1, 100),
+    nativeLimit: () => integer("handoff-native-limit", 3, 0, 100),
     generation: (model: { maxTokens: number; contextWindow: number; reasoning: boolean }) => {
       const thinking = pi.getThinkingLevel();
       const reasoning = model.reasoning && thinking !== "off" ? thinking : undefined;

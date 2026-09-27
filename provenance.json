@@ -101,5 +101,52 @@
       "kind": "coffee-integration-reference",
       "modifications": "none"
     }
+  ],
+  "referenceSnapshots": [
+    {
+      "name": "pi-native-compaction-0.87.1",
+      "sourceRepository": "https://github.com/earendil-works/pi",
+      "sourceCommit": "f07218c4d4bbc12bef056a7058c3dd49dfe41abe",
+      "package": "@earendil-works/pi-coding-agent@0.87.1",
+      "license": "MIT",
+      "licenseFile": "integrations/pi-native-compaction/LICENSE",
+      "files": [
+        {
+          "source": "packages/coding-agent/src/core/compaction/compaction.ts",
+          "destination": "integrations/pi-native-compaction/src/core/compaction/compaction.ts",
+          "sha256": "07c92263026e4c7792a64a1097246199dae70c8ecf3abc8ee55971cd1fcfc41b",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/compaction/utils.ts",
+          "destination": "integrations/pi-native-compaction/src/core/compaction/utils.ts",
+          "sha256": "6e9d2c0b6076d5cac5fd444e5381a1fc01da5acf30eb776319a6b562fc42a02c",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/agent-session.ts",
+          "destination": "integrations/pi-native-compaction/src/core/agent-session.ts",
+          "sha256": "e5c020bced4ada5c5e116cbd160f66e111016fc717ae30d79994a45527e7f3d7",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/session-manager.ts",
+          "destination": "integrations/pi-native-compaction/src/core/session-manager.ts",
+          "sha256": "ded5d65112f8666f0e3ae71dab39a302607c29a000745a3d06e00c2103c8f257",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/messages.ts",
+          "destination": "integrations/pi-native-compaction/src/core/messages.ts",
+          "sha256": "5397e3c96c9504266e4ee8b6e88d5098b3280ee7dbb0c687b74708c62a06c8d4",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        }
+      ]
+    }
   ]
 }

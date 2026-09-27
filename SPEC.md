@@ -1,9 +1,10 @@
 # Context-handoff
 
-Revision 4 — 2026-09-26. Status: implemented on the implementation branch; see docs/plugin-acceptance.md for bounded engineering evidence and remaining semantic limits.
+Revision 5 — 2026-09-26. Status: implemented on the implementation branch; see docs/plugin-acceptance.md for bounded engineering evidence and remaining semantic limits.
+Revision 5 adds an explicit zero-native cadence for the D arm of the ABCD evaluation; revision 4 owner decisions remain in force.
 Revision 4 adds three owner decisions (visible native fallback, budget degradation instead of stopping, structured step actions); see [Revision 4 owner decisions](#revision-4-owner-decisions-2026-09-26). Where they conflict with earlier text, revision 4 governs.
 This revision implements the owner's four requested corrections: configurable cadence, concise model state with program-owned evidence, model-aware generation, and automatic conversation acceptance. Revision 1's adaptation/import plan remains superseded.
-Tracking: [Issue #1](http://192.168.100.1:3000/awangs/Context-handoff/issues/1) (`ready-for-agent`).
+Tracking: [revision 4 implementation PR #1](https://github.com/awangs1986/context-handoff/pull/1) (`ready-for-agent`).
 
 ## Problem Statement
 
@@ -23,7 +24,7 @@ baseline, and its test results do not satisfy this specification.
 
 ## Solution
 
-Provide a Pi plugin that defaults to three successful native summary compactions. The cadence is configurable (1–100 native successes); three is an initial policy, not an empirically optimal or safe bound.
+Provide a Pi plugin that defaults to three successful native summary compactions. The cadence is configurable (0–100 native successes); zero means Handoff owns the next would-compact boundary immediately. Three is an initial policy, not an empirically optimal or safe bound.
 When the next compaction would begin, perform an automatic Handoff instead of the
 next native summary compaction (the fourth with default settings). Do not hand off immediately after the third
 success. If the task finishes before another compaction is needed, finish normally.
@@ -89,7 +90,7 @@ claimed, and three compactions is a policy choice rather than a proven safe boun
 
 2. **One principal testing seam.** Use Pi's public conversation lifecycle as the principal Interface: feed normal user input and compaction events, observe outgoing provider requests, visible history, continuation and recovery. Keep policy, source selection, packet persistence and context installation inside the Handoff module where possible. Do not expose a collection of management tools merely to make internal functions testable. The owner confirmed this whole-conversation acceptance level.
 
-3. **Success-based cadence.** Persist committed native summary compaction counts for the active conversation lineage/branch. Count manual and automatic native successes once; failures, cancellations, retries, process starts and Handoff synthesis calls do not count. Before the configured native-success count (default three), do not replace native summarization. At the next would-compact boundary, Handoff owns recovery and prevents a competing fourth native summary. Successful Handoff resets the new cycle to zero; failed preparation does not.
+3. **Success-based cadence.** Persist committed native summary compaction counts for the active conversation lineage/branch. Count manual and automatic native successes once; failures, cancellations, retries, process starts and Handoff synthesis calls do not count. The configured count is 0–100 (default three). Before a positive configured count is reached, do not replace native summarization; at the next would-compact boundary, Handoff owns recovery and prevents a competing native summary. At zero, Handoff owns the first would-compact boundary. Successful Handoff resets the new cycle to zero; failed preparation does not.
 
 4. **Logical continuity is mandatory; physical session strategy is open.** Preserve one user-visible Conversation and its history/resources. Either rebuilding active context inside the native session or internally replacing a session may be used if supported by public Pi interfaces and the complete contract. A plugin that merely starts a new visible conversation fails acceptance. Validate the supported mechanism before committing to storage or transition architecture; an unsupported host must not advertise seamless operation or silently fall back to a visible new conversation.
 
@@ -125,6 +126,7 @@ claimed, and three compactions is a policy choice rather than a proven safe boun
 
 - **Main acceptance surface, owner confirmed:** run the complete Pi conversation workflow through public lifecycle controls with a controlled provider, capturing actual outgoing requests, user-visible conversation/history and resumed work. Use this single high seam to exercise counting, preparation, context installation, recovery and continuation together. Test observable behavior rather than internal class layout, private helpers or incidental summary wording.
 - **Cadence:** observe three actual successful native summary compactions, no immediate Handoff after the third, and Handoff instead of the fourth would-compact event. Include manual/automatic entry, failed/cancelled attempts, restart, model change, branch restore, a second Handoff cycle and a task that finishes before the next boundary.
+- **Zero-native candidate for ABCD D:** with `--handoff-native-limit 0`, observe a committed Handoff at the first and every subsequent would-compact boundary, no native summary entries, and the same visible Conversation. Confirm the default remains 3 and the limit-3 C arm behaves the same on this build.
 - **Invisible continuity:** assert the visible Conversation identity, earlier history, Workspace and attachments remain usable; the active authorized task continues without an extra user message. Assert completed/cancelled work stays stopped. Do not accept an idle replacement session as a completed Handoff.
 - **Fidelity fixtures:** use independent expected task facts covering an older correction outside the recent tail, a constraint in a later paragraph, a revoked requirement, a rejected approach, partial completion, stale test evidence, exact identifiers/error spellings and unresolved conflicting claims. Inspect the installed context and subsequent externally visible behavior; do not use the generated brief as its own expected answer.
 - **Original recovery:** remove a detail from the compact narrative while retaining a discovery hint, then recover its exact original text through the plugin Interface across successive Handoffs. Cover branch navigation, missing/tampered/foreign sources, source ranges and output budgets. Retrieval being possible and the agent recognizing when to retrieve are separate properties.
