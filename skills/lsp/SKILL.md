@@ -1,6 +1,6 @@
 ---
 name: lsp
-description: Use project language-server semantics for type diagnostics, symbols, definitions, references, and hover when software work depends on more than text matching.
+description: Use project language-server semantics for type diagnostics, symbols, definitions, references, implementation candidates, and hover when software work depends on more than text matching.
 ---
 
 # LSP project intelligence
@@ -23,8 +23,33 @@ coffee-lsp hover --file src/example.ts --line 12 --column 8
 coffee-lsp diagnostics --file src/example.ts
 ```
 
-When `status` says the server is available and the task depends on types or symbol identity, do not stop at the status probe. Run at least one semantic operation that answers the task. For a code change, run `diagnostics` before editing, use `definition` or `references` when cross-file identity or impact matters, and run `diagnostics` again after editing.
+When `status` says the server is available and the task depends on types or symbol identity, do not stop at the status probe. Run at least one semantic operation that answers the task. For a semantic code change, run `diagnostics` before editing, use `definition` or `references` when cross-file identity or impact matters, and run `diagnostics` again after editing.
 
 Read the JSON envelope, including `status`, `issues`, `coverage`, and `diagnosticState`. An empty navigation result means only that this query returned no match. Diagnostics are clean only when `diagnosticState` is `clean`; treat `inconclusive`, timeouts, missing servers, stale positions, and truncated coverage as explicit limitations.
 
 Read relevant source before editing. After a change, rerun diagnostics for changed files and affected callers, then run the project's own compiler, tests, and lint through Bash. LSP evidence complements project checks and does not replace them. Keep queries narrow; do not scan the whole workspace when the task names specific files or symbols.
+
+`status` only checks installation and project selection; `capabilityState: not_negotiated`
+means no server has started. A semantic call negotiates support and may return
+`unsupported_operation`. For interface, trait or virtual-method dispatch candidates:
+
+```bash
+coffee-lsp implementation --file src/example.ts --line 12 --column 8
+```
+
+Candidates do not prove which implementation executes at runtime. Required profiles
+are TS/JS, Python, C# (`csharp-ls` plus .NET SDK), C/C++ (`clangd` plus a compilation
+database), Rust (`rust-analyzer`, Cargo and rust-src), and Go (`gopls` plus Go).
+Run from the task checkout; use `--workspace` to bound project selection. SDKs,
+Cargo features/target and Go build tags/environment must match the project's checks.
+Use `--timeout-ms 30000` for a cold project. Missing dependencies or uncertain
+coverage require an explicit limitation and the project's compiler/checks.
+
+Documentation-only and ordinary text changes do not need LSP. For semantic changes,
+choose the smallest useful set of queries; you do not need to call every operation.
+Saved source changes are synchronized with a warm server; configuration changes
+replace that server. Results describe saved files, and a changed file hash makes
+an earlier navigation position stale. Pyright does not provide implementation
+lookup; treat `unsupported_operation` as that backend limitation. A short cold
+diagnostic query may be inconclusive; retry with the documented cold-project
+budget and retain the project compiler/check as independent evidence.

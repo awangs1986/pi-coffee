@@ -2,6 +2,36 @@
 
 # LSP 中间层：Pi Skill 与 CLI
 
+## Current contract: OMP LSP port, 2026-09-27
+
+This addendum supersedes conflicting implementation/default claims in the historical
+V1 baseline below. Scope is HARNESS-P3/P4 LSP only on unmodified Pi 0.87.1.
+Seven CLI operations are status, symbols, definition, references, hover,
+implementation and diagnostics. Six profiles are TS/JS, Python, C#, C/C++, Rust
+and Go. Implementation is capability-gated; Pyright reports unsupported.
+
+Source saves use incremental document/watched-file synchronization. Configuration
+changes retire the old process. Persistent push reports and fresh complete pulls are
+attributed to the current saved document; known stale, absent and provisional
+cold-empty reports remain inconclusive. Versionless reports follow the OMP settle
+heuristic for these backends. Batch timeouts preserve already-confirmed findings.
+
+The CLI defaults to a 10 s operation budget (30 s recommended for cold projects),
+60 s maximum, four cached language servers and 5 min daemon idle timeout. The
+operation budget includes startup and queue time; transport/termination add bounded
+cleanup overhead. Timeouts/cancellation use exit 4; invalid coordinates use exit 2.
+A timeout does not poison a healthy server. Stop awaits actual daemon exit.
+Deterministic initialization failures back off for 3 min; changed configuration,
+caller-shortened deadlines and explicit stop/restart permit a fresh attempt.
+
+Coffee retains its read-only CLI, bounded JSON and task ownership. OMP Agent/TUI,
+context, tool framework, mux, and editor mutation are excluded. Current evidence
+and exact reproduction steps are in [OMP LSP acceptance](../testing/omp-lsp-acceptance.md);
+source attribution is in [the provenance notice](../../third_party/oh-my-pi/README.md).
+Historical live-model results below do not certify the new port.
+
+## Historical V1 baseline
+
 状态：**V1 CLI、Skill、TypeScript/Python Profile 与按需复用已实现并实测**。关联 PA-007、PA-011、PA-012。模型工具表精简与 Chat/Work 隔离已于 2026-09-22 完成；压力/性能基准和 V2 WorkspaceEdit 仍待验收。实现使用 CLI，不使用 MCP，也不依赖 pi-lens。
 
 ## 1. 目标与成功标准

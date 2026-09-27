@@ -11,6 +11,7 @@ it("ships installable Pi runtime entries and Skills without Host or Web implemen
     "dist/src/runtime.js", "dist/src/runtime.d.ts", "dist/src/pi-extension.js",
     "dist/src/harness/prompts/software-development.md", "dist/src/subagents/launch.py",
     "dist/bin/coffee-lsp", "dist/skills/lsp/SKILL.md",
+    "dist/third_party/oh-my-pi/LICENSE", "dist/third_party/oh-my-pi/README.md",
   ]));
   expect(files.filter(path => /(^|\/)(host|web|relay|public|deploy)(\/|$)/.test(path))).toEqual([]);
   for (const path of ["src/host", "src/web", "src/relay", "public", "src/main.ts"]) {
