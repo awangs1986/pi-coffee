@@ -1,10 +1,121 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { runCoffeeLsp } from "../src/lsp/cli.js";
+import { stopLspDaemon } from "../src/lsp/transport.js";
+const exec = promisify(execFile);
 
 describe("coffee-lsp real server profiles", () => {
+  it("confirms saved clean-to-clean edits and unchanged rewrites on the warm TypeScript server", async () => {
+    const root = mkdtempSync(join(tmpdir(), "coffee-lsp-ts-warm-"));
+    const source = join(root, "src/app.ts");
+    const dependent = join(root, "src/dependent.ts");
+    const env = {
+      ...process.env,
+      PI_COFFEE_ROOT_SESSION: root,
+      XDG_RUNTIME_DIR: root,
+    };
+    mkdirSync(join(root, "src"));
+    writeFileSync(
+      join(root, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: { strict: true, noEmit: true },
+        include: ["src/**/*.ts"],
+      }),
+    );
+    writeFileSync(source, "export const value: number = 1;\n");
+    writeFileSync(
+      dependent,
+      'import { value } from "./app";\nexport const doubled: number = value * 2;\n',
+    );
+    const query = async (timeoutMs: number, file = source) => {
+      const args = [
+        fileURLToPath(new URL("../dist/src/lsp/bin.js", import.meta.url)),
+        "diagnostics",
+        "--file",
+        file,
+        "--timeout-ms",
+        String(timeoutMs),
+      ];
+      try {
+        const { stdout, stderr } = await exec(process.execPath, args, {
+          cwd: root,
+          env,
+        });
+        expect(stderr).toBe("");
+        return { code: 0, json: JSON.parse(stdout) };
+      } catch (error: any) {
+        if (!error.stdout) throw error;
+        return { code: error.code, json: JSON.parse(error.stdout) };
+      }
+    };
+    try {
+      expect(await query(15000)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean" },
+      });
+      expect(await query(4000, dependent)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean", coverage: { confirmedFiles: 1 } },
+      });
+      writeFileSync(source, "export const value: number = 2;\n");
+      expect(await query(4000)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean", coverage: { confirmedFiles: 1 } },
+      });
+      expect(await query(4000, dependent)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean", coverage: { confirmedFiles: 1 } },
+      });
+      writeFileSync(source, 'export const value: string = "wrong";\n');
+      expect(await query(4000, dependent)).toMatchObject({
+        code: 0,
+        json: {
+          diagnosticState: "findings",
+          items: [expect.objectContaining({ code: 2362 })],
+        },
+      });
+      writeFileSync(source, "export const value: number = 2;\n");
+      expect(await query(4000, dependent)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean", coverage: { confirmedFiles: 1 } },
+      });
+      writeFileSync(source, "export const value: number = 'wrong';\n");
+      expect(await query(4000)).toMatchObject({
+        code: 0,
+        json: {
+          diagnosticState: "findings",
+          items: [expect.objectContaining({ code: 2322 })],
+        },
+      });
+      writeFileSync(source, "export const value: number = 3;\n");
+      expect(await query(4000)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean", coverage: { confirmedFiles: 1 } },
+      });
+      writeFileSync(source, "export const value: number = 3;\n");
+      utimesSync(source, new Date(), new Date(Date.now() + 2000));
+      expect(await query(3000)).toMatchObject({
+        code: 0,
+        json: { diagnosticState: "clean", coverage: { confirmedFiles: 1 } },
+      });
+    } finally {
+      await stopLspDaemon(root, env);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("finds and clears a real TypeScript error and honors Unicode code-point columns", async () => {
     const root = mkdtempSync(join(tmpdir(), "coffee-lsp-ts-"));
     const source = join(root, "src/app.ts");

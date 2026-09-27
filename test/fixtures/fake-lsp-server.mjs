@@ -1,13 +1,38 @@
 #!/usr/bin/env node
 
-import { appendFileSync } from "node:fs";
+import {
+  appendFileSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from "node:fs";
 
-if (process.env.PI_COFFEE_FAKE_LSP_STARTS) appendFileSync(process.env.PI_COFFEE_FAKE_LSP_STARTS, "start\n");
+if (process.env.PI_COFFEE_FAKE_LSP_STARTS)
+  appendFileSync(process.env.PI_COFFEE_FAKE_LSP_STARTS, "start\n");
+
+if (process.env.PI_COFFEE_FAKE_LSP_PID)
+  writeFileSync(process.env.PI_COFFEE_FAKE_LSP_PID, String(process.pid));
 
 let input = Buffer.alloc(0);
 let opened = "";
 let uri = "";
 let version = 0;
+let waitingHover;
+let dependency = "";
+let references = 0;
+let pulls = 0;
+let closedForBarrier = false;
+const dependencyPath = process.env.PI_COFFEE_FAKE_LSP_DEPENDENCY_FILE ?? "lib.ts";
+const readDependency = () =>
+  existsSync(dependencyPath) ? readFileSync(dependencyPath, "utf8") : "missing";
+const findings = () => [
+  {
+    range: range(1, 6),
+    severity: 1,
+    code: "fixture-error",
+    message: "BAD is not assignable",
+  },
+];
 
 process.stdin.on("data", (chunk) => {
   input = Buffer.concat([input, chunk]);
@@ -24,7 +49,9 @@ function consume() {
     const length = Number(match[1]);
     const end = marker + 4 + length;
     if (input.length < end) return;
-    const message = JSON.parse(input.subarray(marker + 4, end).toString("utf8"));
+    const message = JSON.parse(
+      input.subarray(marker + 4, end).toString("utf8"),
+    );
     input = input.subarray(end);
     handle(message);
   }
@@ -32,7 +59,9 @@ function consume() {
 
 function send(message) {
   const body = JSON.stringify(message);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+  process.stdout.write(
+    `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
+  );
 }
 
 function reply(message, result) {
@@ -40,53 +69,297 @@ function reply(message, result) {
 }
 
 function handle(message) {
-  if (message.method === "initialize") {
-    reply(message, { capabilities: {
-      positionEncoding: "utf-16",
-      textDocumentSync: 2,
-      documentSymbolProvider: true,
-      definitionProvider: true,
-      referencesProvider: true,
-      hoverProvider: true,
-    } });
+  if (message.id === "fixture-settings" && !message.method) {
+    reply(waitingHover, {
+      contents: message.result?.[0]?.target ?? "missing-settings",
+    });
     return;
   }
-  if (message.method === "shutdown") { reply(message, null); return; }
-  if (message.method === "textDocument/didOpen" || message.method === "textDocument/didChange") {
-    uri = message.params.textDocument.uri;
+  if (message.id === "server-edit" && !message.method) {
+    reply(waitingHover, {
+      contents:
+        message.result?.applied === false
+          ? "server edit declined"
+          : "server edit not declined",
+    });
+    return;
+  }
+  if (
+    message.method === "$/cancelRequest" &&
+    process.env.PI_COFFEE_FAKE_LSP_CANCEL
+  ) {
+    appendFileSync(process.env.PI_COFFEE_FAKE_LSP_CANCEL, "cancelled");
+    return;
+  }
+  if (
+    message.method === "initialized" &&
+    process.env.PI_COFFEE_FAKE_LSP_PAUSE
+  ) {
+    process.stdin.pause();
+    setInterval(() => {}, 1000);
+    return;
+  }
+  if (
+    message.method === "initialized" &&
+    process.env.PI_COFFEE_FAKE_LSP_DYNAMIC
+  ) {
+    send({
+      jsonrpc: "2.0",
+      id: "register",
+      method: "client/registerCapability",
+      params: {
+        registrations: [
+          { id: "diagnostics", method: "textDocument/diagnostic" },
+          { id: "hover", method: "textDocument/hover" },
+        ],
+      },
+    });
+    return;
+  }
+  if (message.method === "textDocument/diagnostic") {
+    if (process.env.PI_COFFEE_FAKE_LSP_PULL_FAIL) {
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32603, message: "pull failed" },
+      });
+      return;
+    }
+    reply(message, {
+      kind: "full",
+      items: process.env.PI_COFFEE_FAKE_LSP_PULL_SEQUENCE
+        ? ++pulls === 1
+          ? []
+          : findings()
+        : opened.includes("BAD")
+          ? findings()
+          : [],
+    });
+    return;
+  }
+  if (message.method === "workspace/didChangeWatchedFiles") {
+    dependency = readDependency();
+    return;
+  }
+  if (message.method === "initialize") {
+    dependency = readDependency();
+    if (process.env.PI_COFFEE_FAKE_LSP_INIT_FAIL) {
+      send({
+        jsonrpc: "2.0",
+        id: message.id,
+        error: { code: -32603, message: "initialization failed" },
+      });
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_INIT_HANG) {
+      appendFileSync(
+        process.env.PI_COFFEE_FAKE_LSP_INIT_HANG,
+        String(process.pid),
+      );
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_NOISE)
+      process.stdout.write("server starting\r\n\r\n");
+    const initialized = {
+      capabilities: {
+        positionEncoding: "utf-16",
+        textDocumentSync: 2,
+        documentSymbolProvider: !process.env.PI_COFFEE_FAKE_LSP_NO_SYMBOLS,
+        definitionProvider: true,
+        implementationProvider: true,
+        referencesProvider: true,
+        hoverProvider: !process.env.PI_COFFEE_FAKE_LSP_DYNAMIC,
+      },
+    };
+    if (process.env.PI_COFFEE_FAKE_LSP_INIT_DELAY)
+      setTimeout(
+        () => reply(message, initialized),
+        Number(process.env.PI_COFFEE_FAKE_LSP_INIT_DELAY),
+      );
+    else reply(message, initialized);
+    return;
+  }
+  if (message.method === "exit") {
+    process.exit(0);
+  }
+  if (message.method === "shutdown") {
+    reply(message, null);
+    return;
+  }
+  if (
+    message.method === "textDocument/didClose" &&
+    process.env.PI_COFFEE_FAKE_LSP_BARRIER_HANG
+  ) {
+    opened = "";
+    closedForBarrier = true;
+    return;
+  }
+  if (
+    message.method === "textDocument/didOpen" ||
+    message.method === "textDocument/didChange"
+  ) {
+    const previousWasClean = !opened.includes("BAD");
+    if (
+      process.env.PI_COFFEE_FAKE_LSP_SAME_TEXT &&
+      opened &&
+      opened ===
+        (message.params.textDocument.text ??
+          message.params.contentChanges?.at(-1)?.text)
+    )
+      return;
+    uri = process.env.PI_COFFEE_FAKE_LSP_RAW_URI
+      ? decodeURIComponent(message.params.textDocument.uri)
+      : message.params.textDocument.uri;
     version = message.params.textDocument.version;
-    opened = message.params.textDocument.text ?? message.params.contentChanges?.at(-1)?.text ?? opened;
-    setTimeout(() => send({ jsonrpc: "2.0", method: "textDocument/publishDiagnostics", params: {
-      uri, version,
-      diagnostics: opened.includes("BAD") ? [{
-        range: { start: { line: 1, character: 6 }, end: { line: 1, character: 9 } },
-        severity: 1,
-        code: "fixture-error",
-        source: "fixture-lsp",
-        message: "BAD is not assignable",
-      }] : [],
-    } }), 10);
+    opened =
+      message.params.textDocument.text ??
+      message.params.contentChanges?.at(-1)?.text ??
+      opened;
+    if (
+      process.env.PI_COFFEE_FAKE_LSP_SUPPRESS_CLEAN &&
+      message.method === "textDocument/didChange" &&
+      previousWasClean &&
+      !opened.includes("BAD")
+    )
+      return;
+    if (
+      (process.env.PI_COFFEE_FAKE_LSP_SILENT_FILE &&
+        uri.endsWith("silent.ts")) ||
+      process.env.PI_COFFEE_FAKE_LSP_DYNAMIC ||
+      process.env.PI_COFFEE_FAKE_LSP_SILENT
+    )
+      return;
+    setTimeout(
+      () =>
+        send({
+          jsonrpc: "2.0",
+          method: "textDocument/publishDiagnostics",
+          params: {
+            uri,
+            version: process.env.PI_COFFEE_FAKE_LSP_STALE
+              ? version - 1
+              : process.env.PI_COFFEE_FAKE_LSP_VERSIONLESS
+                ? undefined
+                : version,
+            diagnostics: opened.includes("BAD")
+              ? [
+                  {
+                    range: {
+                      start: { line: 1, character: 6 },
+                      end: { line: 1, character: 9 },
+                    },
+                    severity: 1,
+                    code: "fixture-error",
+                    source: "fixture-lsp",
+                    message: "BAD is not assignable",
+                  },
+                ]
+              : [],
+          },
+        }),
+      10,
+    );
     return;
   }
   if (message.method === "textDocument/documentSymbol") {
-    reply(message, [{ name: "target", kind: 12, range: range(0, 16), selectionRange: range(0, 16) }]);
+    if (closedForBarrier && process.env.PI_COFFEE_FAKE_LSP_BARRIER_HANG) {
+      if (process.env.PI_COFFEE_FAKE_LSP_BARRIER_STARTED)
+        writeFileSync(process.env.PI_COFFEE_FAKE_LSP_BARRIER_STARTED, "ready");
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_UNREGISTER)
+      send({
+        jsonrpc: "2.0",
+        id: "unregister",
+        method: "client/unregisterCapability",
+        params: {
+          unregisterations: [
+            { id: "diagnostics", method: "textDocument/diagnostic" },
+            { id: "hover", method: "textDocument/hover" },
+          ],
+        },
+      });
+    reply(message, [
+      {
+        name: "target",
+        kind: 12,
+        range: range(0, 16),
+        selectionRange: range(0, 16),
+      },
+    ]);
     return;
   }
-  if (message.method === "textDocument/definition") {
+  if (
+    ["textDocument/definition", "textDocument/implementation"].includes(
+      message.method,
+    )
+  ) {
     reply(message, [{ uri, range: range(0, 16) }]);
     return;
   }
   if (message.method === "textDocument/references") {
+    if (process.env.PI_COFFEE_FAKE_LSP_REFERENCES && references++ < 2) {
+      reply(message, []);
+      return;
+    }
     reply(message, [{ uri, range: range(1, 6) }]);
     return;
   }
   if (message.method === "textDocument/hover") {
-    reply(message, { contents: { kind: "plaintext", value: "const target: number" }, range: range(0, 16) });
+    if (process.env.PI_COFFEE_FAKE_LSP_BARRIER_HANG && !opened) {
+      reply(message, null);
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_HOVER_STARTED)
+      writeFileSync(process.env.PI_COFFEE_FAKE_LSP_HOVER_STARTED, "ready");
+    if (process.env.PI_COFFEE_FAKE_LSP_DEPENDENCY) {
+      reply(message, { contents: dependency });
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_SETTINGS) {
+      waitingHover = message;
+      send({
+        jsonrpc: "2.0",
+        id: "fixture-settings",
+        method: "workspace/configuration",
+        params: { items: [{ section: "fixture" }] },
+      });
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_CANCEL) return;
+    if (process.env.PI_COFFEE_FAKE_LSP_APPLY) {
+      waitingHover = message;
+      send({
+        jsonrpc: "2.0",
+        id: "server-edit",
+        method: "workspace/applyEdit",
+        params: {
+          edit: {
+            changes: { [uri]: [{ range: range(0, 0), newText: "MUTATED" }] },
+          },
+        },
+      });
+      return;
+    }
+    if (process.env.PI_COFFEE_FAKE_LSP_DELAY) {
+      setTimeout(
+        () => reply(message, { contents: "const target: number" }),
+        Number(process.env.PI_COFFEE_FAKE_LSP_DELAY),
+      );
+      return;
+    }
+    reply(message, {
+      contents: { kind: "plaintext", value: "const target: number" },
+      range: range(0, 16),
+    });
     return;
   }
   if (message.id !== undefined) reply(message, null);
 }
 
 function range(line, character) {
-  return { start: { line, character }, end: { line, character: character + 6 } };
+  return {
+    start: { line, character },
+    end: { line, character: character + 6 },
+  };
 }

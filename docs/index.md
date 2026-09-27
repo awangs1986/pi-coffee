@@ -5,7 +5,7 @@
 - [Package integration](development/package-integration.md): public exports, installation and consumer lifecycle.
 - [Pi specification](spec/pi-agent.md): current contracts and historical acceptance limits.
 - [Work prompt](spec/harness-prompt.md), [tool selection](spec/work-tools.md), [Harness extension](spec/harness-plugin.md).
-- [LSP CLI and Skill](spec/lsp-middle-layer.md).
+- [LSP CLI and Skill](spec/lsp-middle-layer.md), [OMP port acceptance method](testing/omp-lsp-acceptance.md).
 - [Subagents](spec/subagents-plugin.md), [search](spec/web-search-plugin.md), [context recovery](spec/context-recovery.md).
 - [Manual prompt checks](testing/work-prompt-manual.md).
 - [Backlog](../BACKLOG.md): branch-specific work and open scope.
