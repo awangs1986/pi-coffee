@@ -1,9 +1,18 @@
 # Native Agent activation and recovery
 
-This release adds opt-in Host Adapters for Codex CLI **0.154.0** and Claude Code
+This release adds opt-in Host Adapters for Codex CLI **0.154.0 / 0.156.1** and Claude Code
 CLI **2.1.280**. Other versions remain unavailable until their native interface
 is verified. Pi remains the default. M5 production activation and two-user acceptance are
 recorded in [the deployment evidence](../reviews/native-agents-m5-20260923.md).
+
+The local workbench recovery on 2026-09-27 additionally verifies Codex 0.156.1:
+native account readiness, the Luna model catalogue, reading an existing synthetic
+thread, and opening a new empty Work task through the real Browser/Server/Host.
+The authenticated Host regression test covers discovery, task creation and empty
+history; unknown CLI versions remain disabled. No additional model turn was sent
+during UI recovery. This is compatibility evidence for those operations, not a
+new paid-model acceptance run. The complete browser belongs to the separate
+`awangs/pi-coffee-server` repository; the older GitHub monolith is not its release.
 
 ## Installation and activation
 
