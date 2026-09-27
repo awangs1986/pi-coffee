@@ -1,5 +1,11 @@
 # PI Coffee documentation map
 
+> **Deployment source correction (2026-09-27):** this GitHub main preserves the
+> arena work, but its monolithic Web is missing the complete split Server UI.
+> Do not deploy it over the complete workbench. Read the
+> [recovery and repository ownership notice](deployment/workbench-recovery-20260927.md)
+> before another LAN deployment.
+
 This is the handoff index for the independent PI Coffee repository. It is deliberately short; each linked document is the single source for one kind of knowledge.
 
 ## Read in this order
