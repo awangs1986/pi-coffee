@@ -1,18 +1,13 @@
-# PI Coffee documentation map
+# PI Coffee documentation
 
-## Current authority
+[ADR-0021](adr/0021-pi-only-source-authority.md) defines source placement. GitHub `awangs1986/pi-coffee` is the Pi-only authority; Gitea mirrors its main. Host/Web/Relay and native Agent adapters belong to [pi-coffee-server](https://github.com/awangs1986/pi-coffee-server).
 
-[ADR-0020](adr/0020-unified-github-authority.md) defines GitHub as the source authority and retains Host in `pi-coffee-server`. Gitea mirrors the same source revision while continuing to provide product login, projects and Issues. Earlier repository split and per-user-VM-only documents are historical where they conflict with this decision.
+- [Package integration](development/package-integration.md): public exports, installation and consumer lifecycle.
+- [Pi specification](spec/pi-agent.md): current contracts and historical acceptance limits.
+- [Work prompt](spec/harness-prompt.md), [tool selection](spec/work-tools.md), [Harness extension](spec/harness-plugin.md).
+- [LSP CLI and Skill](spec/lsp-middle-layer.md).
+- [Subagents](spec/subagents-plugin.md), [search](spec/web-search-plugin.md), [context recovery](spec/context-recovery.md).
+- [Manual prompt checks](testing/work-prompt-manual.md).
+- [Backlog](../BACKLOG.md): branch-specific work and open scope.
 
-## Read by task
-
-- Source reconciliation or release: [comparison and acceptance](reviews/repository-unification-20260927.md), [AGENTS.md](../AGENTS.md), [BACKLOG.md](../BACKLOG.md).
-- Product workbench: [Arena navigation](spec/arena-navigation.md), [Context Usage](spec/context-usage.md), [task directories](spec/conversation-workspaces.md), [Skills](spec/skill-management.md).
-- Agent integration: [native engines](spec/native-agent-engines.md), [native browser](spec/native-agent-browser.md), [shared Host](adr/0010-one-shared-user-vm-with-gitea-identity-and-per-user-folders.md), [Codex adapter](adr/0011-agent-seam-admits-codex-app-server.md).
-- Pi-only tools: [Chat/Work prompts](spec/harness-prompt.md), [work tools](spec/work-tools.md), [LSP CLI](spec/lsp-middle-layer.md). Pi customization does not change native Codex or Claude tools.
-- Runtime boundaries: [wire protocol](protocol.md), [Host interface](host-interface.md).
-- Deployment: [unified release runbook](deployment/unified-release.md). Historical environment-specific evidence remains under `docs/deployment/evidence/`.
-
-Issues carry scope, status and acceptance evidence; checked-in code and tests carry implemented behavior. [Server recovery Issue #17](http://gitea:3000/awangs/pi-coffee-server/issues/17) is the current reconciliation entrypoint. Picode/V5 is a frozen reference.
-
-- [Pi 0.87.1 main upgrade](reviews/pi-0.87.1-main-20260927.md): pinned runtime, optional-plugin compatibility and reproducible checks; [Server #18](http://gitea:3000/awangs/pi-coffee-server/issues/18).
+Extraction acceptance is recorded in [Pi #70](http://gitea:3000/awangs/pi-coffee/issues/70), paired with [Server #19](http://gitea:3000/awangs/pi-coffee-server/issues/19). Referenced historical reports remain at their pinned Server revision; they do not certify this package or a new deployment.

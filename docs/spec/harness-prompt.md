@@ -1,3 +1,5 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # Work 软件开发系统提示词 SPEC
 
 持续维护规格 · 修订：6 · 最近更新：2026-09-21。
@@ -27,7 +29,7 @@
 | **WP-009 审查与诊断的报告方式** | 仅审查/诊断请求保持只读；混合请求中的明确修复授权继续有效；报告以缺陷为主、按严重度排序并给出文件与行号，区分已确认事实与待确认问题，未发现缺陷也要明说 | 与 WP-001 配对：既不许把审查当实施授权，也不许只给总结不给发现。不写排序规则就无法稳定产出可用审查 |
 | **WP-010 他人工作与意外状态** | 不认识的改动、未提交内容和异常状态视为他人成果：先调查，删除/回滚/覆盖之前先问；优先使用专用工具而非等价 shell 命令 | 对应实际事故类型（误删用户进行中的工作）。不引入自动 worktree 或快照机制，靠行为约束 + 人工确认 |
 
-部署/工作区授权按 [GW-01～03](./gitea-workspaces.md)：VM owner 可 sudo，登记的 Conversation 分支普通 commit/push 预授权；WP-006 必须尊重这类持续授权，不重复询问。原生扩展已通过 owner capability 注入实际范围，通用正文不嵌入产品身份或远端地址；真实模型和目标 VM 行为仍在 T0 验收记录中单独取证。
+部署/工作区授权按 [GW-01～03](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/gitea-workspaces.md)：VM owner 可 sudo，登记的 Conversation 分支普通 commit/push 预授权；WP-006 必须尊重这类持续授权，不重复询问。原生扩展已通过 owner capability 注入实际范围，通用正文不嵌入产品身份或远端地址；真实模型和目标 VM 行为仍在 T0 验收记录中单独取证。
 
 具体工具名称以当前接口为准；若未来删除/替换 `search_tools` 或 `recall_folded`，必须同步正文、调用示例、测试和对应专项 SPEC，不能只改工具实现。正文只能在能力可用且被允许时指导使用它。
 
@@ -66,7 +68,7 @@ Pi 原生提示词的最新源码依据是 `earendil-works/pi@c596d09d9cef6fdf0d
 | 正文当前体积 | 8,992 UTF-8 字节、1,324 个空白分词（2026-09-21 修订 6）；修订 4/5 为 8,794 字节 / 1,295 词。净增 198 字节，上限仍为 9,000 | 不是精确 token 数，也不含 Base、项目指令、schema、消息或媒体；变更后重测 |
 | 与原生去重的范围 | 不重复 Pi 原生 Guidelines（简洁、列路径）与逐工具用途列表；项目专属内容不进正文 | 语言措辞可不同，但同一条要求不写两遍。判断依据是原生实际注入内容，不是猜测 |
 | 工具示例 | `search_tools` 搜索后，仅对返回的 ID 激活；工具 schema 下一次模型请求才生效 | 从正文抽取示例，通过该工具的真实 schema 和公共接口验证；禁止编造参数 |
-| 外部参考 | `earendil-works/pi@c596d09d9cef6fdf0db2dd08f3eec8582b7fe8ba`、`claude-code-best/claude-code@77a7934e15d69da13879112ed7db695c9ee7a52a`、`xai-org/grok-build@4247f661689354b831191f11eeeac8424993fe3d`；固定文件与对照见[三仓库交叉评审](../reviews/work-prompt-20260920-pi-claude-grok.md)，旧 Codex 对照仍见[此前评审](../reviews/work-prompt-20260920.md) | 新参考必须记录版本、实际读取文件和采用/拒绝理由；不能宣称等同官方最新部署 |
+| 外部参考 | `earendil-works/pi@c596d09d9cef6fdf0db2dd08f3eec8582b7fe8ba`、`claude-code-best/claude-code@77a7934e15d69da13879112ed7db695c9ee7a52a`、`xai-org/grok-build@4247f661689354b831191f11eeeac8424993fe3d`；固定文件与对照见[三仓库交叉评审](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-20260920-pi-claude-grok.md)，旧 Codex 对照仍见[此前评审](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-20260920.md) | 新参考必须记录版本、实际读取文件和采用/拒绝理由；不能宣称等同官方最新部署 |
 
 上下文计量、压缩触发、artifact 限量与恢复失败处理仍属于[上下文专项 SPEC](./context-recovery.md)和 PA-AC06。提示词只指导模型，不替代程序保证。
 
@@ -110,15 +112,15 @@ Pi 原生提示词的最新源码依据是 `earendil-works/pi@c596d09d9cef6fdf0d
 | 日期 | 类型 | 变更 / 理由 | 证据 |
 |---|---|---|---|
 | 2026-09-20 | owner 确认 | Work 使用完整提示词；Chat 连原生系统提示词也不要；保留 Pi 升级自由与工具克制 | PA-001～PA-005；不以旧模式行为替代新决定 |
-| 2026-09-20 | 工程实现 | 补操作判断、工具例子、失败/上下文/验证约束，移除旧模式与重复配额；预算由旧 `<5,000 字符` 检查改为 `≤6,000 UTF-8 字节` | [源码对照与 red/green 记录](../reviews/work-prompt-20260920.md)；31 文件/179 项测试、两个 smoke 通过；模型行为待验 |
+| 2026-09-20 | 工程实现 | 补操作判断、工具例子、失败/上下文/验证约束，移除旧模式与重复配额；预算由旧 `<5,000 字符` 检查改为 `≤6,000 UTF-8 字节` | [源码对照与 red/green 记录](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-20260920.md)；31 文件/179 项测试、两个 smoke 通过；模型行为待验 |
 | 2026-09-20 | 文档维护 | 建立 WP 编号、稳定验收样例与变更规则；模式/工具未决项归主规格，不再让一次性报告承担规范职责 | PA-008；本次无功能代码改动 |
-| 2026-09-20 | owner 确认 + 工程实现 | 确立“在 Pi 原生之上做适量加法”（PA-009）与“通用正文必须项目中立”（PA-010）。交叉对照 Codex 后：**加** WP-009 审查报告方式、WP-010 他人工作/意外状态、优先专用工具；**删** 与 Pi 原生重复的简洁与路径表述、逐工具用途枚举。净增 240 字节，预算上调至 6,400 | [Codex 与 Pi 原生对照](../reviews/work-prompt-20260920.md)；项目泄漏类别守卫含正向对照，红→绿已验证；模型行为样例 WP-AC11/12 仍待执行 |
-| 2026-09-20 | owner 要求 + 工程实现 | 按三仓库交叉参考扩展通用 Work 正文：基于 Pi 最新源码分区，学习 Claude Code 完整默认版 的任务/行动/工具/验证/沟通骨架，并参考 Grok Build 的危险操作、工作政策、沟通与浏览器验证取舍。新增软件工程上下文解释、额外项目指令范围、显式需求保持、精确/开放范围比例、安全边界、工具拒绝处理、先搜索再称未知、关键事实记录、不猜 URL、窄到广验证、UI 端到端、具体授权边界与面向不可见工具调用的沟通。预算由 6,400 上调至 9,000；正文 6,185 → 8,794 字节 | [三仓库交叉评审](../reviews/work-prompt-20260920-pi-claude-grok.md)；文本合同测试更新，模型行为样例 WP-AC13～15 加入待执行清单，全部 WP-AC 行为仍未运行 |
+| 2026-09-20 | owner 确认 + 工程实现 | 确立“在 Pi 原生之上做适量加法”（PA-009）与“通用正文必须项目中立”（PA-010）。交叉对照 Codex 后：**加** WP-009 审查报告方式、WP-010 他人工作/意外状态、优先专用工具；**删** 与 Pi 原生重复的简洁与路径表述、逐工具用途枚举。净增 240 字节，预算上调至 6,400 | [Codex 与 Pi 原生对照](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-20260920.md)；项目泄漏类别守卫含正向对照，红→绿已验证；模型行为样例 WP-AC11/12 仍待执行 |
+| 2026-09-20 | owner 要求 + 工程实现 | 按三仓库交叉参考扩展通用 Work 正文：基于 Pi 最新源码分区，学习 Claude Code 完整默认版 的任务/行动/工具/验证/沟通骨架，并参考 Grok Build 的危险操作、工作政策、沟通与浏览器验证取舍。新增软件工程上下文解释、额外项目指令范围、显式需求保持、精确/开放范围比例、安全边界、工具拒绝处理、先搜索再称未知、关键事实记录、不猜 URL、窄到广验证、UI 端到端、具体授权边界与面向不可见工具调用的沟通。预算由 6,400 上调至 9,000；正文 6,185 → 8,794 字节 | [三仓库交叉评审](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-20260920-pi-claude-grok.md)；文本合同测试更新，模型行为样例 WP-AC13～15 加入待执行清单，全部 WP-AC 行为仍未运行 |
 
 Gitea 本轮不可解析，Issue 同步待环境恢复；不声称外部工单已验收或关闭。
 
-历史修订 5 只修正规格分层矛盾并接入人工测试，当时正文保持 `b027838` 基线；修订 6 已修改正文。授权歧义与项目中立守卫缺口见[设计审核](../reviews/chat-work-design-review-20260920.md)，不以文档修订宣称模型质量已改善。
+历史修订 5 只修正规格分层矛盾并接入人工测试，当时正文保持 `b027838` 基线；修订 6 已修改正文。授权歧义与项目中立守卫缺口见[设计审核](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/chat-work-design-review-20260920.md)，不以文档修订宣称模型质量已改善。
 
-owner 要求的本人逐条评估已记录于[审核的设计判断部分](../reviews/chat-work-design-review-20260920.md)：建议修改纯审查/混合实施判断、必要本地编辑授权、URL 来源规则、局部指导发现条件，并收敛两项过强限制。owner 于 2026-09-21 批准后已应用这六项修改；模型行为仍待人工验证。
+owner 要求的本人逐条评估已记录于[审核的设计判断部分](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/chat-work-design-review-20260920.md)：建议修改纯审查/混合实施判断、必要本地编辑授权、URL 来源规则、局部指导发现条件，并收敛两项过强限制。owner 于 2026-09-21 批准后已应用这六项修改；模型行为仍待人工验证。
 
-修订 6 的修改和验收记录见[提示词边界修正](../reviews/work-prompt-revision-20260921.md)。WP-001/004/006/007/009 同步更新；未调整工具 schema、模式运行时或 renderer。
+修订 6 的修改和验收记录见[提示词边界修正](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-revision-20260921.md)。WP-001/004/006/007/009 同步更新；未调整工具 schema、模式运行时或 renderer。

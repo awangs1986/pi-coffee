@@ -1,3 +1,5 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # 精简上下文与本地恢复
 
 实现合同日期：2026-09-16；规格归属更新：2026-09-20。上位要求为 [Pi Agent 主 SPEC](./pi-agent.md) PA-006，验收为 PA-AC06。本文记录已有保护与局限，不代表 owner 遇到的统计/自动压缩问题已经彻底解决；Chat/Work 的恢复和工具分配见 PA-Q04/05。

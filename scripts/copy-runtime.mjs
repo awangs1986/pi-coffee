@@ -17,5 +17,3 @@ await import("node:fs/promises").then(({ chmod }) => chmod(resolve(root, "dist/b
 
 await mkdir(resolve(root, "dist/src/subagents"), { recursive: true });
 await cp(resolve(root, "src/subagents/launch.py"), resolve(root, "dist/src/subagents/launch.py"));
-await mkdir(resolve(root, "dist/src/host"), { recursive: true });
-await cp(resolve(root, "src/host/import-zip.py"), resolve(root, "dist/src/host/import-zip.py"));

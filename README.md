@@ -1,25 +1,25 @@
-# PI Coffee Server
+# PI Coffee
 
-A browser workbench backed by native Pi, Codex CLI and Claude Code on the owner's machine. New conversations default to Pi Chat. Work tasks bind Pi, Codex or Claude at creation and use independent project checkouts. Agent choice is fixed for that task.
+Pi-only software development harness for the unmodified Pi coding agent. GitHub [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee) is authoritative; [Gitea](http://gitea:3000/awangs/pi-coffee) mirrors the same main commit.
 
-This repository owns Web, gateway, Relay and Host. GitHub is the source authority; Gitea mirrors the same main revision. See [AGENTS.md](AGENTS.md), the [documentation map](docs/index.md), and the [reconciliation decision](docs/adr/0020-unified-github-authority.md).
+This repository owns Chat/Work prompts, capability discovery, Git and search tools, subagents, context extensions, the LSP CLI and Skills. Browser, Web gateway, Relay, Host and native Pi/Codex/Claude adapters live in [pi-coffee-server](https://github.com/awangs1986/pi-coffee-server).
 
-## Check
+## Develop and run
 
-Node 22.19 or newer is required.
+Use Node >=22.19.0; Linux subagent checks also require Python 3, Git and ripgrep on the child shell PATH.
 
 ```sh
 npm ci
 npm run check
+PATH="$PWD/dist/bin:$PATH" ./node_modules/.bin/pi --extension ./dist/src/pi-extension.js --skill ./dist/skills/lsp
 ```
 
-## Run
+Pi 0.87.1 is pinned. Provider authentication belongs to the user's native Pi configuration. This repository contains no Host service or Web startup command. The native package manifest exposes one extension entry and the LSP Skill; loading both that entry and the individual extension list would load the same extensions twice.
 
-```sh
-npm run start:host
-npm run start:web
-```
+## Embed
 
-Configure credentials through private environment files, never repository files. Web and Host may run on different machines from the same source revision. The [release runbook](docs/deployment/unified-release.md) covers identity, native engines and verification.
+Consumers pin a Git commit of this repository as their `pi-coffee` dependency. The Git installation runs `prepare` to build the package. Import the supported integration surface from `pi-coffee`: `resolvePiExtensions`, `resolvePiSkills`, `withCoffeeLspPath`, `stopLspDaemon`, and the context attribution types. Implementation subpaths are private. See [package integration](docs/development/package-integration.md).
 
-The compact workbench includes Gitea projects, task paths and branches, opt-in file review, Context Usage, Skills, attention indicators, native account usage and per-turn changes. Pi's Chat/Work harness and LSP CLI remain Pi-specific. Native account login and native history remain on the Host; disconnecting the browser does not cancel work.
+## Scope and history
+
+[ADR-0021](docs/adr/0021-pi-only-source-authority.md) supersedes the Pi placement in the former unified repository. Existing main behavior is preserved; unmerged experiments remain on their original branches and Issues. In particular, this extraction does not merge the context-management/Handoff redesign or the unmerged P0–P7 branch. See [documentation](docs/index.md) and [backlog](BACKLOG.md).

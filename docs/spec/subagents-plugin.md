@@ -1,3 +1,5 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # 原生子 Agent：默认研究、独立模型、VM 并发准入
 
 实现合同更新：2026-09-22。子 Agent 仅在 Work 按需激活；Chat 的直接工具和命令路径均拒绝委派。保留已有 3/5 准入、独立模型和输出界限；模式分配见 [Pi Agent 主 SPEC](./pi-agent.md) PA-Q04。

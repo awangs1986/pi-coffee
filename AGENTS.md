@@ -1,20 +1,18 @@
-# PI Coffee source and release authority
+# PI Coffee — Pi-only source authority
 
-GitHub `awangs1986/pi-coffee-server` is the authoritative repository. This repository contains Browser, Web gateway, Relay, Host and native Agent adapters. Gitea `awangs/pi-coffee-server` mirrors the same commits. The former Gitea `pi-coffee` runtime repository and Picode/V5 are historical references.
+GitHub `awangs1986/pi-coffee` owns the Pi harness, prompts, tools, LSP, subagents, context extensions and Skills. Gitea `awangs/pi-coffee` mirrors the same main commit. Host, Browser, gateway, Relay and native Agent adapters belong to `awangs1986/pi-coffee-server`.
 
-## Before changes, merges or deployment
+## Before changes
 
-1. Read [docs/index.md](docs/index.md), [BACKLOG.md](BACKLOG.md), and the linked Issue for the affected feature.
-2. Fetch GitHub and Gitea. Compare commits and feature coverage before reconciling divergent histories. Preserve work on both sides; use normal merge ancestry and never replace a newer capability with an older tree.
-3. Read [the unification decision](docs/adr/0020-unified-github-authority.md) when choosing repository boundaries, resolving contradictory older docs, or deploying. Host remains in this repository by the owner's explicit decision.
-4. Work from current GitHub main in a clean checkout. Preserve other local branches and uncommitted work.
+1. Read `docs/index.md`, `BACKLOG.md` and the affected Gitea Issue.
+2. For repository placement or consumer integration, read `docs/adr/0021-pi-only-source-authority.md` and `docs/development/package-integration.md`.
+3. Fetch both remotes and work from current GitHub main in a clean checkout. Preserve other branches and uncommitted work; compare divergent capabilities before merging.
 
-## Implementation and release
+## Implementation and publication
 
-- Keep native Pi/Codex/Claude details behind Agent interfaces. Web authenticates and forwards; Host owns execution and durable task data.
-- Select the authenticated user's scope for every HTTP and WebSocket operation. Browser disconnects preserve running sessions.
-- Use the red → green loop at public HTTP/WS and browser-controller seams. Run `npm run check`.
-- Preserve the acceptance matrix in [the reconciliation report](docs/reviews/repository-unification-20260927.md): a model reply alone does not verify the workbench.
-- Push GitHub main first, then fast-forward Gitea main to the identical commit. Fetch and verify both remote SHAs. Deploy from that commit and record the release identity and served asset probe.
-- Keep credentials, cookies, snapshots and user transcripts out of commits and Issues.
-- Record scope, failures and acceptance evidence in the corresponding Issue. A release is complete only when a fresh clone passes the documented check and the deployed application passes the relevant UI/API probe.
+- Keep Pi upstream unmodified. Consumers use the public package interface; execution transport and durable task ownership stay in the Server repository.
+- Use Chat/Work terminology and preserve context/evidence limits. Context redesigns require their own acceptance evidence.
+- Use red → green at the Pi RPC, CLI or package-consumer seam. Run `npm run check`; validate a fresh clone and the packed artifact before publishing a package change.
+- Keep credentials, snapshots and user transcripts out of source and Issues.
+- Push GitHub main first, then fast-forward Gitea main and verify equal SHAs. Record failures, checks and the source identity in the Issue.
+- A package publication does not deploy Host or Web. Consumer upgrades and deployment evidence belong to `pi-coffee-server`.

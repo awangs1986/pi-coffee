@@ -1,3 +1,5 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # Web 搜索：短摘要、来源索引与 VM 证据文件
 
 实现合同更新：2026-09-16；规格归属更新：2026-09-20。本版替代“工具先返回全量结果、agent_end 再封盘”的旧设计。上位要求见 [Pi Agent 主 SPEC](./pi-agent.md) PA-003/006/007；产品只使用 Chat/Work；工具和委派分配已按 PA-Q01/04 落实。
@@ -28,7 +30,7 @@ Chat 常驻 web_search，始终直接搜索，即使参数 delegate=true 也不�
 
 ## 配置
 
-保留 `PI_COFFEE_SERPER_KEY`（仅 Relay）、`PI_COFFEE_SEARCH_URL`、`PI_COFFEE_RELAY_TOKEN`、`PI_COFFEE_WEB`、`PI_COFFEE_WEB_ACCESS`、`PI_COFFEE_WEB_SUBAGENT_AGENT`。`PI_COFFEE_RESEARCH_DIR` 只允许旧无 Workspace Session 的兼容读取/迁移；已登记 Conversation 必须按 [Conversation Workspace SPEC](./conversation-workspaces.md)解析 `research/`，不能由全局环境变量覆盖到共享目录。
+保留 `PI_COFFEE_SERPER_KEY`（仅 Relay）、`PI_COFFEE_SEARCH_URL`、`PI_COFFEE_RELAY_TOKEN`、`PI_COFFEE_WEB`、`PI_COFFEE_WEB_ACCESS`、`PI_COFFEE_WEB_SUBAGENT_AGENT`。`PI_COFFEE_RESEARCH_DIR` 只允许旧无 Workspace Session 的兼容读取/迁移；已登记 Conversation 必须按 [Conversation Workspace SPEC](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/conversation-workspaces.md)解析 `research/`，不能由全局环境变量覆盖到共享目录。
 
 ## 验证
 

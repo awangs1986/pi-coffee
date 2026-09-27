@@ -1,8 +1,10 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # Work 提示词人工行为测试
 
 状态：**方法已编写，owner 尚未执行，所有模型结果待填**。原始对照基线提交 `b027838`；当前被测正文为 2026-09-21 修订 6（下方哈希），核心文件为 `docs/spec/harness-prompt.md`、`src/harness/prompts/software-development.md`、`src/harness/prompt.ts`、`test/harness-prompt.test.ts` 和 `test/harness-extension.test.ts`。
 
-第一步是[静态设计审核](../reviews/chat-work-design-review-20260920.md)；本文是第二步，由 owner 在真实模型上执行。不是让另一个模型阅读规则后自评“我会遵守”。
+第一步是[静态设计审核](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/chat-work-design-review-20260920.md)；本文是第二步，由 owner 在真实模型上执行。不是让另一个模型阅读规则后自评“我会遵守”。
 
 当前正文源文件 SHA-256：`ffa8c42b7eef0944a1ef7af1273507b36a11a35686ebd0f9da67fd5ee0009e21`。原正文仍可从 Git 基线提取作对照；两组保持相同运行时和工具配置。
 

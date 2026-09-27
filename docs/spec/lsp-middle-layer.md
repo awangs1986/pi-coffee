@@ -1,3 +1,5 @@
+> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+
 # LSP 中间层：Pi Skill 与 CLI
 
 状态：**V1 CLI、Skill、TypeScript/Python Profile 与按需复用已实现并实测**。关联 PA-007、PA-011、PA-012。模型工具表精简与 Chat/Work 隔离已于 2026-09-22 完成；压力/性能基准和 V2 WorkspaceEdit 仍待验收。实现使用 CLI，不使用 MCP，也不依赖 pi-lens。
@@ -153,7 +155,7 @@ V1 采用直接连接真实语言服务器的 LSP Adapter。TS/Python 是同一�
 
 pi-lens 不是必需依赖。现有 `pi-lens-analyze` 输出和退出码无法提供上述完整契约，也没有完整 CLI 导航入口；简单包一层 JSON 不能恢复它未输出的新鲜度证据。未经验证的深层 import 不作为稳定交付接口。以后若 pi-lens 提供稳定、非 MCP 的嵌入/CLI Interface，并通过同一契约验收，可提供候选 Adapter 或独立 AST/lint Skill；不改变模型使用方法。
 
-现有[真实工具链报告](../reviews/real-agent-toolchain-20260921.md)仅证明旧路径存在 active 集合冲突与 LSP inconclusive/空导航，**没有证明 LSP 需求不可实现，也没有定位空结果的根因**。本文取代此前“仅保留 CLI 单文件检查、用文本搜索替代语义导航”的建议。
+现有[真实工具链报告](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/real-agent-toolchain-20260921.md)仅证明旧路径存在 active 集合冲突与 LSP inconclusive/空导航，**没有证明 LSP 需求不可实现，也没有定位空结果的根因**。本文取代此前“仅保留 CLI 单文件检查、用文本搜索替代语义导航”的建议。
 
 ## 10. 交付与验收
 
@@ -178,4 +180,4 @@ pi-lens 不是必需依赖。现有 `pi-lens-analyze` 输出和退出码无法�
 
 Gitea Issue #1 本轮仍不可连接，PA-011/012、LSP-AC01～08 的实现证据待同步；未读取其最新状态、未更新或关闭远端工单。精简工具集合与 Chat/Work 隔离没有因本次 CLI 交付而自动完成。
 
-实现证据：`test/lsp-cli.test.ts` 覆盖协议替身、诊断刷新、Skill 路径与 daemon 复用；`test/lsp-real-servers.test.ts` 覆盖真实 TypeScript/Python 服务器与 Unicode 坐标；[真实模型报告](../reviews/lsp-agent-evaluation-20260921.md)记录 9 次脱敏结果。最终全仓检查结果以本次交付报告为准。
+实现证据：`test/lsp-cli.test.ts` 覆盖协议替身、诊断刷新、Skill 路径与 daemon 复用；`test/lsp-real-servers.test.ts` 覆盖真实 TypeScript/Python 服务器与 Unicode 坐标；[真实模型报告](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/lsp-agent-evaluation-20260921.md)记录 9 次脱敏结果。最终全仓检查结果以本次交付报告为准。
