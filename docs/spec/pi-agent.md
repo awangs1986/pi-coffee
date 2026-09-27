@@ -2,7 +2,7 @@
 
 # Pi Agent 主规格
 
-文档类型：**持续维护的设计规格（Living SPEC）** · 修订：7 · 最近更新：2026-09-22。
+文档类型：**持续维护的设计规格（Living SPEC）** · 修订：8 · 最近更新：2026-09-27。
 
 本文是 Pi Agent 部分的固定设计入口，记录已确认决定、理由、实现差距、未决项和验收依据。后续在此迭代，不另建一份按日期命名的“最新主规格”。评审记录可以按日期归档，但不能替代本文。
 
@@ -37,6 +37,7 @@ The PA/WP decisions in this document apply to **Pi only**, including zero-system
 | **PA-011** | Work 常驻工具精简为 read、edit、write、bash、git、search_tools；恢复可用时加 recall_folded；目录/文本搜索/文件发现/验证交给 Bash，Web 与子 Agent 按需激活 | owner 在真实测试后批准；替代原表照搬要求。运行时已按此表迁移，详见[工具 SPEC](./work-tools.md) |
 | **PA-012** | 提供能被 Pi Agent 主动发现、正确调用、解决项目问题的 LSP 中间层，采用 Skill + CLI，不用 MCP；pi-lens 不是目标或必要依赖 | 完整保留语义诊断、定义、引用、类型与符号能力，不降级为只做 lint/文本搜索。工程 Interface、按需进程复用和验收见[LSP SPEC](./lsp-middle-layer.md)，Skill/CLI 已实现，部署与性能证据独立记录 |
 | **PA-013** | 一个任务对应一个 Conversation 和一个所属 VM 的本地 Workspace；Chat 集中在 `chats/` 根下按 Conversation 分目录，Work 使用独立 Gitea Checkout | 附件、搜索证据、图片和工具产物必须跟随所属 Conversation，不能回退到跨 Conversation 的全局 Agent 目录。运行模式和 Workspace 类型是两个维度；完整路径、泄露边界与生命周期见[Conversation Workspace SPEC](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/conversation-workspaces.md) |
+| **PA-014** | Use the unmodified official `pi-web-access` extension as Pi's sole Web search integration; keep Serper as its configured default | Retire Coffee's `web_search`, `research_seal`, registration-filter adapter, search-specific evidence protocol, and automatic Web delegation. Chat/Work exposure remains a Harness concern. The official cache's Conversation ownership and direct-result context cost must pass acceptance before runtime migration is called complete; see the [Web search SPEC](./web-search-plugin.md). |
 
 ### 模式边界的验收解释
 
@@ -56,7 +57,7 @@ The PA/WP decisions in this document apply to **Pi only**, including zero-system
 | **本文** | Agent 原则、两模式边界、未决项、跨模块验收与决策沿革 | 不复制完整工具 schema 或运行时参数表 |
 | [Work 提示词 SPEC](./harness-prompt.md) | WP 编号规则、正文职责、长度预算、插件接入约束和行为验收 | 不把文案测试等同于模型质量测试 |
 | [上下文与恢复](./context-recovery.md) | 入口限量、artifact、估算/压缩/恢复的实现合同和失败边界 | 不决定 Chat/Work 的工具清单；现有阈值不是 PA-006 已彻底解决的证据 |
-| [Web 搜索](./web-search-plugin.md) | 搜索工具、证据索引、历史投影和失败路径 | 不自行确定 Chat/Work 分派 |
+| [Web 搜索](./web-search-plugin.md) | Official plugin ownership, Serper defaults, context/cache boundaries, and migration acceptance | Chat/Work exposure still follows the main mode contract |
 | [子 Agent](./subagents-plugin.md) | 上游执行器适配、准入、模型与结果协议 | 不替代两模式的新工具/委派政策确认 |
 | [Work 工具](./work-tools.md) | 精简目标、现有工具表与迁移差距 | 不以目标清单冒充已发版 |
 | [LSP 中间层](./lsp-middle-layer.md) | Skill/CLI、项目识别、语义查询、同步、结果契约与真实验收 | 不要求采用 pi-lens，不修改 Pi 内核 |
@@ -75,7 +76,7 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 
 ### 上下文与恢复
 
-- **内容入口**：原始日志、搜索结果、子任务正文、重复说明不应无差别进入历史；必要证据有界返回，完整证据留 VM，按需定向读取。
+- **内容入口**：原始日志、搜索结果、子任务正文、重复说明不应无差别进入历史；必要证据有界返回，按需定向读取。PA-014 允许官方 Web 工具直接返回结果，但必须通过通用大结果防护和最终请求预算验收；不再承诺 Coffee 搜索专用指针协议。
 - **请求预算**：检查实际将发送的系统内容、工具定义、消息、工具 details 和媒体；区分 provider 实测与本地估算，不把上一轮 usage 当作下一轮完整 payload。
 - **压缩与恢复**：触发参数必须结合实际窗口、输出预留和估算误差验证；取消/失败不能报成功，不能无限重试超限输入或重放不确定副作用。算法、误差目标和 provider 适配待 PA-Q05，先保留专项 SPEC 的现有失败约束。
 - **层次区分**：展示历史、原生 transcript、artifact 与实际模型请求不是同一份数据。文件归档或 UI 折叠本身不能证明请求已经变小。
@@ -98,6 +99,7 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 | PA-008 | 主 SPEC、专项 SPEC、决策/验收表与维护流程已建立 | 本次迁移记录在 HARNESS-001/002；其他发布门槛不随模式迁移自动关闭 |
 | PA-009 | Native base instructions and tool `promptSnippet`/`promptGuidelines` remain in use | Pi 0.87.1 real-RPC request tests verify the assembled Work prompt and Chat isolation; see the [upgrade report](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/pi-0.87.1-main-20260927.md) |
 | PA-010 | 文本中立守卫与正向对照已加入 `test/harness-prompt.test.ts` | 审计发现身份守卫仍依赖已知名字，PA-010 未完全满足；见[评审](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/chat-work-design-review-20260920.md)与手工测试 T10 |
+| PA-014 | Current main still registers Coffee's search/seal tools and suppresses official `web_search` | Official-only loading, native commands, generic result limits, and cross-Conversation cache ownership are pending; the previous Serper probe does not certify this target |
 
 提示词实现证据见 [评审 §5](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/work-prompt-20260920.md)：31 个测试文件、179 项本地测试以及两个 Pi 扩展加载 smoke 通过。测试使用本地替身的部分须保持标注；不得据此填写下表所有项目为“通过”。
 
@@ -116,6 +118,7 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 | **PA-AC09 / PA-009** | 正文不重复 Pi 原生已注入的 Guidelines 与逐工具用途；新增规则前先核对原生内容 | 已核对原生 `buildSystemPrompt` 输出并据此删除重复项；原生内容随 Pi 版本变化，升级时需重新核对 |
 
 | **PA-AC10 / PA-011、PA-012** | Work 精简工具表与原生 LSP Skill 可发现；真实语义查询能定位问题，修改后诊断刷新，项目测试通过；覆盖多项目、编码、冷/热启动与取消 | **部分通过**：Skill、CLI、真实 TS/Python 与模型门槛已过；精简工具表与 Chat 隔离通过；取消与完整性能/多项目矩阵待完成 |
+| **PA-AC11 / PA-014** | Only the official Web extension registers its tools and commands; Serper is the default; Chat/Work visibility, real model calls, large-result payloads, and cache ownership across Conversations are verified | **Design accepted, implementation pending.** The current Coffee adapter and its prior live probe do not satisfy this row. |
 
 ## 7. 未决项：后续逐个讨论，不擅自补全
 
@@ -124,7 +127,7 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 | **PA-Q01（已落实）** | Chat 使用 read、edit、write、bash、web_search；Work 按 PA-011 | Web 搜索在 Chat 直接可调用；工具缺失时拒绝进入该模式，不伪报成功 |
 | **PA-Q02（已关闭）** | 按 PA-009：保留 Pi Base，追加 Work 通用正文 | 不再把整体替换列为候选；公开接缝装配、去重、项目指令与动态事实在 PA-AC04 验收 |
 | **PA-Q03（已落实）** | 默认 Work；/chat、/work、/harness chat\|work；v2 状态保存在当前 Pi 分支 | v1 开发会话统一迁移到 Work并通知；撤销旧能力租约；未知状态保留历史并要求明确选择；不接受退役命令别名 |
-| **PA-Q04（已落实）** | Chat 不开放发现/委派/recall；Work 按需激活 Web/子任务，恢复工具仅 Work 常驻 | Work Web 延续已有默认研究委派，delegate=false 直接搜索；切模式/模型撤销激活；同模式恢复重新校验能力 |
+| **PA-Q04（模式门控已落实，Web 迁移待做）** | Chat 不开放发现/委派/recall；Work 按需激活 Web/子任务，恢复工具仅 Work 常驻 | PA-014 撤销 Web 的自动研究委派和 `delegate` 参数；子 Agent 仍作为 Work 独立能力。切模式/模型撤销激活；同模式恢复重新校验能力 |
 | **PA-Q05** | 上下文统计采用哪些 provider 数据/估算；误差容限、触发阈值、媒体计量及两模式恢复路径 | 现有保护算法只作为已实现基线；不虚报准确、不承诺自动恢复必成功 |
 | **PA-Q06** | 哪些行为规则应下沉为工具的 `promptGuidelines`（随工具激活才出现），哪些留在追加正文 | 原生支持该通道且我们已在使用（`search_tools`、`web_search`、`subagent`）。下沉能减少常驻正文，但会分散规则；需逐条评估，不一次性搬迁 |
 
@@ -159,6 +162,8 @@ Agent 增强使用 Pi 的公开扩展接口；Host 保留窄 RPC 适配，Web �
 2026-09-22：owner 补充确认 PA-013；Chat 和 Work 均有逐 Conversation 本地目录，Chat 统一置于 `chats/` 父目录，附件、搜索、图片与产物不再使用跨 Conversation 全局落点。该项已由 Agent #46 / Server #3 实现并部署；见[联合验收](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/reviews/conversation-workspaces-20260922.md)。
 
 2026-09-22：owner 澄清检查目标是遗漏与合理性，固定“一任务 = 一 Conversation = 一 VM 本地目录”，补充 Work 自动 clone、前端五项上下文、独立 clone、创建重试与归档/清理合同，见 CW-07～10；修正旧 Task 一对多定义，Agent #46 / Server #3 已完成实现与流程验收。
+
+2026-09-27: The owner accepted PA-014: the official `pi-web-access` extension becomes the sole Pi Web integration, with Serper as its configured default. This supersedes Coffee's search/seal adapter and automatic Web delegation. [Implementation and acceptance](./web-search-plugin.md) remain pending, including context budget and Conversation cache isolation.
 
 The owner-corrected [Context Usage contract](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/context-usage.md) specializes PA-006
 with seven source-attributed categories and explicit local-estimate semantics.

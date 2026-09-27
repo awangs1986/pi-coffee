@@ -8,6 +8,10 @@
 
 Pi 0.87.1, Chat/Work, capability discovery, Git/search extensions, subagents, context recovery, LSP CLI and its Skill are extracted with their existing tests. Installed plugin pins remain in `package.json`; repository placement does not change their policy or merge experimental features.
 
+## Official Web migration
+
+[PA-014](docs/spec/web-search-plugin.md) now selects the unmodified official `pi-web-access` extension as Pi's only Web integration, with Serper configured as its default provider. Current main still contains the Coffee search/seal adapter and automatic Web delegation; the specification update does not claim that runtime migration is done. Migration acceptance must cover native Chat/Work tool visibility, Serper calls, large-result context limits, and the official cache's ownership across Conversations. [Pi #24](http://gitea:3000/awangs/pi-coffee/issues/24) has older Relay-specific acceptance text and needs its deployment criteria reconciled with PA-014.
+
 ## Independent work preserved
 
 - [Pi #67](http://gitea:3000/awangs/pi-coffee/issues/67) and [PR #68](http://gitea:3000/awangs/pi-coffee/pulls/68): unmerged P0–P7 work, required-language LSP and native-first/Handoff experiments. Its tests and decisions are evidence for that branch, not current main. Host changes from that branch must be ported into the Server repository when separately accepted.

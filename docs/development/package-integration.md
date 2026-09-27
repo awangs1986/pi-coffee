@@ -14,7 +14,7 @@ Import from `pi-coffee`:
 
 The native Pi package manifest loads `dist/src/pi-extension.js`, which installs the same ordered extensions. Use either the manifest entry or the individual integration paths, once per Pi process. Consumer code must not import private `dist/src` implementation files.
 
-Host owns authenticated scope, Conversation directories, sessions and lifetime. Server's Pi adapter continues to use Pi RPC; Codex and Claude adapters remain unchanged. Search extension code belongs here; its network Relay belongs to Server. Context attribution production belongs here; the Web panel and wire validation belong to Server.
+Host owns authenticated scope, Conversation directories, sessions and lifetime. Server's Pi adapter continues to use Pi RPC; Codex and Claude adapters remain unchanged. Under [PA-014](../spec/web-search-plugin.md), this package will load the official `pi-web-access` extension directly and will no longer own a Coffee-specific search implementation. Any separate Server Relay remains Server-owned and is not the target Pi search path. Context attribution production belongs here; the Web panel and wire validation belong to Server.
 
 ## Consumer upgrade
 
