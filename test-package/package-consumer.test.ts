@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, it } from "vitest";
@@ -11,15 +11,20 @@ it("installs the LSP-only tarball and uses its public helpers and real CLI", () 
     const files = pack.files.map((file: { path: string }) => file.path);
     expect(files).toEqual(expect.arrayContaining([
       "dist/src/runtime.js", "dist/src/runtime.d.ts", "dist/src/lsp/bin.js",
-      "dist/bin/coffee-lsp", "dist/skills/lsp/SKILL.md",
+      "dist/src/extension/index.js", "dist/bin/coffee-lsp", "dist/skills/lsp/SKILL.md",
       "dist/third_party/oh-my-pi/LICENSE", "dist/third_party/oh-my-pi/README.md",
     ]));
     expect(files.filter((path: string) => /(^|\/)(host|web|harness|subagents|context|relay)(\/|$)/.test(path))).toEqual([]);
     writeFileSync(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module" }));
     execFileSync("npm", ["install", "--no-audit", "--no-fund", join(consumer, pack.filename), "typescript@5.9.3"], { cwd: consumer, stdio: "pipe", timeout: 120000 });
     const manifest = JSON.parse(readFileSync(join(consumer, "node_modules/pi-coffee-lsp/package.json"), "utf8"));
-    expect(manifest.pi).toEqual({ skills: ["./dist/skills/lsp"] });
+    // Standard Pi package: `pi` manifest, gallery keyword, host packages only as peers.
+    expect(manifest.pi).toEqual({ extensions: ["./dist/src/extension/index.js"], skills: ["./dist/skills/lsp"] });
+    expect(manifest.keywords).toEqual(expect.arrayContaining(["pi-package", "pi-extension"]));
     expect(Object.keys(manifest.dependencies).sort()).toEqual(["pyright", "typescript-language-server"]);
+    expect(Object.keys(manifest.peerDependencies).sort()).toEqual(["@earendil-works/pi-coding-agent", "typebox"]);
+    expect(existsSync(join(consumer, "node_modules/@earendil-works"))).toBe(false);
+    expect(manifest.private).toBeUndefined();
     writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, files: ["app.ts"] }));
     writeFileSync(join(consumer, "app.ts"), "export const value: number = 'wrong';\n");
     const script = `

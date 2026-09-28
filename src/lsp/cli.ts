@@ -604,7 +604,7 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
   };
 }
 
-function findProjectRoot(
+export function findProjectRoot(
   file: string,
   workspace: string,
   explicit: boolean,

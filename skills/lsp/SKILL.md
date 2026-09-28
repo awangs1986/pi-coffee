@@ -7,7 +7,9 @@ description: Use project language-server semantics for type diagnostics, symbols
 
 Use this skill when a task involves type errors, cross-file definitions or references, ambiguous same-name symbols, or the impact of changing an interface. Plain text search can find candidates; it does not prove that two names are the same symbol.
 
-The interface is the `coffee-lsp` command through Bash. Start by checking the target file:
+If an `lsp` tool is available in this session, prefer it: it runs the same operations (`status`, `symbols`, `definition`, `references`, `hover`, `implementation`, `diagnostics`) with the same 1-based positions, returns compact text, and the session automatically appends language-server diagnostics to successful `edit` and `write` results. Everything below about positions, capabilities and interpreting results applies to the tool as well; use the Bash command when the tool is absent or when you need the raw JSON envelope. Both share the session's warm language servers.
+
+The Bash interface is the `coffee-lsp` command. Start by checking the target file:
 
 ```bash
 coffee-lsp status --file src/example.ts
