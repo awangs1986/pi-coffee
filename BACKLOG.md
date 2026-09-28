@@ -40,3 +40,5 @@ retired; the exact npm version is a development compatibility fixture only.
 output limits, command ownership and concurrency differences. Host lifecycle
 replacement and deployment remain a Server integration gate, not completed by
 this package change. LSP's independent package work is a separate deliverable.
+
+[Native migration acceptance](docs/reviews/native-subagents-20260928.md): 139 tests plus package validation, fresh clone, native npm installation and packed consumer passed. No production Host deployment.
