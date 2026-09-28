@@ -47,12 +47,6 @@ try {
   if (inspection.searchSchema?.properties?.delegate || !inspection.searchSchema?.properties?.provider) throw new Error("Expected unmodified official web_search schema");
   const missingTools = requiredTools.filter((name) => !inspection.all.includes(name));
   if (missingTools.length > 0) throw new Error(`Missing Web tools: ${missingTools.join(", ")}`);
-  if (nativeSubagents && (!inspection.all.includes("subagent") || !inspection.all.includes("bg_wait"))) {
-    throw new Error(`pi-subagents tools were not registered on the Linux User VM: ${JSON.stringify(inspection)}`);
-  }
-  if (!nativeSubagents && (inspection.all.includes("subagent") || inspection.all.includes("bg_wait"))) {
-    throw new Error(`Linux-only pi-subagents tools unexpectedly registered on ${process.platform}: ${JSON.stringify(inspection)}`);
-  }
   if (!inspection.all.includes("recall_folded") || !inspection.all.includes("unfold")) {
     throw new Error(`context-fold tools were not registered: ${JSON.stringify(inspection)}`);
   }
@@ -65,9 +59,6 @@ try {
   console.log(JSON.stringify({
     ok: true,
     webTools: requiredTools,
-    piSubagents: nativeSubagents
-      ? { verified: true, tools: ["subagent", "bg_wait"] }
-      : { verified: false, skipped: true, reason: "native admission requires the Linux User VM" },
     contextFoldTools: ["recall_folded", "unfold"],
     command: "websearch",
     extensions,

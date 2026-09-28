@@ -12,7 +12,7 @@
 - Work 正文由 `renderHarnessPrompt("work")` 读取，通过 `before_agent_start` 追加，并用既有块边界去重；动态事实与稳定正文分开。
 - 模式、能力和验证状态只存于 User VM 原生会话。恢复读取当前 Pi 分支；切模型/模式时撤销能力激活，Work 恢复时重新校验。
 - 注册工具不等于激活工具；每次请求的实际 schema 是模型可调用能力的依据。
-- `PI_COFFEE_SUBAGENTS=off` 关闭子任务扩展；`PI_COFFEE_EXTENSIONS` 可替换扩展列表，设为 `off` 关闭全部扩展。工具与模型政策见[子 Agent 接缝](./subagents-plugin.md)。
+- `PI_COFFEE_EXTENSIONS` controls only the Coffee-managed extension list. Native `pi-subagents` is independently managed by Pi; `PI_COFFEE_SUBAGENTS` no longer controls it. See [native subagent ownership](./subagents-plugin.md).
 
 ## User VM 后端适配
 

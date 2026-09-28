@@ -1,23 +1,23 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { resolvePiExtensions } from "../dist/src/pi-extensions.js";
 
-if (process.platform !== "linux") {
-  console.log(JSON.stringify({
-    ok: true,
-    skipped: true,
-    platform: process.platform,
-    reason: "native subagent admission requires the Linux User VM (/proc, fcntl, and POSIX signals)",
-  }, null, 2));
-  process.exit(0);
-}
-
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const smokeRoot = await mkdtemp(join(tmpdir(), "pi-coffee-subagents-smoke-"));
 const agentDir = join(smokeRoot, "agent");
+await mkdir(agentDir);
+if (process.argv.includes("--install-native")) {
+  execFileSync(process.execPath, [join(root, "node_modules/@earendil-works/pi-coding-agent/dist/cli.js"), "install", "npm:pi-subagents@0.73.1"], {
+    cwd: smokeRoot, env: { ...process.env, PI_CODING_AGENT_DIR: agentDir }, timeout: 120000, stdio: "pipe",
+  });
+} else {
+  await writeFile(join(agentDir, "settings.json"), JSON.stringify({packages: [dirname(createRequire(import.meta.url).resolve("pi-subagents"))]}));
+}
 const inspectionPath = join(smokeRoot, "tools.json");
 const inspectionExtension = join(smokeRoot, "inspect.mjs");
 await writeFile(
@@ -49,9 +49,9 @@ try {
   const inspection = await readJsonWhenReady(inspectionPath);
   const commands = await client.getCommands();
   const names = new Set(commands.map((command) => command.name));
-  const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold", "websearch", "subagents-model"];
+  const required = ["subagents", "subagents-doctor", "subagents-fleet", "parallel-review", "review-loop", "context-fold", "websearch"];
   const missing = required.filter((name) => !names.has(name));
-  const expectedWork = ["read", "edit", "write", "bash", "git", "search_tools", "recall_folded"];
+  const expectedWork = ["read", "edit", "write", "bash", "git", "search_tools", "recall_folded", "subagents_enable", "bg_wait", "subagent_supervisor"];
   if (inspection.all.includes("subagent") !== true || inspection.all.includes("bg_wait") !== true) {
     throw new Error(`pi-subagents tools were not registered: ${JSON.stringify(inspection)}`);
   }
@@ -70,7 +70,7 @@ try {
   if (missing.length > 0) throw new Error(`Missing pi-subagents commands: ${missing.join(", ")}`);
   console.log(JSON.stringify({
     ok: true,
-    piSubagents: "0.63.0",
+    piSubagents: "0.73.1",
     contextFold: "0.4.0",
     extensions,
     harnessWorkActive: inspection.active,

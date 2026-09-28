@@ -19,7 +19,6 @@ import {
   type CapabilitySettingsStore,
   type TrustState,
 } from "../capabilities/settings.js";
-import { createSubagentsManifest } from "../subagents/capability.js";
 import { createWebAccessManifest, createWebSearchManifest } from "../extensions/web-access/capability.js";
 import {
   WORK_TOOLS,
@@ -108,6 +107,13 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   pi.registerTool(createSearchToolsTool(pi, () => mode, () => catalog, () => turn, persistCapabilityState));
   pi.registerTool(createNativeGitTool({ run }));
 
+  // Mode policy lives in Harness. Native subagent schemas and execution stay upstream.
+  pi.on("tool_call", event => {
+    if (mode === "chat" && ["subagents_enable", "subagent", "bg_wait", "subagent_supervisor"].includes(event.toolName)) {
+      return { block: true, reason: "Subagents are unavailable to the model in Chat; select Work." };
+    }
+  });
+
   function applyMode(nextMode: HarnessMode, persist = true): ReturnType<typeof resolveToolTable> {
     const table = resolveToolTable(nextMode, pi.getAllTools().map((tool) => tool.name));
     if (table.ready) {
@@ -134,9 +140,6 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
     });
 
     const registrations = capabilityManifestRegistrations(pi);
-    const subagents = registrations.some(item => item.manifest.id === "subagent") ? undefined : createSubagentsManifest(pi, conformedCapabilities);
-    if (subagents !== undefined) next.register(subagents, "trusted");
-
     const webSearch = createWebSearchManifest(pi);
     if (webSearch !== undefined) next.register(webSearch, "trusted");
     const webAccess = createWebAccessManifest(pi, conformedCapabilities);
@@ -371,7 +374,11 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
       ctx.abort();
       return;
     }
-    return mode === "chat" ? chatPayload(event.payload) : undefined;
+    if (mode === "chat") {
+      pi.setActiveTools([...resolveToolTable(mode, pi.getAllTools().map(tool => tool.name)).active]);
+      return chatPayload(event.payload);
+    }
+    return undefined;
   });
 
   pi.on("before_agent_start", (event, ctx) => {

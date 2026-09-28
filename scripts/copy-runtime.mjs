@@ -15,7 +15,5 @@ await mkdir(resolve(root, "dist/bin"), { recursive: true });
 await cp(resolve(root, "src/lsp/coffee-lsp-launcher.mjs"), resolve(root, "dist/bin/coffee-lsp"));
 await import("node:fs/promises").then(({ chmod }) => chmod(resolve(root, "dist/bin/coffee-lsp"), 0o755));
 
-await mkdir(resolve(root, "dist/src/subagents"), { recursive: true });
-await cp(resolve(root, "src/subagents/launch.py"), resolve(root, "dist/src/subagents/launch.py"));
 
 await cp(resolve(root, "third_party/oh-my-pi"), resolve(root, "dist/third_party/oh-my-pi"), { recursive: true });

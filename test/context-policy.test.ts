@@ -5,12 +5,10 @@ import { describe, expect, it } from "vitest";
 import { installContextPolicy, protectLocalCompaction } from "../src/context/policy.js";
 
 describe("bounded context and local recovery", () => {
-  it('routes large tool/child output to the Conversation data root',async()=>{
+  it('routes large built-in tool output to the Conversation data root',async()=>{
     const root=await mkdtemp(join(tmpdir(),'coffee-owned-artifacts-')),previous=process.env.PI_COFFEE_DATA_ROOT;
     process.env.PI_COFFEE_DATA_ROOT=root;
     try{
-      const {boundSubagentResult}=await import('../src/subagents/result-artifact.js');
-      const child=boundSubagentResult('child evidence'.repeat(2000));expect(child.details.artifactPath).toContain(join(root,'artifacts','subagents'));
       const handlers=new Map<string,Function>();installContextPolicy({on:(event:string,handler:Function)=>handlers.set(event,handler)} as never);
       const result=await handlers.get('tool_result')!({toolName:'bash',content:[{type:'text',text:'tool evidence'.repeat(10000)}]},{});
       expect(result.details.artifactPath).toContain(join(root,'artifacts','tools'));expect(await readFile(result.details.artifactPath,'utf8')).toContain('tool evidence');
@@ -37,8 +35,8 @@ describe("bounded context and local recovery", () => {
       expect(result.isError).toBe(true);
       expect(result.details.big).toBeUndefined();
       expect(await readFile(result.details.artifactPath, "utf8")).toContain("RAW-LOG");
-      const childResult = await handlers.get("tool_result")!({ toolName: "subagent", content: [{ type: "text", text: "brief" }] }, {});
-      expect(childResult.content[0].text).toBe("brief");
+      const childResult = await handlers.get("tool_result")!({ toolName: "subagent", content: [{ type: "text", text: "native output".repeat(10000) }] }, {});
+      expect(childResult).toBeUndefined(); // Official subagents own their content and details.
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

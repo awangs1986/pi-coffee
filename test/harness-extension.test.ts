@@ -171,7 +171,7 @@ describe("Chat/Work session and capability boundaries", () => {
   function setup(entries: unknown[] = [], web = true) {
     const pi = new FakePi("/workspace", entries);
     if (web) createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
-    for (const name of ["recall_folded", "unfold", "subagent", "bg_wait"]) pi.registerTool({
+    for (const name of ["recall_folded", "unfold"]) pi.registerTool({
       name, label: name, description: name, parameters: {} as never,
       execute: async () => ({ content: [], details: {} }),
     });
@@ -182,15 +182,15 @@ describe("Chat/Work session and capability boundaries", () => {
     const pi = setup(); await pi.emit("session_start", {});
     expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
     expect(pi.tools.has("verify")).toBe(false);
-    await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" });
-    expect(pi.getActiveTools()).toContain("subagent");
+    await pi.runTool("search_tools", { action: "activate", capability_id: "web" });
+    expect(pi.getActiveTools()).toContain("web_search");
     const restoredWork = setup(pi.entries); await restoredWork.emit("session_start", {});
-    expect(restoredWork.getActiveTools()).toContain("subagent");
+    expect(restoredWork.getActiveTools()).toContain("web_search");
     await pi.runCommand("chat", "");
     expect(pi.getActiveTools()).toEqual([...CHAT_TOOLS]);
     await pi.emit("model_select", {});
     expect(pi.getActiveTools()).toEqual([...CHAT_TOOLS]);
-    expect((await pi.runTool("search_tools", { action: "activate", capability_id: "subagent" })).details.code).toBe("mode-disabled");
+    expect((await pi.runTool("search_tools", { action: "activate", capability_id: "web" })).details.code).toBe("mode-disabled");
     const restored = setup(pi.entries); await restored.emit("session_start", {});
     expect(restored.getActiveTools()).toEqual([...CHAT_TOOLS]);
     await restored.runCommand("work", "");
