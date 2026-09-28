@@ -6,6 +6,8 @@
 
 本文是 Pi Agent 部分的固定设计入口，记录已确认决定、理由、实现差距、未决项和验收依据。后续在此迭代，不另建一份按日期命名的“最新主规格”。评审记录可以按日期归档，但不能替代本文。
 
+**2026-09-28 native subagents:** [The official-plugin decision](./subagents-plugin.md) supersedes older subagent adapter, 3/5 admission, activation and output-wrapper statements below. Pi manages installation; Work uses the native loader.
+
 ## Native-engine scope clarification (2026-09-23)
 
 The PA/WP decisions in this document apply to **Pi only**, including zero-system-prompt Chat, Work prompting, tool inventory, LSP, plugin loading and context recovery. The accepted [native-engine integration](https://github.com/awangs1986/pi-coffee-server/blob/112ef53a0e2b04bd9d7cf283faa04754bc84c9ab/docs/spec/native-agent-engines.md) preserves Codex and Claude Code's own design and official authentication. Shared Conversation Workspace/Gitea rules apply independently of engine. Native-engine support is deployed; current capabilities are recorded in the native-engine delivery evidence.

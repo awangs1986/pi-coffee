@@ -2,10 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { boundSubagentResult } from "../subagents/result-artifact.js";
 import { redactSecrets } from "../context/redact.js";
 
-// Parent-facing subagent output is always bounded, including failure details.
+// Built-in and Web output policy. Native subagent output stays upstream-owned.
 const BOUNDED_TOOLS = new Set(["read", "bash", "grep", "find", "ls", "git", "verify", "web_search", "fetch_content", "source_check", "get_search_content"]);
 const MAX_RESULT_BYTES = 12_000;
 
@@ -26,10 +25,6 @@ export function protectLocalCompaction(
 /** Limits at the public Pi seam, without changing tool permissions or the original session store. */
 export function installContextPolicy(pi: ExtensionAPI): void {
   pi.on("tool_result", async (event, ctx) => {
-    if (["subagent", "bg_wait"].includes(event.toolName)) {
-      const bounded = boundSubagentResult(event.content, event.details);
-      return { ...bounded, isError: event.isError || bounded.details.isError === true };
-    }
     if (!BOUNDED_TOOLS.has(event.toolName)) return;
     const serialized = JSON.stringify({ content: event.content, details: event.details });
     if (Buffer.byteLength(serialized, "utf8") <= MAX_RESULT_BYTES) return;

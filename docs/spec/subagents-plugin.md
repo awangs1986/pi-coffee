@@ -1,66 +1,116 @@
-> Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
+# Official native subagents
 
-# 原生子 Agent：默认研究、独立模型、VM 并发准入
+Tracked in [Pi #73](http://gitea:3000/awangs/pi-coffee/issues/73).
 
-实现合同更新：2026-09-22。子 Agent 仅在 Work 按需激活；Chat 的直接工具和命令路径均拒绝委派。保留已有 3/5 准入、独立模型和输出界限；模式分配见 [Pi Agent 主 SPEC](./pi-agent.md) PA-Q04。
+Accepted by the owner on 2026-09-28: use unmodified
+[nicobailon/pi-subagents](https://github.com/nicobailon/pi-subagents) directly,
+managed through Pi's native package manager. Do not create a Coffee subagent
+fork or an independent Coffee execution adapter. This supersedes the previous
+Coffee executor, admission, model-command, resource and output-wrapper contract.
 
-**PA-014 supersession (2026-09-27):** official `pi-web-access` no longer delegates Web research automatically through Coffee. Work may explicitly use the independent subagent capability for research; Chat has no subagent capability. The Web-specific delegation text below records the current implementation until migration, not the accepted target. See [Web search](./web-search-plugin.md).
+## Version and installation ownership
 
-## 可复用的执行合同
+The migration baseline is npm `pi-subagents@0.73.1`, released 2026-09-27, with
+Pi 0.87.1. GitHub main also contains unreleased changes; these are not the npm
+release. The exact development dependency in Coffee is a compatibility test
+fixture, not a runtime dependency or an automatic installation.
 
-Chat 不由本插件增加工具；Work 按需激活子任务，见 PA-Q01/04 与 PA-014。默认 Web 研究委派已退出目标设计；历史证据保存在 Git 提交 `b027838`。
-
-以下是已存在的执行器约束，不等于新的模式分配已验收：
-
-- 研究子 Pi 实际搜索并按需读取来源；父 Agent 接收短结论、URL 与证据索引，不先搜索再委派摘要。
-- 简单查询只启动一个子任务；独立问题可并行。每个主对话最多 **3** 个正在运行的子 Pi，每个 User VM 最多 **5** 个；主 Agent 不计数。多出的启动请求等待名额，不是直接报“并发超限”。
-- 默认 fresh context，不复制父会话的完整历史。当前本地适配器禁止所有嵌套子 Agent；复杂分解回到主 Agent。
-- 保留 Pi 原生登录、provider/model registry、上游执行器、后台作业和取消协议。没有添加安全沙箱、权限内核或自动 worktree 策略。
-
-## 实现边界
-
-`src/pi-extensions.ts` 默认加载本地 `subagents/native-adapter.js`，它通过 jiti 加载锁定的 `pi-subagents@0.63.0`。只缩小模型可见 schema、接入原生二进制启动接口、归档输出和注册能力，不复制上游执行器。
-
-`subagent` 支持：单个 `{agent,task,model?,cwd?,async?}`；最多 12 个 `tasks` 的批次（转换为原生 `runs.all` workflow）；`list/get/models/status/stop` 管理操作；`pending/reply` 转发原生 supervisor。`async` 默认 true；研究工具的事件委派使用前台等待。12 是单次批量输入上限，不是运行并发上限。默认不暴露任意 workflowScript、worktree 与并发覆盖参数。`bg_wait` 保留原生后台等待语义；普通异步子任务优先使用完成通知，不轮询。
-
-`subagent` 与 `bg_wait` 是两个模型工具，不因属于同一能力包而只计一个。准入状态、公开事件总线和原生 supervisor 继续复用；后者通过 `subagent` 的 pending/reply 操作提供，不增加常驻工具。新模式的切换与在途任务规则须在 PA-Q03 中确定，不能以隐藏工具代替执行侧限制。
-
-## 硬并发与排队
-
-`PI_SUBAGENT_PI_BINARY` 指向随构建复制的 `launch.py`。上游前台、后台 runner、事件委派最终启动子 Pi 都经过此接口。
-
-Linux `flock` 同时取得一个主对话槽（共 3）和一个 VM 槽（共 5），持锁文件描述符随 `exec` 进入真实 Node/Pi。锁由实际子 Pi 生命周期持有：父端超时不提前释放；子进程退出或 SIGKILL 后内核释放。等待中的启动器不计运行子 Agent。等待超过 10 分钟以明确错误退出；研究调用总超时 15 分钟（包含等待）。取消等待中的启动器不会占用名额或后台偷偷继续启动。竞争采用随机退避，不保证 FIFO 或无饥饿。
-
-Host 提供稳定 conversation ID，原生 CLI 使用 Pi session ID；后台作业继承根标识。默认命名空间 `/tmp/pi-coffee-subagents-<uid>`。所有同一 VM 的 Host/CLI 必须使用同一操作系统用户和同一准入目录。管理员可设 `PI_COFFEE_SCHEDULER_DIR`，但不能为每个会话设置不同值。运行中**不得删除锁目录/文件**，否则不同 inode 会破坏排他性。目录 0700，锁文件 0600。
-
-这是产品启动路径的资源调度，不是安全边界：可信用户手工启动的其他 CLI、外部 runner、绕开适配器的显式扩展列表/直接命令不在计量范围。不能将 3/5 宣称为任意 VM 进程的强制沙箱限额。重启不自动重放任务；现有 Host 中断恢复策略不变。
-
-## 独立模型
-
-```
-/subagents-model                  # 查看
-/subagents-model provider/model   # 设置用户级子任务默认模型
-/subagents-model off              # 清除默认，恢复上游继承行为
-/subagents-policy                 # 查看并发和队列约束
+```sh
+pi install npm:pi-subagents@0.73.1
 ```
 
-保存到用户 Pi `settings.json` 的 `subagents.defaultModel`；父模型不变。原生文件 Agent 的显式模型/agentOverrides 保留上游优先级；每次调用明确的 `model` 优先。运行时 `coffee-research` 单次、批次每次读取用户默认，命令修改后无需重启。无可用凭证/模型时报告错误，不自动换账号、供应商或父模型。当前 Web 委派和 `delegate=false` 路径将在 PA-014 迁移时移除。
+Pi discovers the extension, Skills and prompt templates from the package's
+native manifest. Coffee neither calls its factory nor injects an extension path.
+There must be exactly one loaded copy. An explicitly versioned package entry is
+pinned: to adopt a newer release, install that version and rerun compatibility
+checks. Users who choose an unversioned source can use `pi update`; the running
+version must still be recorded. Package presence is distinct from activation.
 
-## 输出与证据
+Before installing into a Web-used agent directory, upgrade the consumer to a
+Coffee revision without the old adapter. Installing beside a still-running old
+consumer would load two copies. Test isolated profiles first. The old
+`PI_COFFEE_SUBAGENTS` switch no longer controls the native package; use Pi package
+resource selection/removal instead.
 
-Current Coffee research children store bounded search results in a VM evidence file and return a brief to the parent. Under PA-014, an explicitly requested research child uses the official Web tool; generic child-output and context limits still apply, but the old Coffee search artifact format is no longer a target requirement.
+## Harness and native boundaries
 
-单次/批次/状态/bg_wait 输出及异步完成通知在父端入口限量。目标路径是父 Conversation Workspace 的 `artifacts/subagents/<sha256>.json`（Project Workspace 对应 `.pi-coffee/artifacts/subagents/`，文件 0600），返回短预览、runId 和相对路径；子进程不能用调用参数改写归属。写盘失败只返回短错误，不把原输出塞回历史。完整上游子会话/执行 artifact 仍在 VM，不能将 UI/history 中的短索引当作原始证据已删除。既有大历史只做上下文投影，不破坏性重写。
+- In Work, when installed, the native `subagents_enable`, `bg_wait` and
+  `subagent_supervisor` tools are available alongside the Coffee base tools.
+  The native loader activates `subagent`; Coffee does not rewrite its schema or
+  convert calls into workflow scripts. `search_tools` no longer owns a subagent
+  capability. Native Skills, guides and command help describe the current API.
+- Chat removes these four tools from model requests and blocks their model tool
+  calls, including a native loader restored after Harness's start hook.
+- Native slash commands are user-controlled upstream commands. Coffee no longer
+  wraps or prohibits them in Chat; an explicit user command can launch work.
+  Chat model isolation must not be described as a VM permission boundary.
+- Model changes and explicit Harness mode changes reset the effective tool table.
+  Use the native loader again when needed. Old Coffee capability leases are not
+  carried over as native activation state.
+- The official plugin owns single/workflow execution, cancellation, completion
+  notifications, retained children, nesting and optional worktree behavior.
+  Coffee does not force worktrees or a global no-nesting rule. The Work prompt
+  still asks for focused delegation, short evidence and no concurrent writers.
+- Configure models with native settings/agent definitions or explicit tool
+  arguments. Coffee's `/subagents-model`, `/subagents-policy`, runtime
+  `coffee-research` role and launcher are removed. Existing `subagents.defaultModel`
+  remains an upstream setting; it is not rewritten during migration.
 
-当前适配器仍默认使用 `getAgentDir()/pi-coffee/subagent-results/`；这是 PA-013 的已知实现差距，只能作为旧 Session 的兼容读取来源，不能作为新 Conversation 的最终合同。
+## Explicit behavior changes
 
-## 部署与验证
+| Area | Old Coffee adapter | Official 0.73.1 |
+| --- | --- | --- |
+| Concurrency | 3 active children per root, 5 per VM, shared Python/flock admission | Native per-run `globalConcurrencyLimit`, default 20; no Coffee VM-wide 3/5 guarantee |
+| Spawn budget | Coffee call schema and no nested delegation | Native per-run spawn budget, default 64; optional session budgets and native nesting policy |
+| Async load | Coffee launcher/process tracking | Native `maxActiveAsyncRunsPerSession` and capacity evidence; distinct from per-run concurrency |
+| Tool surface | Reduced schema and supervisor multiplexed into `subagent` | Official schema, loader, `bg_wait` and separate supervisor tool |
+| Output | Coffee archive and small preview on tools and notifications | Upstream result and artifact contracts, without a Coffee subagent output wrapper |
+| Resource discovery | Coffee manually supplied Skills/prompts | Native Pi package manifest |
 
-要求 Linux、Node >=22.19、Python3 标准库 `fcntl`。`npm run build` 复制可执行启动器；运行用户须有锁目录写权限。Current main fails its default Web delegation when subagents are disabled and requires an explicit direct-search override. Under PA-014, official Web search does not depend on subagents. 原生认证仍由用户在 VM 终端配置。
+Concurrency scopes are not interchangeable. A per-run setting of 3 is not a
+replacement for three children across a Conversation, or five across a VM.
 
-- `test/subagent-launcher.test.ts`：14 个独立进程/两个根对话，观测峰值 5、每根不超过 3；排队、等待中取消、SIGKILL 释放、禁止嵌套。
-- `test/subagent-rpc.test.ts`：真实 Pi loader/CLI + 上游执行器 + 本地假 LLM/Relay，覆盖Chat/Work 分派的能力激活、拒绝与直接搜索、单次、双任务 workflow、后台完成通知、默认 Web 委派、独立模型和每次显式覆盖。子模型请求期间检测实际持有的内核锁；父请求不含完整搜索尾部。
-- `test/subagent-result.test.ts`：Unicode/details 限量、0600 归档、写盘失败；其余测试覆盖事件注册、模型配置、失败无静默回退。
-- `npm run check`、`npm run smoke:subagents`、`npm run smoke:web`。
+## Context limits and artifacts
 
-这些是本地协议和执行路径验证，不替代真实 provider 登录/额度、真实 Serper 搜索质量、两台部署 VM、多窗口/浏览器通知和重启连续性验收。没有访问或更新未连通的外部需求单。
+0.73.0+ caps workflow Return/Emitted/Console sections at 200 KB or 5000 lines by
+default, with `maxOutput` overrides, truncation markers and artifact pointers.
+Async notifications/status have their own upstream preview limits.
+
+**Single-child inline results have no default `maxOutput` cap.** Set
+`maxOutput: { bytes: 2400, lines: 40 }` for a bounded call, or use native
+`outputMode: "file-only"` with an output path for large evidence. The Work prompt
+recommends these options, but that recommendation is not an enforced global cap.
+Do not claim every native child result is now summary-only, or that native
+artifact placement already matches Coffee's per-Conversation artifact contract.
+
+Coffee's separate context extension still bounds its existing built-in/Web tool
+set and checks the final request budget. It does not rewrite native subagent
+content/details or completion notifications, including the former Coffee-specific
+secret-redaction pass. Native output must not be described as having that old
+universal redaction guarantee. This migration does not redesign
+compaction or prove drift reduction.
+
+## Host migration gate
+
+The removed adapter supplied `/coffee-workspace-jobs`. Existing Server adapters
+that depend on this private command receive unknown background state and must
+continue to refuse workspace mutation/cleanup. Do not report unknown as idle.
+A Server consumer upgrade must replace this lifecycle integration and verify
+queued/running/paused children, completion, cancellation, reconnect and cleanup.
+Until then this source release must not be deployed over the current Web Host.
+
+Native plugin installation and source publication do not upgrade an already
+running Web session. Server release identity and deployment acceptance are
+separate from this repository's native-plugin compatibility checks.
+
+## Validation
+
+`test/subagent-rpc.test.ts` uses a real Pi 0.87.1 process, native package discovery,
+unmodified upstream runners and local deterministic HTTP fixtures. It covers
+single/workflow/background execution, model selection, Chat isolation and
+explicit output truncation and cancellation with terminal-state evidence. It is not a live model's autonomous delegation test.
+
+`npm run smoke:subagents` checks actual tools, commands and manifest resources.
+Run `node scripts/smoke-subagents.mjs --install-native` after build to additionally
+exercise `pi install npm:pi-subagents@0.73.1` in an isolated agent directory.
+Run `npm run check` and validate the packed artifact from a fresh checkout.

@@ -28,14 +28,13 @@ async function probe(lensEnabled) {
     { name: 'read', args: { path: 'marker.txt' }, expected: /alpha/ },
     { name: 'edit', args: { path: 'marker.txt', edits: [{ oldText: 'alpha', newText: 'beta' }] }, expected: /replaced|edited|applied/i },
     { name: 'bash', args: { command: 'node -e "if(require(\'fs\').readFileSync(\'marker.txt\',\'utf8\')!==\'beta\\n\')process.exit(1);console.log(\'BASH_OK\')"' }, expected: /BASH_OK/ },
-    { name: 'bash', args: { command: 'rg beta marker.txt' }, expected: /beta/ },
+    { name: 'bash', args: { command: 'grep beta marker.txt' }, expected: /beta/ },
     { name: 'bash', args: { command: 'find . -name marker.txt' }, expected: /marker.txt/ },
     { name: 'bash', args: { command: 'ls .' }, expected: /marker.txt/ },
     { name: 'git', args: { action: 'status' }, expected: /marker.txt/ },
     { name: 'search_tools', args: { action: 'search', query: 'web' }, expected: /web:/ },
     { name: 'search_tools', args: { action: 'activate', capability_id: 'web' }, expected: /Activated web/ },
     { name: 'web_search', args: { query: 'fixture evidence' }, expected: /example.com/ },
-    { name: 'search_tools', args: { action: 'activate', capability_id: 'subagent' }, expected: /Activated subagent/ },
   ];
   let cursor = 0; let calls = 0; const missing = []; const observed = []; const requestTools = [];
   const server = createServer(async (req, res) => {

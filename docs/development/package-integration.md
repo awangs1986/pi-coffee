@@ -1,6 +1,6 @@
 # Pi package integration
 
-The package is `pi-coffee`, pinned by a consumer to an immutable GitHub commit. Its Git `prepare` script builds TypeScript and copies prompt text, Skills, the LSP launcher and the Linux child launcher. A packed distribution contains `dist`, package metadata and README; it contains no Host, Web, Relay or browser assets.
+The package is `pi-coffee`, pinned by a consumer to an immutable GitHub commit. Its Git `prepare` script builds TypeScript and copies prompt text, Skills, the LSP launcher. A packed distribution contains `dist`, package metadata and README; it contains no Host, Web, Relay or browser assets.
 
 ## Public interface
 
@@ -31,3 +31,13 @@ Fresh-clone results and the final pair of repository identities are recorded in 
 ## Web extension ownership
 
 The consumer loads the pinned official `pi-web-access/index.ts` through `resolvePiExtensions()` exactly once. Do not also autoload a separately installed global copy: use Pi's documented package resource filter (`extensions: []`) on that global entry. This keeps the package installed but disables its extension in standalone Pi too; use a separate explicit configuration when standalone Pi should own Web tools. Both legacy `PI_COFFEE_WEB=off` and `PI_COFFEE_WEB_ACCESS=off` now disable the single official integration. `/websearch` and `/curator` are native commands; the Coffee `delegate` argument and `research_seal` no longer exist.
+
+## Native subagent migration (2026-09-28)
+
+Install `npm:pi-subagents@0.73.1` independently through Pi. Coffee no longer
+loads the upstream factory, supplies its resource directories, or rewrites its
+results. The development-only pin records the tested combination with Pi 0.87.1.
+See [subagent ownership and consumer migration gate](../spec/subagents-plugin.md).
+Do not install a native copy into a Host profile still using the old bundled
+adapter. The Server lifecycle consumer must replace `/coffee-workspace-jobs`
+before deployment; package publication alone is not that deployment.

@@ -30,3 +30,13 @@ The acceptance report records the completed live-model evaluation and its limits
 - Context-fold and Coffee context-management development continue in their dedicated task. This extraction does not authorize a policy switch or another model evaluation.
 
 Historical planning remains available in the parent commits. Host/Web/task-workspace and native Codex/Claude work is tracked in Server Issues.
+
+## Official native subagents (2026-09-28)
+
+[Pi #73](http://gitea:3000/awangs/pi-coffee/issues/73): owner selected unmodified `pi-subagents@0.73.1`, installed by Pi's native package
+manager. Coffee executor/resource/model/output adapters and 3/5 launcher are
+retired; the exact npm version is a development compatibility fixture only.
+[The specification](docs/spec/subagents-plugin.md) records native activation,
+output limits, command ownership and concurrency differences. Host lifecycle
+replacement and deployment remain a Server integration gate, not completed by
+this package change. LSP's independent package work is a separate deliverable.

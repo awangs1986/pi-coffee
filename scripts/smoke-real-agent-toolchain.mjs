@@ -75,7 +75,7 @@ try {
         },
         {
           id: "explicit-coverage",
-          text: "This is an explicit compatibility probe. Exercise each currently visible base development capability safely at least once: inspect, list, search, and read the repository; create a temporary probe file, modify it, run a shell command, inspect repository state, and run the configured verification; remove the temporary file afterward. Use the capability discovery interface to look for web research and subagent/delegation bundles, activate them if available, and make one minimal harmless call through each activated bundle. Also use every visible pi-lens project-intelligence or diagnostic capability at least once; if its activation tool offers LSP navigation, activate it and perform a definition or reference query for formatTotal in src/calculator.ts. Do not commit or push. Report unavailable tools precisely.",
+          text: "This is an explicit compatibility probe. Exercise each currently visible base development capability safely at least once: inspect, list, search, and read the repository; create a temporary probe file, modify it, run a shell command, inspect repository state, and run the configured verification; remove the temporary file afterward. Use capability discovery for web research. If the official subagents_enable tool is installed, use its native loader and make one minimal harmless subagent call. Also use every visible pi-lens project-intelligence or diagnostic capability at least once; if its activation tool offers LSP navigation, activate it and perform a definition or reference query for formatTotal in src/calculator.ts. Do not commit or push. Report unavailable tools precisely.",
         },
       ],
     }));

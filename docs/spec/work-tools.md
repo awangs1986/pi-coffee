@@ -6,6 +6,8 @@
 
 **PA-014 Web target (2026-09-27):** use only the official `pi-web-access` extension. Chat keeps its native `web_search` visible; Work discovers official Web tools on demand, with search and content/source visibility allowed to stay separate. The native package owns `web_search`, `fetch_content`, `source_check`, `get_search_content`, `/websearch`, and `/curator`. Coffee's `research_seal`, search-specific adapter, and default Web delegation are retired in the target design. The tables below describe current main until that migration is implemented and verified; see [Web search](./web-search-plugin.md).
 
+**2026-09-28 subagent update:** the six base Work tools remain; an installed native subagent package additionally supplies its loader, wait and supervisor tools. Coffee no longer bundles or activates a subagent capability. Native limits replace the former adapter contract; see [the accepted migration](./subagents-plugin.md).
+
 ## 已确认的目标集合
 
 | 分组 | 常驻模型工具 | 理由 |
@@ -24,7 +26,7 @@ LSP 的定义/引用/类型信息由语义查询提供；Bash + rg 只承担文�
 | 入口 | 目标行为 | 当前状态 |
 |---|---|---|
 | `search_tools` → Web | 搜索与必要网页内容读取按需使用 | Current main has separate `web` and `web-access` visibility groups; PA-014 keeps their implementations in the one official plugin |
-| `search_tools` → Subagent | 委派与等待按需使用 | 已有 `subagent` / `bg_wait`，保留其执行合同 |
+| Native `subagents_enable` → `subagent` | Official delegation, on demand | Native package ownership; see [subagents](./subagents-plugin.md) |
 | Pi 原生 `lsp` Skill → Bash CLI | 获取项目可用能力，执行诊断、定义、引用、类型与符号查询 | V1 CLI/Skill 与 TS/Python Profile 已实现并实测；不用 MCP，不新增 LSP 模型工具 |
 
 Work 预先看见 LSP Skill 的名称、用途和真实路径，按需读取正文；语言服务器首次语义查询时启动并复用。能力摘要可见不等于服务器已经运行。LSP 不依赖 `search_tools` 激活，也不加载 pi-lens 原生 Pi 工具。
@@ -39,7 +41,7 @@ Work 预先看见 LSP Skill 的名称、用途和真实路径，按需读取正�
 |---|---|---|
 | `web` | `web_search`、`research_seal` | 本地可信目录；首次执行检查搜索通路 |
 | `web-access` | `fetch_content`、`source_check`、`get_search_content` | 依赖信任、runner conformance 等条件 |
-| `subagent` | `subagent`、`bg_wait` | 现有适配器与本地 manifest |
+| Native subagents (outside `search_tools`) | `subagents_enable`, `subagent`, `bg_wait`, `subagent_supervisor` | Official Pi package; native loader and schema |
 
 发现只返回摘要，激活后工具 schema 在下一模型请求生效。`search_tools` 不承担 Skill 启动；Host 通过 Pi 原生 `--skill` 装配 `lsp`，Skill 经 Bash 调用已打包的 `coffee-lsp`。pi-lens 仍不是默认 LSP 后端。
 

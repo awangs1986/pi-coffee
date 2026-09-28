@@ -12,20 +12,15 @@ import {
   resolvePiLensExtension,
   resolveRpivTodoExtension,
   resolvePiMcpAdapterExtension,
-  resolvePiSubagentsExtension,
-  resolvePiSubagentsResourceExtension,
   resolvePiWebAccessExtension,
   resolvePiWebAccessPackage,
 } from "../src/pi-extensions.js";
-import subagentsResourceExtension from "../src/subagents/extension.js";
 
 describe("PI Coffee native extension selection", () => {
   it("loads the read-only context observer after the final Harness boundary", () => {
     const extensions = resolvePiExtensions({});
     expect(extensions).toEqual([
-      resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
-      resolvePiSubagentsResourceExtension(),
       resolveContextFoldExtension(),
       resolveHarnessExtension(),
       resolveContextUsageExtension(),
@@ -33,13 +28,12 @@ describe("PI Coffee native extension selection", () => {
     expect(extensions.every((path) => isAbsolute(path))).toBe(true);
     // Local extension entries point at the build output (`dist/src`); the
     // package entry is the only source path that must exist before a build.
-    expect(resolvePiSubagentsExtension()).toMatch(/[\\/]subagents[\\/]native-adapter\.js$/);
     expect(resolvePiWebAccessExtension()).toBe(resolvePiWebAccessPackage());
     expect(resolvePiWebAccessPackage()).toMatch(/node_modules[\\/]pi-web-access[\\/]index\.ts$/);
     expect(resolveContextFoldExtension()).toMatch(/[\\/]context[\\/]extension\.js$/);
   });
 
-  it("can disable only pi-subagents while retaining Harness", () => {
+  it("does not load native subagents through legacy Coffee settings", () => {
     expect(resolvePiExtensions({ PI_COFFEE_SUBAGENTS: "off" })).toEqual([
       resolvePiWebAccessExtension(),
       resolveContextFoldExtension(),
@@ -56,9 +50,7 @@ describe("PI Coffee native extension selection", () => {
 
   it("can disable context-fold independently, leaving Pi native compaction available", () => {
     expect(resolvePiExtensions({ PI_COFFEE_CONTEXT_FOLD: "off" })).toEqual([
-      resolvePiSubagentsExtension(),
       resolvePiWebAccessExtension(),
-      resolvePiSubagentsResourceExtension(),
       resolveHarnessExtension(),
       resolveContextUsageExtension(),
     ]);
@@ -140,18 +132,4 @@ describe("PI Coffee native extension selection", () => {
     expect(resolvePiExtensions({ PI_COFFEE_EXTENSIONS: "off", PI_COFFEE_SUBAGENTS: "on" })).toEqual([]);
   });
 
-  it("exposes upstream skills and prompt templates through Pi resource discovery", () => {
-    const handlers = new Map<string, (event: unknown, context: unknown) => unknown>();
-    const fakePi = {
-      on(event: string, handler: (payload: unknown, context: unknown) => unknown) {
-        handlers.set(event, handler);
-      },
-    };
-    subagentsResourceExtension(fakePi as never);
-    const result = handlers.get("resources_discover")?.({ type: "resources_discover", cwd: "/tmp", reason: "startup" }, {});
-    expect(result).toEqual({
-      skillPaths: [expect.stringMatching(/node_modules[\\/]pi-subagents[\\/]skills$/)],
-      promptPaths: [expect.stringMatching(/node_modules[\\/]pi-subagents[\\/]prompts$/)],
-    });
-  });
 });

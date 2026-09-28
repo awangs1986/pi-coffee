@@ -8,7 +8,7 @@
 
 ## 实现合同
 
-1. **入口限量**：read/bash/grep/find/ls/git/verify 和内容获取工具返回的 content + details 超过 12000 UTF-8 字节时，先保存所属 Conversation Workspace 的 `artifacts/`（Project Workspace 对应 `.pi-coffee/artifacts/`），历史接收至多 4000 字符预览和恢复相对路径。写盘失败只返回短错误，并警告原操作可能已执行，禁止声称已保存。subagent/bg_wait 和异步子任务通知另在原生适配器入口先归档大正文/details，只返回短摘要与索引。当前通用入口尚未全部按 Conversation 解析，属于 [PA-013](./pi-agent.md) 的实现差距。
+1. **入口限量**：read/bash/grep/find/ls/git/verify 和内容获取工具返回的 content + details 超过 12000 UTF-8 字节时，先保存所属 Conversation Workspace 的 `artifacts/`（Project Workspace 对应 `.pi-coffee/artifacts/`），历史接收至多 4000 字符预览和恢复相对路径。写盘失败只返回短错误，并警告原操作可能已执行，禁止声称已保存。Native subagent tools and completion notifications now retain upstream output semantics; see [the subagent limits and migration](./subagents-plugin.md). Single-child inline output requires explicit `maxOutput` or file-only output for a bounded result.当前通用入口尚未全部按 Conversation 解析，属于 [PA-013](./pi-agent.md) 的实现差距。
 2. **Search (PA-014 target)**: the official `pi-web-access` tool may return source data directly into Pi history. The generic large-tool-result guard must cover `web_search` before the official-only migration is accepted; the final provider-request budget remains the backstop. The current Coffee pointer-only search path is an implementation baseline, not the target contract. See [Web search](./web-search-plugin.md) for the unresolved official-cache Conversation boundary.
 3. **折叠**：复用锁定的 context-fold@0.4.0，不改上游源码；Work 在已注册时常驻 recall_folded，unfold 不默认开放。Chat 不增加恢复工具，也不执行自动折叠 context 投影，避免注入恢复指导；本地手动压缩与最终请求预算保护仍保留。
 4. **硬压缩**：通过本地 adapter 调用原 context-fold 的确定性索引算法。未返回有效结果或报错时取消压缩，不能静默 fallback 到模型摘要。CONTEXTFOLD_COMPACT=native 或包级禁用在该 adapter 下会取消硬压缩；不要把它当作成功。
@@ -33,4 +33,4 @@ Pi 0.84.4 在 compaction hook 之前仍会解析所选模型及认证。这里�
 - `test/host-server.test.ts`：压缩失败返回错误而不是提前成功 ACK。
 - `npm run smoke:subagents`：实际默认加载包含 recall_folded，子 Agent 的真实执行测试另见 subagent-rpc.test.ts。
 
-以上不等于真实供应商、真实双 VM、所有图片格式或任意 VM 进程的沙箱并发限制；产品子 Pi 启动路径的 3/5 锁准入另有跨进程与真实 Pi 协议测试。
+以上不等于真实供应商、真实双 VM、所有图片格式或任意 VM 进程的沙箱并发限制；The former Coffee 3/5 launcher contract is retired by the official subagent migration.

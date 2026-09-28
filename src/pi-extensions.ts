@@ -11,12 +11,9 @@ const resolvePackage = createRequire(import.meta.url).resolve;
  * Resolve the native extension entries loaded by every Agent Host session.
  *
  * `PI_COFFEE_EXTENSIONS` is an explicit replacement list. With no override,
- * PI Coffee loads Harness, the pinned upstream
- * pi-subagents entry, official pi-web-access exactly once, its subagent resources, and
- * context-fold. context-fold is deliberately last:
- * Pi keeps the last non-empty `session_before_compact` result, so its
- * deterministic summary wins over companion extensions. Its local adapter
- * cancels compaction on failure instead of silently requesting a model summary.
+ * PI Coffee loads Harness, official pi-web-access and local context recovery.
+ * pi-subagents is independently installed and loaded by Pi's package manager.
+ * Do not add its entry here: a second copy would register duplicate tools.
  *
  * pi-lens is a separately installed opt-in integration. It is not added
  * to the default list and therefore does not initialize LSP/diagnostic work or
@@ -35,11 +32,7 @@ export function resolvePiExtensions(env: NodeJS.ProcessEnv = process.env): strin
 
   const harness = resolveHarnessExtension();
   const extensions: string[] = [];
-  if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) {
-    extensions.push(resolvePiSubagentsExtension());
-  }
   if (!isDisabled(env.PI_COFFEE_WEB) && !isDisabled(env.PI_COFFEE_WEB_ACCESS)) extensions.push(resolvePiWebAccessExtension());
-  if (!isDisabled(env.PI_COFFEE_SUBAGENTS)) extensions.push(resolvePiSubagentsResourceExtension());
   if (isEnabled(env.PI_COFFEE_PI_LENS)) extensions.push(resolvePiLensExtension(env));
   if (isEnabled(env.PI_COFFEE_RPIV_TODO)) extensions.push(resolveRpivTodoExtension(env));
   if (isEnabled(env.PI_COFFEE_PI_MCP_ADAPTER)) extensions.push(resolvePiMcpAdapterExtension(env));
@@ -58,11 +51,6 @@ export function resolveWebExtension(): string {
   return resolvePiWebAccessPackage();
 }
 
-/** Resolve the official package entry; Pi's loader handles its TypeScript source. */
-export function resolvePiSubagentsExtension(): string {
-  return join(moduleDirectory, "subagents", "native-adapter.js");
-}
-
 /** Resolve the official pi-web-access package entry. */
 export function resolvePiWebAccessExtension(): string {
   return resolvePiWebAccessPackage();
@@ -70,10 +58,6 @@ export function resolvePiWebAccessExtension(): string {
 
 export function resolvePiWebAccessPackage(): string {
   return resolvePackage("pi-web-access/index.ts");
-}
-
-export function resolvePiSubagentsResourceExtension(): string {
-  return join(moduleDirectory, "subagents", "extension.js");
 }
 
 /** Resolve context-fold's native Pi package entry; Pi loads its TypeScript source through jiti. */
