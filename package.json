@@ -1,6 +1,6 @@
 {
   "name": "pi-coffee-lsp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pi package: language-server tool, automatic diagnostics after edits, read-only coffee-lsp CLI and Skill (adapted from oh-my-pi)",
   "type": "module",
   "keywords": [
@@ -13,12 +13,20 @@
     "typescript",
     "pyright"
   ],
-  "bin": { "coffee-lsp": "./dist/src/lsp/bin.js" },
-  "pi": {
-    "extensions": ["./dist/src/extension/index.js"],
-    "skills": ["./dist/skills/lsp"]
+  "bin": {
+    "coffee-lsp": "./dist/src/lsp/bin.js"
   },
-  "engines": { "node": ">=22.19.0" },
+  "pi": {
+    "extensions": [
+      "./dist/src/extension/index.js"
+    ],
+    "skills": [
+      "./dist/skills/lsp"
+    ]
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
     "build": "node scripts/clean.mjs && tsc -p tsconfig.json && node scripts/copy-runtime.mjs",
     "test": "vitest run",
@@ -38,8 +46,12 @@
     "typebox": "*"
   },
   "peerDependenciesMeta": {
-    "@earendil-works/pi-coding-agent": { "optional": true },
-    "typebox": { "optional": true }
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.87.1",
@@ -48,10 +60,19 @@
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   },
-  "repository": { "type": "git", "url": "https://github.com/awangs1986/pi-coffee-lsp.git" },
-  "files": ["dist", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/awangs1986/pi-coffee-lsp.git"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "exports": {
-    ".": { "types": "./dist/src/runtime.d.ts", "import": "./dist/src/runtime.js" },
+    ".": {
+      "types": "./dist/src/runtime.d.ts",
+      "import": "./dist/src/runtime.js"
+    },
     "./package.json": "./package.json"
   }
 }

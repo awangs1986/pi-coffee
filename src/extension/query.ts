@@ -6,7 +6,15 @@ export interface LspEnvelope {
   status: "ok" | "partial" | "unavailable" | "error";
   workspace?: string;
   projectRoot?: string;
-  server?: { id: string; state: string; command?: string };
+  server?: {
+    id: string;
+    state: string;
+    command?: string;
+    role?: "language" | "linter";
+    source?: string;
+    language?: string;
+  };
+  managedPrefix?: string;
   capabilityState?: string;
   capabilities?: string[];
   diagnosticState?: "clean" | "findings" | "inconclusive";

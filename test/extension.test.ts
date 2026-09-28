@@ -245,8 +245,36 @@ describe("Pi extension", () => {
           ),
         ).rejects.toThrow(/invalid_arguments/);
 
+        // The registry is reachable without a file, from the tool and the command.
+        const servers = await tool.execute(
+          "call-3",
+          { operation: "servers" },
+          new AbortController().signal,
+          () => {},
+          harness.ctx,
+        );
+        expect(servers.content[0].text).toMatch(/^language servers: \d+ available, \d+ not installed/);
+        expect(servers.content[0].text).toContain("+ typescript: TypeScript / JavaScript");
+        expect(servers.content[0].text).toContain("vue: Vue [.vue]");
+        expect(servers.details).toMatchObject({ operation: "servers", status: "ok" });
+        await expect(
+          tool.execute(
+            "call-4",
+            { operation: "status" },
+            new AbortController().signal,
+            () => {},
+            harness.ctx,
+          ),
+        ).rejects.toThrow(/requires file/);
+
         // /lsp status, auto toggling and explicit checks.
         const command = harness.commands.get("lsp")!;
+        await command.handler("servers", harness.ctx);
+        expect(harness.notifications.at(-1)).toContain("language servers:");
+        await command.handler("install", harness.ctx);
+        expect(harness.notifications.at(-1)).toContain("Usage: /lsp install");
+        await command.handler("install rust", harness.ctx);
+        expect(harness.notifications.at(-1)).toContain("manual_install_required");
         await command.handler("status", harness.ctx);
         expect(harness.notifications.at(-1)).toContain("auto diagnostics on");
         expect(harness.notifications.at(-1)).toContain("last automatic check: src/app.ts");

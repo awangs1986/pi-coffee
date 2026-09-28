@@ -7,7 +7,7 @@ description: Use project language-server semantics for type diagnostics, symbols
 
 Use this skill when a task involves type errors, cross-file definitions or references, ambiguous same-name symbols, or the impact of changing an interface. Plain text search can find candidates; it does not prove that two names are the same symbol.
 
-If an `lsp` tool is available in this session, prefer it: it runs the same operations (`status`, `symbols`, `definition`, `references`, `hover`, `implementation`, `diagnostics`) with the same 1-based positions, returns compact text, and the session automatically appends language-server diagnostics to successful `edit` and `write` results. Everything below about positions, capabilities and interpreting results applies to the tool as well; use the Bash command when the tool is absent or when you need the raw JSON envelope. Both share the session's warm language servers.
+If an `lsp` tool is available in this session, prefer it: it runs the same operations (`status`, `symbols`, `definition`, `references`, `hover`, `implementation`, `diagnostics`, `servers`) with the same 1-based positions, returns compact text, and the session automatically appends language-server diagnostics to successful `edit` and `write` results. Everything below about positions, capabilities and interpreting results applies to the tool as well; use the Bash command when the tool is absent or when you need the raw JSON envelope. Both share the session's warm language servers.
 
 The Bash interface is the `coffee-lsp` command. Start by checking the target file:
 
@@ -39,13 +39,23 @@ means no server has started. A semantic call negotiates support and may return
 coffee-lsp implementation --file src/example.ts --line 12 --column 8
 ```
 
-Candidates do not prove which implementation executes at runtime. Required profiles
-are TS/JS, Python, C# (`csharp-ls` plus .NET SDK), C/C++ (`clangd` plus a compilation
-database), Rust (`rust-analyzer`, Cargo and rust-src), and Go (`gopls` plus Go).
-Run from the task checkout; use `--workspace` to bound project selection. SDKs,
-Cargo features/target and Go build tags/environment must match the project's checks.
-Use `--timeout-ms 30000` for a cold project. Missing dependencies or uncertain
-coverage require an explicit limitation and the project's compiler/checks.
+Candidates do not prove which implementation executes at runtime. TS/JS (TypeScript 5
+through typescript-language-server, TypeScript 7 through the native `tsc --lsp`) and
+Python (Pyright) are bundled. Other languages come from a registry (web: HTML, CSS,
+JSON, YAML, Vue, Svelte, Astro, ESLint, Tailwind; games: C#/OmniSharp, clangd, Lua,
+GLSL/WGSL, Zig, Odin, Rust, CMake; applications: Go, Java, Kotlin, Dart, Swift, Ruby,
+Bash, Dockerfile, and more) and need their executable installed. When `status` reports
+`unavailable`, its issue message names the install command; `coffee-lsp servers` lists
+every entry with its state, and `coffee-lsp install <id>` installs npm-distributed
+servers (html, css, json, yaml, vue, svelte, astro, eslint, bash, dockerfile, toml,
+tailwindcss, graphql, prisma, php) into a managed directory outside the project.
+Native servers (clangd, rust-analyzer, gopls, csharp-ls, lua-language-server, zls, …)
+must be installed by the user; ask before installing anything. Run from the task
+checkout; use `--workspace` to bound project selection. SDKs, Cargo features/target and
+Go build tags/environment must match the project's checks. Use `--timeout-ms 30000`
+for a cold project. Missing dependencies or uncertain coverage require an explicit
+limitation and the project's compiler/checks. Servers marked `role: linter` (ESLint,
+Ruff, Biome, Tailwind) provide diagnostics only.
 
 Documentation-only and ordinary text changes do not need LSP. For semantic changes,
 choose the smallest useful set of queries; you do not need to call every operation.

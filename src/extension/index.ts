@@ -4,7 +4,7 @@ import type {
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 import { existsSync } from "node:fs";
-import { delimiter, extname, join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { Type, type Static } from "typebox";
 import { findProjectRoot } from "../lsp/cli.js";
 import { resolveProfile } from "../lsp/profiles.js";
@@ -30,6 +30,7 @@ const OPERATIONS = [
   "hover",
   "implementation",
   "diagnostics",
+  "servers",
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
 const POSITIONAL: readonly Operation[] = [
@@ -44,11 +45,14 @@ const lspParameters = Type.Object({
     type: "string",
     enum: [...OPERATIONS],
     description:
-      "status: is a server available for this file. symbols: document outline with 1-based positions. definition / references / implementation / hover: semantic navigation at line/column. diagnostics: type errors for one or more saved files.",
+      "status: is a server available for this file. symbols: document outline with 1-based positions. definition / references / implementation / hover: semantic navigation at line/column. diagnostics: type errors for one or more saved files. servers: the language-server registry and which servers are installed (file optional).",
   }),
-  file: Type.String({
-    description: "File to query; absolute or relative to the working directory.",
-  }),
+  file: Type.Optional(
+    Type.String({
+      description:
+        "File to query; absolute or relative to the working directory. Required for every operation except servers.",
+    }),
+  ),
   files: Type.Optional(
     Type.Array(Type.String(), {
       description:
@@ -229,6 +233,8 @@ export function createCoffeeLspExtension(
     parameters: lspParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       bind(ctx);
+      if (params.operation !== "servers" && !params.file)
+        throw new Error(`lsp ${params.operation} requires file`);
       const args = buildArgs(params, ctx.cwd);
       const outcome = await runQuery(args, {
         cwd: ctx.cwd,
@@ -253,7 +259,7 @@ export function createCoffeeLspExtension(
 
   pi.registerCommand("lsp", {
     description:
-      "LSP extension: /lsp [status|check <file>|auto on|off|stop|restart]",
+      "LSP extension: /lsp [status|check <file>|servers|install <id>|auto on|off|stop|restart]",
     handler: async (rawArgs, ctx) => {
       bind(ctx);
       const [command = "status", ...rest] = rawArgs.trim().split(/\s+/).filter(Boolean);
@@ -300,6 +306,40 @@ export function createCoffeeLspExtension(
           );
           return;
         }
+        case "servers": {
+          const outcome = await runQuery(["servers"], {
+            cwd: ctx.cwd,
+            env: environment(),
+            signal: ctx.signal,
+          });
+          notify(
+            outcome.envelope
+              ? formatEnvelope(outcome.envelope, ctx.cwd)
+              : outcome.stderr.trim() || "coffee-lsp produced no result",
+            outcome.code === 0 ? "info" : "warning",
+          );
+          return;
+        }
+        case "install": {
+          const id = rest[0];
+          if (!id) {
+            notify("Usage: /lsp install <server id> (see /lsp servers)", "warning");
+            return;
+          }
+          notify(`installing ${id} into the managed prefix; this runs npm and may take a minute`);
+          const outcome = await runQuery(["install", id], {
+            cwd: ctx.cwd,
+            env: environment(),
+            signal: ctx.signal,
+          });
+          notify(
+            outcome.envelope
+              ? formatEnvelope(outcome.envelope, ctx.cwd)
+              : outcome.stderr.trim() || "coffee-lsp produced no result",
+            outcome.code === 0 ? "info" : "warning",
+          );
+          return;
+        }
         case "auto": {
           const value = rest[0];
           if (value === "on" || value === "off") {
@@ -322,7 +362,10 @@ export function createCoffeeLspExtension(
           return;
         }
         default:
-          notify("Usage: /lsp [status|check <file>|auto on|off|stop|restart]", "warning");
+          notify(
+            "Usage: /lsp [status|check <file>|servers|install <id>|auto on|off|stop|restart]",
+            "warning",
+          );
       }
     },
   });
@@ -417,25 +460,29 @@ function inputPath(event: ToolResultEvent, cwd: string): string | undefined {
   return existsSync(file) ? file : undefined;
 }
 
-/** Returns a warm-up cache key when a language server profile covers this file. */
+/**
+ * Returns a warm-up cache key when an enabled, installed language server
+ * covers this file. Files without extension (Dockerfile, CMakeLists.txt) are
+ * matched by name through the registry.
+ */
 function supported(
   file: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
 ): string | undefined {
-  if (!extname(file)) return undefined;
   let root: string;
   try {
-    root = findProjectRoot(file, cwd, false);
+    root = findProjectRoot(file, cwd, false, env);
   } catch {
     return undefined;
   }
-  const profile = resolveProfile(file, root, env);
+  const profile = resolveProfile(file, root, env, cwd);
   return profile.available ? `${profile.id}:${root}` : undefined;
 }
 
 function buildArgs(params: LspParameters, cwd: string): string[] {
-  const args: string[] = [params.operation, "--file", resolve(cwd, params.file)];
+  const args: string[] = [params.operation];
+  if (params.file) args.push("--file", resolve(cwd, params.file));
   if (params.operation === "diagnostics")
     for (const extra of params.files ?? []) args.push("--file", resolve(cwd, extra));
   if (POSITIONAL.includes(params.operation)) {

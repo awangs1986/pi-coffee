@@ -70,7 +70,9 @@ export function formatEnvelope(envelope: LspEnvelope, cwd: string): string {
   switch (envelope.operation) {
     case "status": {
       const state = envelope.server?.state ?? envelope.status;
-      lines.push(`lsp status: ${server} server ${state}`);
+      const role = envelope.server?.role === "linter" ? " (lint only)" : "";
+      const language = envelope.server?.language ? ` for ${envelope.server.language}` : "";
+      lines.push(`lsp status: ${server} server ${state}${role}${language}`);
       if (envelope.projectRoot)
         lines.push(`project root: ${path(envelope.projectRoot)}`);
       if (envelope.capabilities?.length && envelope.status === "ok")
@@ -114,6 +116,19 @@ export function formatEnvelope(envelope: LspEnvelope, cwd: string): string {
       lines.push(...formatDiagnosticsLines(envelope, cwd));
       break;
     }
+    case "servers": {
+      lines.push(...formatServersLines(envelope));
+      break;
+    }
+    case "install": {
+      const command = envelope.server?.command;
+      lines.push(
+        envelope.status === "ok"
+          ? `installed ${server}: ${command ?? "available"} (managed prefix ${envelope.managedPrefix ?? "?"})`
+          : `install ${server}: ${envelope.status}`,
+      );
+      break;
+    }
     default:
       lines.push(`lsp ${envelope.operation}: ${envelope.status}`);
   }
@@ -125,6 +140,24 @@ export function formatEnvelope(envelope: LspEnvelope, cwd: string): string {
   for (const issue of issues) lines.push(`! ${issue.code}: ${issue.message}`);
   if (envelope.nextAction) lines.push(`next: ${envelope.nextAction}`);
   return lines.join("\n");
+}
+
+export function formatServersLines(envelope: LspEnvelope): string[] {
+  const items = envelope.items ?? [];
+  const available = items.filter((item) => item.status === "available");
+  const missing = items.filter((item) => item.status === "missing");
+  const disabled = items.filter((item) => item.status === "disabled");
+  const lines = [
+    `language servers: ${available.length} available, ${missing.length} not installed, ${disabled.length} disabled${envelope.managedPrefix ? ` (managed prefix ${envelope.managedPrefix})` : ""}`,
+  ];
+  const describe = (item: any) =>
+    `${item.id}${item.role === "linter" ? " (lint only)" : ""}${item.configured ? " (coffee-lsp.json)" : ""}: ${item.language} [${item.fileTypes.join(" ")}]`;
+  for (const item of available)
+    lines.push(`  + ${describe(item)} → ${item.command}${item.source ? ` (${item.source})` : ""}`);
+  for (const item of missing)
+    lines.push(`  - ${describe(item)}${item.install ? ` → ${item.install}` : ""}${item.note ? ` (${item.note})` : ""}`);
+  for (const item of disabled) lines.push(`  · ${describe(item)} disabled`);
+  return lines;
 }
 
 export function formatDiagnosticsLines(envelope: LspEnvelope, cwd: string): string[] {

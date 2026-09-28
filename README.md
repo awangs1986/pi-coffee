@@ -63,6 +63,7 @@ lsp { operation: "definition",  file: "src/game.ts", line: 12, column: 8 }
 lsp { operation: "references",  file: "src/game.ts", line: 12, column: 8, includeDeclaration: true }
 lsp { operation: "hover",       file: "src/game.ts", line: 12, column: 8 }
 lsp { operation: "diagnostics", file: "src/game.ts", files: ["src/scene.ts"], timeoutMs: 30000 }
+lsp { operation: "servers" }
 ```
 
 Positions are 1-based lines and Unicode code-point columns, exactly as in the
@@ -107,6 +108,8 @@ background once per project, so the first edit usually meets a warm server.
 | --- | --- |
 | `/lsp status` | session id, daemon socket, current automatic-diagnostics settings, last automatic check |
 | `/lsp check <file>` | run diagnostics for one file with a 30-second budget and show the result |
+| `/lsp servers` | the language-server registry: which servers are installed, missing (with install hints) or disabled |
+| `/lsp install <id>` | install an npm-distributed server (html, css, json, yaml, vue, …) into the managed prefix |
 | `/lsp auto on` / `off` | toggle automatic diagnostics for this session |
 | `/lsp stop` / `restart` | stop the session's language servers (they restart on the next query) |
 
@@ -124,9 +127,10 @@ that daemon and never stops it. Parallel tool calls are serialized by the daemon
 
 Extension behaviour is read from the `pi` section of `coffee-lsp.json`, first in
 the Pi agent directory (`PI_CODING_AGENT_DIR`, default `~/.pi/agent`), then in the
-working directory; environment variables win over both. Language-server
-`settings` / `initializationOptions` continue to live under the profile ids of
-the same file.
+working directory; environment variables win over both. The `servers` section
+extends or overrides the language-server registry (see
+[Languages](#languages)); the legacy per-profile sections (`"typescript": {
+"settings": … }`) still work and take precedence over registry defaults.
 
 ```json
 {
@@ -138,6 +142,15 @@ the same file.
     "reportClean": true,
     "prewarm": true,
     "daemonIdleMs": 1800000
+  },
+  "servers": {
+    "gdscript": {
+      "command": "/path/to/gdscript-bridge",
+      "fileTypes": [".gd"],
+      "rootMarkers": ["project.godot"]
+    },
+    "markdown": { "disabled": false },
+    "lua": { "settings": { "Lua": { "diagnostics": { "globals": ["love"] } } } }
   },
   "typescript": { "settings": {} }
 }
@@ -151,7 +164,8 @@ the same file.
 | `PI_COFFEE_LSP_PREWARM=0` | do not start servers on `read` |
 | `PI_COFFEE_LSP_IDLE_MS` | daemon idle shutdown |
 | `PI_COFFEE_ROOT_SESSION` | override the session id used for the daemon socket |
-| `PI_COFFEE_<TS\|PYTHON\|CSHARP\|CPP\|RUST\|GO>_LSP_COMMAND` | JSON argv array replacing a language server |
+| `PI_COFFEE_<ID>_LSP_COMMAND` | JSON argv array replacing the server with registry id `<ID>` (upper case, `-` → `_`); the historical `TS`, `PYTHON`, `CSHARP`, `CPP`, `RUST`, `GO` names still work |
+| `PI_COFFEE_LSP_HOME` | directory for managed servers (default `<agent dir>/coffee-lsp`; `coffee-lsp install` writes to `<home>/npm`) |
 
 ## Query saved source from Bash
 
@@ -163,6 +177,8 @@ coffee-lsp references --file src/example.ts --line 12 --column 8
 coffee-lsp hover --file src/example.ts --line 12 --column 8
 coffee-lsp implementation --file src/example.ts --line 12 --column 8
 coffee-lsp diagnostics --file src/example.ts --timeout-ms 30000
+coffee-lsp servers [--file src/App.vue]     # registry: installed / missing / disabled
+coffee-lsp install yaml                     # npm-distributed servers only
 ```
 
 Use actual symbol positions from the current source or a symbols result. Positions
@@ -171,22 +187,98 @@ are 1-based Unicode code points. Default operation budget is 10 seconds, maximum
 query. Diagnostics pass only when `diagnosticState` is `clean` with confirmed
 coverage. Empty, stale, unsupported and inconclusive results are not success.
 
-| Language family | Server | Additional project prerequisites |
-| --- | --- | --- |
-| TS/JS | typescript-language-server 4.3.4 (bundled) | Project TypeScript compiler; tsconfig/jsconfig |
-| Python | Pyright 1.1.405 (bundled) | Python environment and project configuration |
-| C# | csharp-ls | .NET SDK and unambiguous solution/project |
-| C/C++ | clangd | Compiler and compile_commands.json (also supported under build/) |
-| Rust | rust-analyzer | Cargo, matching Rust toolchain and rust-src |
-| Go | gopls | Go toolchain and go.mod/go.work |
+## Languages
 
-Install native servers on PATH. Command overrides remain the existing
-`PI_COFFEE_<TS|PYTHON|CSHARP|CPP|RUST|GO>_LSP_COMMAND` JSON argv arrays. Project
-`coffee-lsp.json` can supply per-profile `settings` and `initializationOptions`.
-Pyright does not advertise implementation lookup. Rename, formatting, code actions
-and server-requested edits are outside the read-only interface. TypeScript
-projects must have `typescript` installed in their own `node_modules`; the bundled
-server does not carry a compiler.
+Servers come from a registry adapted from
+[oh-my-pi](https://github.com/can1357/oh-my-pi)'s `lsp/defaults.json`: file
+types, root markers, command lines and the settings needed for read-only
+diagnostics and navigation. One server serves a file: language servers before
+linters, then whichever has its markers at the project root, then registry
+order. Executables resolve from the project (`node_modules/.bin`, `.venv`,
+`venv`, `bin` next to `Gemfile`/`go.mod`, walking up), then the managed prefix
+(`coffee-lsp install`), then PATH. `coffee-lsp servers` shows the result for a
+workspace. `coffee-lsp install <id>` installs the npm-distributed entries below
+into `PI_COFFEE_LSP_HOME/npm` (default `~/.pi/agent/coffee-lsp/npm`) without
+touching the project; everything else is installed with the listed command and
+picked up from PATH.
+
+**Web**
+
+| Id | Files | Server | Install |
+| --- | --- | --- | --- |
+| `typescript` | .ts .tsx .mts .cts .js .jsx .mjs .cjs | typescript-language-server 4.3.4 (bundled) with the project's TypeScript 5 | bundled; projects without `typescript`: `coffee-lsp install typescript` (managed TS 5) |
+| `typescript-native` | same | TypeScript 7 native `tsc --lsp` — selected automatically when the project's `typescript` is 7+ | `npm i -D typescript` (7+) or `coffee-lsp install typescript-native` |
+| `deno` | .ts .tsx .js .jsx (deno.json projects) | `deno lsp` | https://deno.com |
+| `html` | .html .htm | vscode-html-language-server (symbols/hover; diagnostics for embedded CSS/JS) | `coffee-lsp install html` |
+| `css` | .css .scss .sass .less | vscode-css-language-server | `coffee-lsp install css` |
+| `json` | .json .jsonc | vscode-json-language-server | `coffee-lsp install json` |
+| `vue` | .vue | @vue/language-server (template/CSS semantics; TS inside `.vue` needs the tsserver plugin setup) | `npm i -D @vue/language-server` or `coffee-lsp install vue` |
+| `svelte` | .svelte | svelte-language-server | `npm i -D svelte-language-server` or `coffee-lsp install svelte` |
+| `astro` | .astro | @astrojs/language-server | `npm i -D @astrojs/language-server` or `coffee-lsp install astro` |
+| `tailwindcss` (lint) | .html .css .vue .svelte .astro .jsx .tsx … | @tailwindcss/language-server | `coffee-lsp install tailwindcss` |
+| `eslint` (lint) | .js .ts .jsx .tsx .vue .svelte | vscode-eslint-language-server with the project's ESLint | `coffee-lsp install eslint` |
+| `biome` (lint) | .js .ts .json .css … | `biome lsp-proxy` | `npm i -D @biomejs/biome` |
+| `graphql` | .graphql .gql | graphql-language-service-cli | `coffee-lsp install graphql` |
+| `prisma` | .prisma | @prisma/language-server | `coffee-lsp install prisma` |
+| `php` | .php | intelephense | `coffee-lsp install php` |
+
+**Games**
+
+| Id | Files | Server | Install |
+| --- | --- | --- | --- |
+| `csharp` | .cs | csharp-ls | `dotnet tool install --global csharp-ls` |
+| `omnisharp` | .cs .csx (Unity) | OmniSharp (`omnisharp -lsp`) | https://github.com/OmniSharp/omnisharp-roslyn/releases |
+| `cpp` | .c .h .cc .cpp .cxx .hpp .hh .hxx .cu .m .mm | clangd (needs `compile_commands.json`, `build/compile_commands.json` or `.clangd`) | https://clangd.llvm.org/installation |
+| `lua` | .lua | lua-language-server (LuaLS) | https://github.com/LuaLS/lua-language-server/releases |
+| `glsl` | .glsl .vert .frag .geom .comp .tesc .tese | glsl_analyzer | https://github.com/nolanderc/glsl_analyzer/releases |
+| `wgsl` | .wgsl | wgsl-analyzer | `cargo install --git https://github.com/wgsl-analyzer/wgsl-analyzer wgsl-analyzer` |
+| `zig` | .zig .zon | zls | https://github.com/zigtools/zls/releases |
+| `odin` | .odin | ols | https://github.com/DanielGavin/ols |
+| `rust` | .rs | rust-analyzer (needs Cargo.toml or rust-project.json) | `rustup component add rust-analyzer` |
+| `cmake` | .cmake CMakeLists.txt | cmake-language-server | `pip install cmake-language-server` |
+| GDScript | .gd | not built in: Godot's language server runs inside the editor on TCP 6005 and cannot be spawned; add a stdio bridge as a `servers` entry | — |
+
+**Applications & scripting**
+
+| Id | Files | Server | Install |
+| --- | --- | --- | --- |
+| `python` | .py .pyi | Pyright 1.1.405 (bundled) | bundled (`basedpyright` entry available, disabled by default) |
+| `ruff` (lint) | .py .pyi | `ruff server` | `pip install ruff` |
+| `go` | .go | gopls (needs go.mod/go.work) | `go install golang.org/x/tools/gopls@latest` |
+| `java` | .java | jdtls | https://github.com/eclipse-jdtls/eclipse.jdt.ls |
+| `kotlin` | .kt .kts | kotlin-lsp | https://github.com/Kotlin/kotlin-lsp |
+| `scala` | .scala .sbt .sc | metals | `coursier install metals` |
+| `dart` | .dart (needs pubspec.yaml) | `dart language-server` (Flutter included) | https://dart.dev/get-dart |
+| `swift` | .swift | sourcekit-lsp | Xcode / swift.org toolchains |
+| `ruby` | .rb .rake .gemspec .erb | ruby-lsp (`solargraph` entry also available) | `gem install ruby-lsp` |
+| `elixir` | .ex .exs .heex .eex | elixir-ls | https://github.com/elixir-lsp/elixir-ls/releases |
+| `gleam` / `erlang` / `haskell` / `ocaml` / `nix` | .gleam / .erl .hrl / .hs .lhs / .ml .mli / .nix | gleam lsp / erlang_ls / haskell-language-server-wrapper / ocamllsp / nixd | see `coffee-lsp servers` |
+| `bash` | .sh .bash .zsh | bash-language-server (lint via shellcheck on PATH) | `coffee-lsp install bash` |
+| `yaml` | .yaml .yml | yaml-language-server | `coffee-lsp install yaml` |
+| `toml` | .toml | taplo | `coffee-lsp install toml` |
+| `dockerfile` | Dockerfile .dockerfile | dockerfile-language-server-nodejs | `coffee-lsp install dockerfile` |
+| `terraform` | .tf .tfvars | terraform-ls | https://github.com/hashicorp/terraform-ls |
+| `markdown` | .md | marksman (disabled by default: noisy for an agent's own notes) | enable via `"servers": {"markdown": {"disabled": false}}` |
+| `latex` / `typst` | .tex .bib / .typ | texlab / tinymist | see `coffee-lsp servers` |
+
+Entries marked *lint* are diagnostics-only servers; they are used for a file
+only when no language server covers it (disable the language server in
+`coffee-lsp.json` to lint instead). Additional project prerequisites remain:
+C# needs an unambiguous `.sln`/`.slnx`/`.csproj` at the project root; clangd
+needs a compilation database; Pyright does not advertise implementation lookup.
+Rename, formatting, code actions and server-requested edits are outside the
+read-only interface.
+
+Every registry field can be overridden per server in `coffee-lsp.json` →
+`servers.<id>`: `command`, `args`, `fileTypes`, `rootMarkers`,
+`requiredMarkers`, `languageId`, `settings`, `initializationOptions` (alias
+`initOptions`), `isLinter`, `disabled`, `install`, `npm`. New ids need
+`command`, `fileTypes` and `rootMarkers`. Files are read from the agent
+directory, the workspace and the project root (later files win); a malformed
+file is ignored rather than removing a language. `args`, `settings` and
+`initializationOptions` may use `${pid}`, `${root}`, `${rootUri}`,
+`${rootName}` and `${tsdk}` (the project's `node_modules/typescript/lib`;
+entries whose value cannot be resolved are dropped).
 
 ## Embed
 

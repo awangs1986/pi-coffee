@@ -9,7 +9,14 @@
 > `/lsp` 命令、会话级 daemon 生命周期）已实现，并按 Pi 标准包格式（`package.json` 的
 > `pi.extensions` + `pi.skills`、`pi-package` 关键字、宿主包作为 peerDependencies）打包，
 > 可通过 `pi install npm:pi-coffee-lsp` 安装。见 `src/extension/`、`test/extension.test.ts` 与 README。
-> 其余条目（P0-2 语言注册表、P0-3 快照、P0-4 Windows、P1-1 冷启动预算等）仍待处理。
+> **进度更新（2026-09-28，v0.3.0）**：P0-2 已完成——`src/lsp/registry.ts` 引入了改编自 OMP `lsp/defaults.json`
+> 的 server 注册表（50 个内置条目：网页 HTML/CSS/JSON/YAML/Vue/Svelte/Astro/ESLint/Tailwind…，游戏 C#/OmniSharp/
+> clangd/Lua/GLSL/WGSL/Zig/Odin/CMake…，应用 Java/Kotlin/Dart/Swift/Ruby/Bash/Dockerfile…），`coffee-lsp.json` 的
+> `servers` 段可新增/覆盖/禁用任意 server，`PI_COFFEE_<ID>_LSP_COMMAND` 对所有条目生效，新增 `coffee-lsp servers`
+> 与 `coffee-lsp install <id>`（npm 分发的 server 装进 `~/.pi/agent/coffee-lsp/npm`），并区分 TypeScript 5
+> （typescript-language-server）与 TypeScript 7（原生 `tsc --lsp`）。仍未做：同一文件多 server 并行（linter 与
+> 语言服务器同时出诊断）、`tcp` 传输（Godot）、tree-sitter 降级。
+> 其余条目（P0-3 快照、P0-4 Windows、P1-1 冷启动预算等）仍待处理。
 
 ---
 

@@ -12,11 +12,17 @@ import {
   normalizeLocation,
 } from "./client.js";
 import {
+  listServers,
+  projectMarkersFor,
+  registryFor,
   resolveProfile,
   toServerSpec,
   type LspProfileResolution,
 } from "./profiles.js";
+import { hasRootMarkers, managedNpmPrefix } from "./registry.js";
 import { requestLspDaemon } from "./transport.js";
+import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 export interface CoffeeLspIo {
   cwd: string;
@@ -46,8 +52,12 @@ const OPERATIONS = [
   "hover",
   "implementation",
   "diagnostics",
+  "servers",
+  "install",
 ] as const;
 type Operation = (typeof OPERATIONS)[number];
+/** Operations that describe the registry rather than one file; they never use the daemon. */
+const REGISTRY_OPERATIONS: readonly Operation[] = ["servers", "install"];
 
 export async function runCoffeeLsp(
   args: string[],
@@ -87,6 +97,8 @@ export async function runCoffeeLsp(
     io.stdout(helpText());
     return 0;
   }
+  if (parsed.operation === "servers") return emitServers(io, parsed);
+  if (parsed.operation === "install") return installServer(io, parsed);
   const primary = parsed.files[0];
   if (!primary || !existsSync(primary))
     return emitError(
@@ -101,6 +113,7 @@ export async function runCoffeeLsp(
       primary,
       parsed.workspace,
       parsed.workspaceExplicit,
+      io.env,
     );
   } catch (error) {
     return emitError(
@@ -135,17 +148,23 @@ export async function runCoffeeLsp(
       parsed.projectRoot,
     );
   }
-  const profile = resolveProfile(primary, parsed.projectRoot, io.env);
+  const profile = resolveProfile(
+    primary,
+    parsed.projectRoot,
+    io.env,
+    parsed.workspace,
+  );
   try {
     for (const file of parsed.files) {
       const root = findProjectRoot(
         file,
         parsed.workspace,
         parsed.workspaceExplicit,
+        io.env,
       );
       if (
         root !== parsed.projectRoot ||
-        resolveProfile(file, root, io.env).id !== profile.id
+        resolveProfile(file, root, io.env, parsed.workspace).id !== profile.id
       )
         throw new Error(
           "Diagnostic batches must use one language project; query mixed projects separately.",
@@ -174,6 +193,11 @@ export async function runCoffeeLsp(
           id: profile.id,
           state: profile.available ? "available" : "unavailable",
           ...(profile.command ? { command: profile.command } : {}),
+          ...(profile.role ? { role: profile.role } : {}),
+          ...(profile.source ? { source: profile.source } : {}),
+          ...(profile.definition
+            ? { language: profile.definition.language }
+            : {}),
         },
         capabilityState: "not_negotiated",
         capabilities: [
@@ -201,16 +225,8 @@ export async function runCoffeeLsp(
       parsed.workspace,
       profile.id,
     );
-  const requiredMarkers: Record<string, string[]> = {
-    cpp: ["compile_commands.json", "build/compile_commands.json", ".clangd"],
-    rust: ["Cargo.toml", "rust-project.json"],
-    go: ["go.mod", "go.work"],
-  };
-  const markers = requiredMarkers[profile.id];
-  if (
-    markers &&
-    !markers.some((name) => existsSync(resolve(parsed.projectRoot, name)))
-  )
+  const markers = profile.definition?.requiredMarkers;
+  if (markers && !hasRootMarkers(parsed.projectRoot, markers))
     return emitError(
       io,
       parsed.operation,
@@ -220,8 +236,9 @@ export async function runCoffeeLsp(
       parsed.projectRoot,
       profile.id,
     );
+  const csharp = profile.definition?.languageId === "csharp";
   if (
-    profile.id === "csharp" &&
+    csharp &&
     !readdirSync(parsed.projectRoot).some((name) =>
       /\.(csproj|sln|slnx)$/.test(name),
     )
@@ -235,7 +252,7 @@ export async function runCoffeeLsp(
       parsed.projectRoot,
       profile.id,
     );
-  if (profile.id === "csharp") {
+  if (csharp) {
     const names = readdirSync(parsed.projectRoot);
     const solutions = names.filter((name) => /\.slnx?$/.test(name));
     const projects = names.filter((name) => name.endsWith(".csproj"));
@@ -276,7 +293,7 @@ export async function runCoffeeLsp(
           io.signal,
         );
     unbind = client.bindSignal(io.signal, Math.max(0, deadline - Date.now()));
-    const result = await execute(parsed, client, profile.id);
+    const result = await execute(parsed, client, profile);
     if (initialSnapshot !== projectFingerprint(parsed.projectRoot))
       return emitError(
         io,
@@ -303,11 +320,15 @@ export async function runCoffeeLsp(
         profile.id,
       );
     const timeout = /timed out/i.test(detail);
+    const hint =
+      profile.id === "typescript" && /TypeScript installation/i.test(detail)
+        ? " Add typescript to the project, or run coffee-lsp install typescript for a managed fallback."
+        : "";
     return emitError(
       io,
       parsed.operation,
       timeout ? "request_timeout" : "server_failed",
-      detail,
+      detail + hint,
       timeout ? 4 : 5,
       parsed.projectRoot,
       profile.id,
@@ -328,26 +349,39 @@ function shouldUseDaemon(args: readonly string[]): boolean {
     args.includes("-v")
   )
     return false;
-  return args[0] !== "status";
+  return (
+    args[0] !== "status" && !REGISTRY_OPERATIONS.includes(args[0] as Operation)
+  );
 }
 
 async function execute(
   parsed: ParsedArgs,
   client: LspClient,
-  profileId: string,
+  profile: LspProfileResolution,
 ): Promise<{ envelope: any; code: number }> {
+  const profileId = profile.id;
   const base = {
     schemaVersion: 1,
     operation: parsed.operation,
     status: "ok",
     workspace: parsed.workspace,
     projectRoot: parsed.projectRoot,
-    server: { id: profileId, state: "ready" },
+    server: {
+      id: profileId,
+      state: "ready",
+      ...(profile.role ? { role: profile.role } : {}),
+    },
   };
   if (
     parsed.operation !== "diagnostics" &&
     parsed.operation !== "status" &&
-    !client.supports(parsed.operation)
+    !REGISTRY_OPERATIONS.includes(parsed.operation) &&
+    !client.supports(
+      parsed.operation as Exclude<
+        Operation,
+        "diagnostics" | "status" | "servers" | "install"
+      >,
+    )
   ) {
     return {
       envelope: {
@@ -517,6 +551,8 @@ interface ParsedArgs {
   includeDeclaration: boolean;
   expectSha256?: string;
   noDaemon: boolean;
+  /** Server id for `install`. */
+  target?: string;
   help: boolean;
 }
 
@@ -538,6 +574,7 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
   if (!OPERATIONS.includes(operation))
     throw new Error(`unknown operation '${args[0]}'`);
   const files: string[] = [];
+  let target: string | undefined;
   let workspace = cwd;
   let workspaceExplicit = false;
   let timeoutMs = 10_000;
@@ -549,7 +586,9 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
   let expectSha256: string | undefined;
   for (let i = 1; i < args.length; i += 1) {
     const value = args[i];
-    if (value === "--file")
+    if (operation === "install" && i === 1 && !value.startsWith("--"))
+      target = value;
+    else if (value === "--file")
       files.push(resolve(cwd, requireValue(args, ++i, value)));
     else if (value === "--workspace") {
       workspace = resolve(cwd, requireValue(args, ++i, value));
@@ -560,9 +599,9 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
       column = positiveInt(requireValue(args, ++i, value), value);
     else if (value === "--timeout-ms") {
       timeoutMs = positiveInt(requireValue(args, ++i, value), value);
-      if (timeoutMs > 60000) throw new Error("--timeout-ms may not exceed 60000");
-    }
-    else if (value === "--limit")
+      if (timeoutMs > 60000)
+        throw new Error("--timeout-ms may not exceed 60000");
+    } else if (value === "--limit")
       limit = positiveInt(requireValue(args, ++i, value), value);
     else if (value === "--expect-sha256")
       expectSha256 = requireValue(args, ++i, value);
@@ -573,6 +612,22 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
   if (files.length > 20)
     throw new Error("Query at most 20 files per diagnostic batch");
   if (timeoutMs > 60000) throw new Error("--timeout-ms may not exceed 60000");
+  if (operation === "install" && !target)
+    throw new Error("install requires a server id: coffee-lsp install <id>");
+  if (REGISTRY_OPERATIONS.includes(operation))
+    return {
+      operation,
+      files,
+      workspace,
+      workspaceExplicit,
+      projectRoot: workspace,
+      timeoutMs,
+      limit,
+      includeDeclaration,
+      noDaemon: true,
+      target,
+      help: false,
+    };
   if (files.length === 0) throw new Error(`${operation} requires --file`);
   if (operation !== "diagnostics" && files.length !== 1)
     throw new Error(`${operation} accepts exactly one --file`);
@@ -608,6 +663,7 @@ export function findProjectRoot(
   file: string,
   workspace: string,
   explicit: boolean,
+  env: NodeJS.ProcessEnv = process.env,
 ): string {
   const canonicalFile = realpathSync(file);
   const canonicalWorkspace = existsSync(workspace)
@@ -615,32 +671,16 @@ export function findProjectRoot(
     : resolve(workspace);
   if (explicit && !isWithin(canonicalWorkspace, canonicalFile))
     throw new Error("--file must be inside --workspace");
-  const extension = extname(canonicalFile).toLowerCase();
-  const markers =
-    extension === ".py"
-      ? ["pyrightconfig.json", "pyproject.toml", "setup.cfg"]
-      : extension === ".cs"
-        ? ["*.sln", "*.slnx", "*.csproj"]
-        : extension === ".rs"
-          ? ["Cargo.toml", "rust-project.json"]
-          : extension === ".go"
-            ? ["go.work", "go.mod"]
-            : /\.(c|h|cc|cpp|cxx|hpp|hh|hxx)$/.test(extension)
-              ? ["compile_commands.json", "build/compile_commands.json", ".clangd", "CMakeLists.txt"]
-              : ["tsconfig.json", "jsconfig.json"];
+  // Markers come from the servers that cover this file type, so a Vue file
+  // finds its nuxt.config.ts and a Rust file its Cargo.toml.
+  const markers = projectMarkersFor(
+    canonicalFile,
+    registryFor(canonicalWorkspace, env),
+  );
   let directory = dirname(canonicalFile);
   const boundary = explicit ? canonicalWorkspace : undefined;
-  while (true) {
-    if (
-      markers.some((marker) =>
-        marker.startsWith("*")
-          ? readdirSync(directory).some((name) =>
-              name.endsWith(marker.slice(1)),
-            )
-          : existsSync(resolve(directory, marker)),
-      )
-    )
-      return directory;
+  while (markers.length > 0) {
+    if (hasRootMarkers(directory, markers)) return directory;
     if (boundary && directory === boundary) break;
     const parent = dirname(directory);
     if (parent === directory || (boundary && !isWithin(boundary, parent)))
@@ -762,6 +802,180 @@ function fileSha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+function emitServers(io: CoffeeLspIo, parsed: ParsedArgs): number {
+  const root = parsed.files[0]
+    ? findProjectRoot(
+        parsed.files[0],
+        parsed.workspace,
+        parsed.workspaceExplicit,
+        io.env,
+      )
+    : parsed.workspace;
+  const file = parsed.files[0];
+  const items = listServers(root, io.env, parsed.workspace).map((entry) => ({
+    ...entry,
+    ...(file
+      ? {
+          appliesToFile: entry.fileTypes.some((type) =>
+            fileMatches(file, type),
+          ),
+        }
+      : {}),
+  }));
+  return emit(
+    io,
+    {
+      schemaVersion: 1,
+      operation: "servers",
+      status: "ok",
+      workspace: parsed.workspace,
+      projectRoot: root,
+      managedPrefix: managedNpmPrefix(io.env),
+      items,
+      issues: [],
+    },
+    0,
+  );
+}
+
+function fileMatches(file: string, type: string): boolean {
+  const lower = file.toLowerCase(),
+    wanted = type.toLowerCase();
+  if (wanted.startsWith(".")) return lower.endsWith(wanted);
+  return (
+    lower === wanted ||
+    lower.endsWith(`/${wanted}`) ||
+    lower.endsWith(`\\${wanted}`)
+  );
+}
+
+/**
+ * Install an npm-distributed server into the managed prefix. Only registry
+ * entries with an `npm` package are installable; everything else prints its
+ * install hint. Never touches the project.
+ */
+async function installServer(
+  io: CoffeeLspIo,
+  parsed: ParsedArgs,
+): Promise<number> {
+  const id = parsed.target!;
+  const registry = registryFor(parsed.workspace, io.env);
+  const definition = registry[id];
+  if (!definition)
+    return emitError(
+      io,
+      "install",
+      "invalid_arguments",
+      `unknown server '${id}'; run coffee-lsp servers`,
+      2,
+      parsed.workspace,
+    );
+  if (!definition.npm)
+    return emitError(
+      io,
+      "install",
+      "manual_install_required",
+      `${id} is not distributed through npm. ${definition.install ?? ""}`.trim(),
+      3,
+      parsed.workspace,
+      id,
+    );
+  const prefix = managedNpmPrefix(io.env);
+  mkdirSync(prefix, { recursive: true });
+  const manifest = resolve(prefix, "package.json");
+  if (!existsSync(manifest))
+    writeFileSync(
+      manifest,
+      JSON.stringify({ name: "pi-coffee-lsp-servers", private: true }, null, 2),
+    );
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  // `pkg`, `@scope/pkg` → latest; `pkg@5` keeps its range.
+  const spec = /^(@[^/]+\/)?[^@]+@/.test(definition.npm)
+    ? definition.npm
+    : `${definition.npm}@latest`;
+  const args = [
+    "install",
+    "--no-audit",
+    "--no-fund",
+    "--no-package-lock",
+    "--prefix",
+    prefix,
+    spec,
+  ];
+  const output = await new Promise<{ code: number | null; text: string }>(
+    (done) => {
+      const child = spawn(npm, args, {
+        cwd: prefix,
+        env: io.env,
+        shell: process.platform === "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let text = "";
+      child.stdout?.on("data", (chunk) => (text += chunk));
+      child.stderr?.on("data", (chunk) => (text += chunk));
+      const timer = setTimeout(() => child.kill(), 10 * 60 * 1000);
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        done({ code: null, text: `${text}\n${message(error)}` });
+      });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        done({ code, text });
+      });
+    },
+  );
+  const listing = listServers(parsed.workspace, io.env).find(
+    (entry) => entry.id === id,
+  );
+  if (output.code !== 0 || listing?.status !== "available")
+    return emitError(
+      io,
+      "install",
+      "install_failed",
+      `npm ${args.join(" ")} exited with ${output.code}: ${output.text.trim().slice(-2000)}`,
+      5,
+      parsed.workspace,
+      id,
+    );
+  return emit(
+    io,
+    {
+      schemaVersion: 1,
+      operation: "install",
+      status: "ok",
+      workspace: parsed.workspace,
+      projectRoot: parsed.workspace,
+      managedPrefix: prefix,
+      server: {
+        id,
+        state: "available",
+        command: listing.command,
+        source: listing.source,
+      },
+      items: [listing],
+      issues: [],
+    },
+    0,
+  );
+}
+
 function helpText(): string {
-  return `coffee-lsp <status|symbols|definition|references|hover|implementation|diagnostics> --file <path> [options]\n\nOptions:\n  --workspace <path>       workspace root\n  --line <n> --column <n>  1-based Unicode code point position\n  --include-declaration    include a symbol declaration in references\n  --timeout-ms <n>         request timeout\n  --limit <n>              maximum returned items\n  --expect-sha256 <hash>   reject a stale navigation position\n  --no-daemon              use one language-server process for this call\n`;
+  return `coffee-lsp <status|symbols|definition|references|hover|implementation|diagnostics> --file <path> [options]
+coffee-lsp servers [--file <path>] [--workspace <path>]
+coffee-lsp install <id>
+
+Options:
+  --workspace <path>       workspace root
+  --line <n> --column <n>  1-based Unicode code point position
+  --include-declaration    include a symbol declaration in references
+  --timeout-ms <n>         request timeout
+  --limit <n>              maximum returned items
+  --expect-sha256 <hash>   reject a stale navigation position
+  --no-daemon              use one language-server process for this call
+
+servers lists the language-server registry (built-ins plus coffee-lsp.json
+"servers" entries) and which command each resolves to from the workspace.
+install <id> runs npm install for an npm-distributed server into the managed
+prefix (PI_COFFEE_LSP_HOME/npm); other servers print their install hint.
+`;
 }

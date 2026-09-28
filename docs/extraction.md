@@ -48,3 +48,21 @@ The first lockfile-free dependency resolution hit an npm 10.9.8 Arborist error.
 Reusing the reviewed source lockfile and letting npm prune unrelated packages
 produced the committed standalone lockfile and a successful installation.
 Use `npm ci` to reproduce its pinned dependency graph.
+
+## Post-extraction changes
+
+The extraction above describes the 0.1.0 state. Later versions diverge from the
+pi-coffee source on purpose:
+
+- 0.2.0 adds the Pi extension layer (`src/extension`) — `lsp` tool, automatic
+  diagnostics after `edit`/`write`, `/lsp` command, per-process daemon
+  lifecycle — and the standard Pi package manifest.
+- 0.3.0 replaces the six hard-coded profiles with a language-server registry
+  (`src/lsp/registry.ts`, adapted from oh-my-pi `lsp/defaults.json` at upstream
+  `5a6e431aa0ca0b49f28eeb7c1f8558b86c06d25a`; provenance in
+  `third_party/oh-my-pi/README.md`). `src/lsp/profiles.ts` selects servers over
+  that registry, `coffee-lsp.json` gains a `servers` section, and the CLI gains
+  `servers` / `install`. `src/lsp/client.ts` changed only in taking the LSP
+  language id from the registry. The kernel's diagnostics semantics, daemon and
+  transport are unchanged; `npm run check` covers 75 tests plus the installed
+  package consumer test.

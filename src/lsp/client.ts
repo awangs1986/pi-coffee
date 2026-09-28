@@ -1,4 +1,5 @@
 // Selected LSP logic adapted from OMP, commit b1a8b875; see third_party/oh-my-pi/LICENSE and README.md.
+import { languageIdFor } from "./registry.js";
 import { EquivalentUriMap, uriToFile } from "./uri.js";
 import {
   waitForDiagnostics,
@@ -21,6 +22,8 @@ export interface LspServerSpec {
   allowVersionlessDiagnostics?: boolean;
   settings?: JsonObject;
   initializationOptions?: JsonObject;
+  /** Fixed LSP language id for every document; otherwise derived from the file name. */
+  languageId?: string;
 }
 
 export interface NormalizedLocation {
@@ -545,7 +548,7 @@ export class LspClient {
         await this.notify("textDocument/didOpen", {
           textDocument: {
             uri,
-            languageId: languageId(path),
+            languageId: languageIdFor(path, this.spec.languageId),
             version: next,
             text,
           },
@@ -908,20 +911,6 @@ function externalRangePosition(
 ): { line: number; column: number } {
   const prefix = (lines[position.line] ?? "").slice(0, position.character);
   return { line: position.line + 1, column: Array.from(prefix).length + 1 };
-}
-
-function languageId(path: string): string {
-  if (/\.tsx$/i.test(path)) return "typescriptreact";
-  if (/\.ts$/i.test(path)) return "typescript";
-  if (/\.jsx$/i.test(path)) return "javascriptreact";
-  if (/\.[mc]?js$/i.test(path)) return "javascript";
-  if (/\.py$/i.test(path)) return "python";
-  if (/\.cs$/i.test(path)) return "csharp";
-  if (/\.(c|h)$/i.test(path)) return "c";
-  if (/\.(cpp|cc|cxx|hpp|hh|hxx)$/i.test(path)) return "cpp";
-  if (/\.rs$/i.test(path)) return "rust";
-  if (/\.go$/i.test(path)) return "go";
-  return "plaintext";
 }
 
 function sha256(value: string | Buffer): string {

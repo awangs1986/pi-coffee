@@ -210,6 +210,14 @@ function handle(message) {
     uri = process.env.PI_COFFEE_FAKE_LSP_RAW_URI
       ? decodeURIComponent(message.params.textDocument.uri)
       : message.params.textDocument.uri;
+    if (
+      process.env.PI_COFFEE_FAKE_LSP_LANGUAGE_ID &&
+      message.method === "textDocument/didOpen"
+    )
+      appendFileSync(
+        process.env.PI_COFFEE_FAKE_LSP_LANGUAGE_ID,
+        `${message.params.textDocument.languageId}\n`,
+      );
     version = message.params.textDocument.version;
     opened =
       message.params.textDocument.text ??
