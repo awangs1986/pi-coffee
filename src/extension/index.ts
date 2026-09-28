@@ -3,11 +3,11 @@ import type {
   ExtensionContext,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { Type, type Static } from "typebox";
-import { findProjectRoot } from "../lsp/cli.js";
-import { resolveProfile } from "../lsp/profiles.js";
+import { MAX_DOCUMENT_BYTES, findProjectRoot } from "../lsp/cli.js";
+import { resolveProfile, type LspProfileResolution } from "../lsp/profiles.js";
 import { lspDaemonSocket, stopLspDaemon } from "../lsp/transport.js";
 import { withCoffeeLspPath } from "../pi-skills.js";
 import {
@@ -72,6 +72,12 @@ const lspParameters = Type.Object({
         "1-based column counted in Unicode code points. Take it from symbols or the current file contents.",
     }),
   ),
+  symbol: Type.Optional(
+    Type.String({
+      description:
+        "Instead of column: the identifier to look up, positioned at its first whole-word occurrence in the file (or on line when given). Use name#2 for the second occurrence.",
+    }),
+  ),
   includeDeclaration: Type.Optional(
     Type.Boolean({
       description: "references: also list the declaration itself.",
@@ -108,6 +114,8 @@ export interface ExtensionOptions {
 
 /** Marks a PI_COFFEE_ROOT_SESSION value that this extension exported into the host process. */
 const OWNED_SESSION_MARKER = "PI_COFFEE_LSP_OWNED_SESSION";
+/** Files a session opens through reads; edits always open their file. */
+const MAX_PREWARMED_FILES = 40;
 
 interface ExtensionState {
   /** PI_COFFEE_ROOT_SESSION used for every query from this Pi process. */
@@ -115,8 +123,11 @@ interface ExtensionState {
   cwd: string;
   config: CoffeeLspExtensionConfig;
   autoEnabled: boolean;
-  prewarmed: Map<string, Promise<void>>;
+  /** Files opened in their project's server by a read, with the warm-up they started or joined. */
+  prewarmed: Map<string, { project: string; done: Promise<void> }>;
   lastAuto?: { file: string; summary: string; at: number };
+  /** Server ids whose missing-installation hint was already shown this session. */
+  hinted: Set<string>;
 }
 
 /**
@@ -150,6 +161,7 @@ export function createCoffeeLspExtension(
     config: loadExtensionConfig(process.cwd(), baseEnv),
     autoEnabled: true,
     prewarmed: new Map(),
+    hinted: new Set(),
   };
   state.autoEnabled = state.config.autoDiagnostics;
 
@@ -212,8 +224,11 @@ export function createCoffeeLspExtension(
     if (event.toolName !== "edit" && event.toolName !== "write") return;
     if (!state.autoEnabled) return;
     const file = inputPath(event, ctx.cwd);
-    if (!file || !supported(file, ctx.cwd, environment())) return;
-    const appended = await automaticDiagnostics(file, ctx);
+    if (!file) return;
+    const coverage = supported(file, ctx.cwd, environment());
+    const appended = coverage.key
+      ? await automaticDiagnostics(file, ctx)
+      : missingServerHint(coverage.profile, file, ctx);
     if (!appended) return;
     return { content: [...event.content, { type: "text", text: appended }] };
   });
@@ -222,13 +237,13 @@ export function createCoffeeLspExtension(
     name: "lsp",
     label: "LSP",
     description:
-      "Query the project's language server: diagnostics, symbols, definition, references, implementation and hover. Results describe saved files; positions are 1-based lines and Unicode code-point columns.",
+      "Query the project's language server: diagnostics, symbols, definition, references, implementation and hover. Results describe saved files; positions are 1-based lines and Unicode code-point columns, or give symbol: \"name\" instead of a column.",
     promptSnippet:
       "Language-server semantics: diagnostics, symbols, definition, references, implementation, hover",
     promptGuidelines: [
       "Use lsp (definition, references, implementation, hover, symbols) instead of grep when you need to know what a symbol is or who uses it; use grep for plain text patterns.",
-      "Language-server diagnostics for a file are appended automatically to successful edit and write results; fix reported errors before moving on. Use lsp diagnostics to re-check a file or its dependents explicitly.",
-      "Take lsp positions from lsp symbols or from the current file contents. A diagnostics result is clean only when it says clean; inconclusive means run the project's own compiler or tests.",
+      "Language-server diagnostics for a file are appended automatically to successful edit and write results, followed by any new errors the change caused in other files open in this session ('related'); fix both before moving on. Use lsp diagnostics to re-check a file or its dependents explicitly.",
+      "For lsp navigation pass symbol: \"name\" (or name#2 for the second occurrence) instead of counting columns; take exact positions from lsp symbols when a name is ambiguous. A diagnostics result is clean only when it says clean; inconclusive means run the project's own compiler or tests.",
     ],
     parameters: lspParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -376,17 +391,40 @@ export function createCoffeeLspExtension(
     const file = inputPath(event, ctx.cwd);
     if (!file) return;
     const env = environment();
-    const key = supported(file, ctx.cwd, env);
-    if (!key || state.prewarmed.has(key)) return;
+    const project = supported(file, ctx.cwd, env).key;
+    if (!project || state.prewarmed.has(file)) return;
+    // Every file read joins the server's open set, so later edits elsewhere
+    // report their fallout in it (related diagnostics). Bounded so a long
+    // session does not keep hundreds of documents open.
+    if (state.prewarmed.size >= MAX_PREWARMED_FILES) return;
     // symbols opens the document and initialises the project without waiting
     // for diagnostics, so the first edit usually meets a warm server.
-    const warm = runQuery(
+    const done = runQuery(
       ["symbols", "--file", file, "--timeout-ms", "30000", "--limit", "1"],
       { cwd: ctx.cwd, env },
     )
       .then(() => undefined)
       .catch(() => undefined);
-    state.prewarmed.set(key, warm);
+    state.prewarmed.set(file, { project, done });
+  }
+
+  /**
+   * One line, once per server and session, when an edited file type has a
+   * registry entry but no installed server: the only case where silence would
+   * hide an actionable fix. Unsupported file types stay silent.
+   */
+  function missingServerHint(
+    profile: LspProfileResolution | undefined,
+    file: string,
+    ctx: ExtensionContext,
+  ): string | undefined {
+    if (!profile || profile.id === "unknown" || state.hinted.has(profile.id)) return undefined;
+    state.hinted.add(profile.id);
+    const language = profile.definition?.language ?? profile.id;
+    const install = profile.definition?.npm
+      ? `/lsp install ${profile.id} (or coffee-lsp install ${profile.id})`
+      : profile.definition?.install ?? "see /lsp servers";
+    return `LSP: no ${language} language server is installed, so ${displayPath(file, ctx.cwd)} is not checked after edits. Install: ${install}. Verify with the project's own build or tests meanwhile.`;
   }
 
   async function automaticDiagnostics(
@@ -394,10 +432,12 @@ export function createCoffeeLspExtension(
     ctx: ExtensionContext,
   ): Promise<string | undefined> {
     const env = environment();
-    const key = supported(file, ctx.cwd, env);
+    const key = supported(file, ctx.cwd, env).key;
     if (!key) return undefined;
-    const warm = state.prewarmed.get(key);
-    if (warm) await warm;
+    // Wait for this project's warm-ups so a cold start does not eat the budget.
+    await Promise.all(
+      [...state.prewarmed.values()].filter((entry) => entry.project === key).map((entry) => entry.done),
+    );
     const outcome = await runQuery(
       [
         "diagnostics",
@@ -410,46 +450,67 @@ export function createCoffeeLspExtension(
     );
     const envelope = outcome.envelope;
     if (!envelope || envelope.operation !== "diagnostics") return undefined;
-    if (envelope.diagnosticState === "clean") {
-      state.lastAuto = { file, summary: "clean", at: Date.now() };
-      return state.config.reportClean
-        ? `LSP diagnostics (${envelope.server?.id}): ${displayPath(file, ctx.cwd)} has no errors.`
-        : undefined;
-    }
-    if (envelope.diagnosticState !== "findings") {
+    if (envelope.diagnosticState !== "clean" && envelope.diagnosticState !== "findings") {
       // Missing servers, cold projects and stale snapshots are not evidence;
-      // stay silent instead of teaching the model to ignore this section.
-      state.lastAuto = {
-        file,
-        summary: `${envelope.issues?.[0]?.code ?? envelope.status}`,
-        at: Date.now(),
-      };
+      // stay silent instead of teaching the model to ignore this section. A
+      // server that cannot run at all is explained once, so the fix (install,
+      // start the editor, add a project file) is not hidden.
+      const issue = envelope.issues?.[0];
+      state.lastAuto = { file, summary: `${issue?.code ?? envelope.status}`, at: Date.now() };
+      const serverId = envelope.server?.id ?? "unknown";
+      if (
+        issue &&
+        ["server_failed", "missing_server", "project_configuration_missing"].includes(issue.code) &&
+        !state.hinted.has(serverId)
+      ) {
+        state.hinted.add(serverId);
+        return `LSP: ${serverId} language server unavailable for ${displayPath(file, ctx.cwd)} (${issue.code}: ${issue.message}). Diagnostics are off for this language until that is fixed; rely on the project's build or tests meanwhile.`;
+      }
       return undefined;
     }
-    const items = (envelope.items ?? [])
-      .filter(
-        (item) =>
-          item.severity === 1 ||
-          (state.config.includeWarnings && item.severity === 2) ||
-          item.severity === undefined,
-      )
-      .sort((a, b) => (a.severity ?? 9) - (b.severity ?? 9));
+    const relevant = (item: any) =>
+      item.severity === 1 ||
+      (state.config.includeWarnings && item.severity === 2) ||
+      item.severity === undefined;
+    const bySeverity = (a: any, b: any) => (a.severity ?? 9) - (b.severity ?? 9);
+    const items = (envelope.items ?? []).filter(relevant).sort(bySeverity);
+    const related = (envelope.related ?? []).filter(relevant).sort(bySeverity);
+    const lines: string[] = [];
     if (items.length === 0) {
-      state.lastAuto = { file, summary: "only info/hint diagnostics", at: Date.now() };
-      return state.config.reportClean
-        ? `LSP diagnostics (${envelope.server?.id}): ${displayPath(file, ctx.cwd)} has no errors.`
-        : undefined;
+      state.lastAuto = {
+        file,
+        summary: envelope.diagnosticState === "clean" ? "clean" : "only info/hint diagnostics",
+        at: Date.now(),
+      };
+      if (state.config.reportClean || related.length > 0)
+        lines.push(
+          `LSP diagnostics (${envelope.server?.id}): ${displayPath(file, ctx.cwd)} has no errors.`,
+        );
+    } else {
+      const shown = items.slice(0, state.config.maxItems);
+      const summary = summarizeSeverities(items);
+      state.lastAuto = { file, summary, at: Date.now() };
+      lines.push(
+        `LSP diagnostics (${envelope.server?.id}): ${summary} in ${displayPath(file, ctx.cwd)}`,
+        ...shown.map((item) => `  ${formatDiagnostic(item, ctx.cwd)}`),
+      );
+      if (items.length > shown.length)
+        lines.push(`  … ${items.length - shown.length} more; run lsp diagnostics for the full list`);
     }
-    const shown = items.slice(0, state.config.maxItems);
-    const summary = summarizeSeverities(items);
-    state.lastAuto = { file, summary, at: Date.now() };
-    const lines = [
-      `LSP diagnostics (${envelope.server?.id}): ${summary} in ${displayPath(file, ctx.cwd)}`,
-      ...shown.map((item) => `  ${formatDiagnostic(item, ctx.cwd)}`),
-    ];
-    if (items.length > shown.length)
-      lines.push(`  … ${items.length - shown.length} more; run lsp diagnostics for the full list`);
-    return lines.join("\n");
+    // Fallout in other files open in this session: what a compiler run would
+    // reveal later, surfaced now while the change is still in context.
+    if (related.length > 0) {
+      const files = new Set(related.map((item) => item.path));
+      const shown = related.slice(0, state.config.maxItems);
+      state.lastAuto.summary += `; related: ${summarizeSeverities(related)}`;
+      lines.push(
+        `LSP related diagnostics: this change newly caused ${summarizeSeverities(related)} in ${files.size} other open file${files.size === 1 ? "" : "s"}`,
+        ...shown.map((item) => `  ${formatDiagnostic(item, ctx.cwd)}`),
+      );
+      if (related.length > shown.length)
+        lines.push(`  … ${related.length - shown.length} more; run lsp diagnostics on those files`);
+    }
+    return lines.length ? lines.join("\n") : undefined;
   }
 }
 
@@ -462,22 +523,24 @@ function inputPath(event: ToolResultEvent, cwd: string): string | undefined {
 
 /**
  * Returns a warm-up cache key when an enabled, installed language server
- * covers this file. Files without extension (Dockerfile, CMakeLists.txt) are
- * matched by name through the registry.
+ * covers this file, plus the resolution itself so callers can explain a
+ * missing server. Files without extension (Dockerfile, CMakeLists.txt) are
+ * matched by name through the registry; oversized files are never synchronized.
  */
 function supported(
   file: string,
   cwd: string,
   env: NodeJS.ProcessEnv,
-): string | undefined {
+): { key?: string; profile?: LspProfileResolution } {
   let root: string;
   try {
+    if (statSync(file).size > MAX_DOCUMENT_BYTES) return {};
     root = findProjectRoot(file, cwd, false, env);
   } catch {
-    return undefined;
+    return {};
   }
   const profile = resolveProfile(file, root, env, cwd);
-  return profile.available ? `${profile.id}:${root}` : undefined;
+  return { profile, ...(profile.available ? { key: `${profile.id}:${root}` } : {}) };
 }
 
 function buildArgs(params: LspParameters, cwd: string): string[] {
@@ -487,7 +550,8 @@ function buildArgs(params: LspParameters, cwd: string): string[] {
     for (const extra of params.files ?? []) args.push("--file", resolve(cwd, extra));
   if (POSITIONAL.includes(params.operation)) {
     if (params.line !== undefined) args.push("--line", String(params.line));
-    if (params.column !== undefined) args.push("--column", String(params.column));
+    if (params.symbol) args.push("--symbol", params.symbol);
+    else if (params.column !== undefined) args.push("--column", String(params.column));
   }
   if (params.operation === "references" && params.includeDeclaration)
     args.push("--include-declaration");

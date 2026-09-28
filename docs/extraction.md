@@ -66,3 +66,14 @@ pi-coffee source on purpose:
   language id from the registry. The kernel's diagnostics semantics, daemon and
   transport are unchanged; `npm run check` covers 75 tests plus the installed
   package consumer test.
+- 0.4.0 closes the "agent makes fewer mistakes while editing" loop, taking the
+  ideas (not code) from pi-lens: related diagnostics — errors an edit newly
+  causes in the other files open on the same daemon (`LspClient.relatedDiagnostics`,
+  envelope `related`, extension section `LSP related diagnostics`); `--symbol
+  name[#n]` position resolution (`locateSymbol` in `src/lsp/cli.ts`); a 2 MiB
+  document limit (`file_too_large`); TCP transport in the registry
+  (`ServerChannel` in `src/lsp/client.ts`, built-in `gdscript` for Godot's
+  editor server); and a project walker (`src/lsp/snapshot.ts`) that skips
+  engine/framework output directories and root `.gitignore` names and degrades
+  with `snapshot_truncated` at 50,000 entries instead of scanning everything.
+  `npm run check` covers 81 tests plus the installed package consumer test.

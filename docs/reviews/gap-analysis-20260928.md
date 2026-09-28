@@ -17,6 +17,14 @@
 > （typescript-language-server）与 TypeScript 7（原生 `tsc --lsp`）。仍未做：同一文件多 server 并行（linter 与
 > 语言服务器同时出诊断）、`tcp` 传输（Godot）、tree-sitter 降级。
 > 其余条目（P0-3 快照、P0-4 Windows、P1-1 冷启动预算等）仍待处理。
+> **进度更新（2026-09-28，v0.4.0）**：只做"日常开发时 agent 少犯错"闭环需要的部分——
+> (1) 关联诊断：一次编辑在同一 daemon 里其他已打开文件中**新**造成的错误随自动诊断一并出现（`related` /
+> `LSP related diagnostics`，只报增量、不重复）；(2) `--symbol name[#n]` 按名字定位，不再手数列号；
+> (3) P0-3 完成：快照扫描器跳过 Unity/Unreal/Godot/前端缓存目录与根 `.gitignore` 目录名，`package-lock.json`
+> 等数据文件不再当配置变化，超过 50000 项降级为 `snapshot_truncated` 而不是失败；(4) `tcp` 传输 + 内置
+> `gdscript`（Godot 编辑器内 LSP，127.0.0.1:6005，端口可配）；(5) 2 MiB 文档上限（`file_too_large`）；
+> (6) 语言无可用 server 时在编辑结果里提示一次。仍未做（有意）：P0-4 Windows 命名管道、P1-1 预算调整、
+> 多 server 合并诊断、tree-sitter 降级、workspaceSymbol/rename/codeAction 等写操作。
 
 ---
 

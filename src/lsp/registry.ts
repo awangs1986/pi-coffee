@@ -28,9 +28,18 @@ import {
  * a top-level `servers` key.
  */
 export interface ServerDefinition {
-  /** Executable name, absolute path, or `node:<module entry>` for a bundled npm server. */
+  /**
+   * Executable name, absolute path, or `node:<module entry>` for a bundled npm
+   * server. For `transport: "tcp"` entries this is the informational
+   * `tcp://host:port` address.
+   */
   command: string;
   args?: string[];
+  /** `stdio` (default) spawns `command`; `tcp` connects to a server that is already listening. */
+  transport?: "stdio" | "tcp";
+  /** TCP host and port; only used with `transport: "tcp"`. */
+  host?: string;
+  port?: number;
   /** Extensions with a leading dot (`.vue`) or exact file names (`Dockerfile`). */
   fileTypes: string[];
   /** Files or `*.ext` patterns that mark a project root, checked one level per directory. */
@@ -523,6 +532,19 @@ export const BUILTIN_SERVERS: ServerRegistry = {
     rootMarkers: ["Cargo.toml", ".git"],
     install:
       "cargo install --git https://github.com/wgsl-analyzer/wgsl-analyzer wgsl-analyzer",
+  },
+  gdscript: {
+    language: "GDScript (Godot editor language server)",
+    transport: "tcp",
+    host: "127.0.0.1",
+    port: 6005,
+    command: "tcp://127.0.0.1:6005",
+    fileTypes: [".gd"],
+    rootMarkers: ["project.godot"],
+    requiredMarkers: ["project.godot"],
+    // Godot's server lives inside the editor; there is nothing to spawn.
+    install:
+      "open the project in the Godot editor (its language server listens on 127.0.0.1:6005) or run godot --path <project> --editor --headless --lsp-port 6005; set servers.gdscript.port in coffee-lsp.json when the editor uses another port",
   },
   cmake: {
     language: "CMake",
@@ -1048,6 +1070,11 @@ function mergeServers(
       override.initializationOptions === undefined
         ? { initializationOptions: initOptions }
         : {}),
+      // A configured command for a TCP entry (a stdio bridge for Godot) is
+      // meant to be spawned unless the transport is restated.
+      ...(override.command !== undefined && override.transport === undefined
+        ? { transport: "stdio" }
+        : {}),
     };
     const normalized = normalizeDefinition(id, candidate);
     if (normalized) merged[id] = normalized;
@@ -1059,8 +1086,23 @@ function normalizeDefinition(
   id: string,
   raw: Record<string, unknown>,
 ): ServerDefinition | undefined {
-  const command =
-    typeof raw.command === "string" && raw.command.trim()
+  const tcp = raw.transport === "tcp";
+  const host =
+    typeof raw.host === "string" && raw.host.trim()
+      ? raw.host.trim()
+      : "127.0.0.1";
+  const port =
+    typeof raw.port === "number" &&
+    Number.isSafeInteger(raw.port) &&
+    raw.port > 0 &&
+    raw.port < 65536
+      ? raw.port
+      : undefined;
+  const command = tcp
+    ? port
+      ? `tcp://${host}:${port}`
+      : undefined
+    : typeof raw.command === "string" && raw.command.trim()
       ? raw.command.trim()
       : undefined;
   const fileTypes = stringArray(raw.fileTypes);
@@ -1073,6 +1115,7 @@ function normalizeDefinition(
   return {
     language: typeof raw.language === "string" ? raw.language : id,
     command,
+    ...(tcp ? { transport: "tcp" as const, host, port } : {}),
     args: stringArray(raw.args) ?? (Array.isArray(raw.args) ? [] : undefined),
     fileTypes,
     rootMarkers,

@@ -100,7 +100,8 @@ export function formatEnvelope(envelope: LspEnvelope, cwd: string): string {
           : envelope.operation === "definition"
             ? "definition"
             : "implementation";
-      lines.push(`${items.length} ${noun}${items.length === 1 ? "" : "s"} (${server})`);
+      const at = envelope.position ? ` at ${position(envelope.position)}` : "";
+      lines.push(`${items.length} ${noun}${items.length === 1 ? "" : "s"}${at} (${server})`);
       for (const item of items) {
         const snippet = item.snippet ? `  ${String(item.snippet).trim()}` : "";
         lines.push(`  ${path(item.path)}:${position(item.location)}${snippet}`);
@@ -181,6 +182,34 @@ export function formatDiagnosticsLines(envelope: LspEnvelope, cwd: string): stri
       `diagnostics: inconclusive (${server}; confirmed ${confirmed ?? 0}/${requested ?? "?"} files) — not evidence of a clean file`,
     );
   for (const item of items) lines.push(`  ${formatDiagnostic(item, cwd)}`);
+  lines.push(...formatRelatedLines(envelope, cwd));
+  return lines;
+}
+
+/**
+ * Cross-file fallout: diagnostics that appeared in the other files this
+ * session has open. Rendered after the queried file's own list.
+ */
+export function formatRelatedLines(
+  envelope: LspEnvelope,
+  cwd: string,
+  maxItems = Infinity,
+): string[] {
+  const related = envelope.related ?? [];
+  const examined = envelope.coverage?.relatedFiles ?? 0;
+  if (related.length === 0) {
+    return examined > 0 && envelope.diagnosticState !== "inconclusive"
+      ? [`  related: no new diagnostics in ${examined} other open file${examined === 1 ? "" : "s"}`]
+      : [];
+  }
+  const files = new Set(related.map((item) => item.path));
+  const shown = related.slice(0, maxItems);
+  const lines = [
+    `  related: ${summarizeSeverities(related)} newly reported in ${files.size} other open file${files.size === 1 ? "" : "s"}`,
+    ...shown.map((item) => `    ${formatDiagnostic(item, cwd)}`),
+  ];
+  if (related.length > shown.length)
+    lines.push(`    … ${related.length - shown.length} more; run lsp diagnostics on those files`);
   return lines;
 }
 

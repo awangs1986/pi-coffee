@@ -6,6 +6,7 @@ import {
   readFileSync,
   existsSync,
 } from "node:fs";
+import { createServer } from "node:net";
 
 if (process.env.PI_COFFEE_FAKE_LSP_STARTS)
   appendFileSync(process.env.PI_COFFEE_FAKE_LSP_STARTS, "start\n");
@@ -34,10 +35,29 @@ const findings = () => [
   },
 ];
 
-process.stdin.on("data", (chunk) => {
+// Documents opened in cascade mode: uri → text. A change to one document
+// republishes every other open document, like tsserver or pyright do.
+const documents = new Map();
+const cascade = Boolean(process.env.PI_COFFEE_FAKE_LSP_CASCADE);
+
+const onData = (chunk) => {
   input = Buffer.concat([input, chunk]);
   consume();
-});
+};
+// PI_COFFEE_FAKE_LSP_TCP_PORT serves the same protocol over TCP, like Godot's
+// editor language server, instead of stdio.
+let output = process.stdout;
+const tcpPort = Number(process.env.PI_COFFEE_FAKE_LSP_TCP_PORT);
+if (tcpPort) {
+  createServer((socket) => {
+    output = socket;
+    socket.on("data", onData);
+    socket.on("error", () => {});
+  }).listen(tcpPort, "127.0.0.1", () => {
+    if (process.env.PI_COFFEE_FAKE_LSP_TCP_READY)
+      writeFileSync(process.env.PI_COFFEE_FAKE_LSP_TCP_READY, "ready");
+  });
+} else process.stdin.on("data", onData);
 
 function consume() {
   while (true) {
@@ -59,9 +79,36 @@ function consume() {
 
 function send(message) {
   const body = JSON.stringify(message);
-  process.stdout.write(
-    `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
-  );
+  output.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+}
+
+function publish(forUri, text, forVersion) {
+  send({
+    jsonrpc: "2.0",
+    method: "textDocument/publishDiagnostics",
+    params: {
+      uri: forUri,
+      version: process.env.PI_COFFEE_FAKE_LSP_STALE
+        ? forVersion - 1
+        : process.env.PI_COFFEE_FAKE_LSP_VERSIONLESS
+          ? undefined
+          : forVersion,
+      diagnostics: text.includes("BAD")
+        ? [
+            {
+              range: {
+                start: { line: 1, character: 6 },
+                end: { line: 1, character: 9 },
+              },
+              severity: 1,
+              code: "fixture-error",
+              source: "fixture-lsp",
+              message: "BAD is not assignable",
+            },
+          ]
+        : [],
+    },
+  });
 }
 
 function reply(message, result) {
@@ -194,6 +241,8 @@ function handle(message) {
     closedForBarrier = true;
     return;
   }
+  if (message.method === "textDocument/didClose")
+    documents.delete(message.params.textDocument.uri);
   if (
     message.method === "textDocument/didOpen" ||
     message.method === "textDocument/didChange"
@@ -223,6 +272,20 @@ function handle(message) {
       message.params.textDocument.text ??
       message.params.contentChanges?.at(-1)?.text ??
       opened;
+    if (cascade) {
+      documents.set(uri, { text: opened, version });
+      // Every open document depends on every other one in this fixture: BAD
+      // anywhere in the open set is an error in each open document, and every
+      // change republishes the whole set, like tsserver or pyright do.
+      setTimeout(() => {
+        const anyBad = [...documents.values()].some((document) =>
+          document.text.includes("BAD"),
+        );
+        for (const [documentUri, document] of documents)
+          publish(documentUri, anyBad ? "BAD" : "", document.version);
+      }, 10);
+      return;
+    }
     if (
       process.env.PI_COFFEE_FAKE_LSP_SUPPRESS_CLEAN &&
       message.method === "textDocument/didChange" &&

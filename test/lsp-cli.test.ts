@@ -5,7 +5,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -926,6 +926,223 @@ describe("coffee-lsp CLI", () => {
       rmSync(root, { recursive: true, force: true });
     }
   }, 15_000);
+
+  it("reports new errors in the other open files after a change, once", async () => {
+    const root = mkdtempSync(join(tmpdir(), "coffee-lsp-related-"));
+    const app = join(root, "app.ts");
+    const lib = join(root, "lib.ts");
+    writeFileSync(join(root, "tsconfig.json"), "{}\n");
+    writeFileSync(app, "export const target = 1;\nconst value = 2;\n");
+    writeFileSync(lib, "export const helper = 1;\nconst other = 2;\n");
+    const env = {
+      ...process.env,
+      XDG_RUNTIME_DIR: root,
+      PI_COFFEE_ROOT_SESSION: `related-${process.pid}-${Date.now()}`,
+      PI_COFFEE_FAKE_LSP_CASCADE: "1",
+      PI_COFFEE_TS_LSP_COMMAND: JSON.stringify([
+        process.execPath,
+        resolve("test/fixtures/fake-lsp-server.mjs"),
+      ]),
+    };
+    // The daemon is the built artifact; in-process calls would spawn src/lsp/bin.js.
+    const cli = resolve("dist/src/lsp/bin.js");
+    const invoke = async (args: string[]) => {
+      const run = promisify(execFile)(process.execPath, [cli, ...args], { cwd: root, env });
+      const { stdout, code } = await run.then(
+        (result) => ({ stdout: result.stdout, code: 0 }),
+        (error) => ({ stdout: error.stdout as string, code: error.code as number }),
+      );
+      return { code, json: JSON.parse(stdout) };
+    };
+    try {
+      // lib.ts joins the open set through a navigation query, like a read does in Pi.
+      expect((await invoke(["symbols", "--file", lib, "--workspace", root])).code).toBe(0);
+      const alone = await invoke(["diagnostics", "--file", app, "--workspace", root]);
+      expect(alone.json).toMatchObject({
+        diagnosticState: "clean",
+        related: [],
+        coverage: { relatedFiles: 1 },
+      });
+
+      // Breaking app.ts breaks lib.ts in this fixture; the fallout is reported...
+      writeFileSync(app, "export const target = 1;\nconst value = BAD;\n");
+      const broken = await invoke(["diagnostics", "--file", app, "--workspace", root]);
+      expect(broken.json).toMatchObject({
+        diagnosticState: "findings",
+        items: [expect.objectContaining({ path: app, code: "fixture-error" })],
+        related: [
+          expect.objectContaining({
+            path: lib,
+            code: "fixture-error",
+            location: expect.objectContaining({ line: 2, column: 7 }),
+          }),
+        ],
+        coverage: { requestedFiles: 1, confirmedFiles: 1, relatedFiles: 1 },
+      });
+
+      // ...and not repeated while it merely persists.
+      writeFileSync(app, "export const target = 1;\nconst value = BAD;\nconst more = 3;\n");
+      const again = await invoke(["diagnostics", "--file", app, "--workspace", root]);
+      expect(again.json).toMatchObject({ diagnosticState: "findings", related: [] });
+
+      // Querying lib.ts directly always lists its current diagnostics.
+      const direct = await invoke(["diagnostics", "--file", lib, "--workspace", root]);
+      expect(direct.json).toMatchObject({
+        diagnosticState: "findings",
+        items: [expect.objectContaining({ path: lib })],
+        coverage: { relatedFiles: 1 },
+      });
+
+      // A one-shot server has no neighbours.
+      const single = await invoke([
+        "diagnostics",
+        "--file",
+        app,
+        "--workspace",
+        root,
+        "--no-daemon",
+      ]);
+      expect(single.json.coverage.relatedFiles).toBe(0);
+    } finally {
+      await stopLspDaemon(env.PI_COFFEE_ROOT_SESSION, env).catch(() => {});
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("locates navigation positions by symbol name and refuses oversized documents", async () => {
+    const root = mkdtempSync(join(tmpdir(), "coffee-lsp-symbol-"));
+    const source = join(root, "app.ts");
+    writeFileSync(join(root, "tsconfig.json"), "{}\n");
+    writeFileSync(
+      source,
+      "export const target = 1;\nconst value = target + target;\nconst targeted = target;\n",
+    );
+    const env = {
+      ...process.env,
+      PI_COFFEE_TS_LSP_COMMAND: JSON.stringify([
+        process.execPath,
+        resolve("test/fixtures/fake-lsp-server.mjs"),
+      ]),
+    };
+    const base = ["--file", source, "--workspace", root, "--no-daemon"];
+    try {
+      const first = await invoke(["definition", ...base, "--symbol", "target"], root, env);
+      expect(first.json).toMatchObject({ status: "ok", position: { line: 1, column: 14 } });
+      // Whole words only: `targeted` on line 3 is never counted.
+      const third = await invoke(["hover", ...base, "--symbol", "target#3"], root, env);
+      expect(third.json.position).toEqual({ line: 2, column: 24 });
+      const onLine = await invoke(
+        ["hover", ...base, "--symbol", "target", "--line", "3"],
+        root,
+        env,
+      );
+      expect(onLine.json.position).toEqual({ line: 3, column: 18 });
+      const fifth = await invoke(["hover", ...base, "--symbol", "target#5"], root, env);
+      expect(fifth).toMatchObject({
+        code: 2,
+        json: { issues: [{ code: "symbol_not_found" }] },
+      });
+      const missing = await invoke(
+        ["hover", ...base, "--symbol", "nowhere", "--line", "2"],
+        root,
+        env,
+      );
+      expect(missing.json.issues[0].message).toContain("on line 2");
+      const conflicting = await invoke(
+        ["hover", ...base, "--symbol", "target", "--column", "3"],
+        root,
+        env,
+      );
+      expect(conflicting.json.issues[0]).toMatchObject({ code: "invalid_arguments" });
+
+      const bundle = join(root, "bundle.js");
+      writeFileSync(bundle, "x".repeat(2 * 1024 * 1024 + 1));
+      const large = await invoke(
+        ["diagnostics", "--file", bundle, "--workspace", root, "--no-daemon"],
+        root,
+        env,
+      );
+      expect(large).toMatchObject({
+        code: 3,
+        json: { status: "unavailable", issues: [{ code: "file_too_large" }] },
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it("connects to a TCP language server such as Godot's and explains a closed port", async () => {
+    const root = mkdtempSync(join(tmpdir(), "coffee-lsp-tcp-"));
+    const script = join(root, "player.gd");
+    const ready = join(root, "ready");
+    writeFileSync(join(root, "project.godot"), "[application]\n");
+    writeFileSync(script, "extends Node\nvar x = BAD\n");
+    const port = 20000 + (process.pid % 20000);
+    writeFileSync(
+      join(root, "coffee-lsp.json"),
+      JSON.stringify({ servers: { gdscript: { port } } }),
+    );
+    const env = { ...process.env };
+    const server = spawn(
+      process.execPath,
+      [resolve("test/fixtures/fake-lsp-server.mjs")],
+      {
+        env: {
+          ...env,
+          PI_COFFEE_FAKE_LSP_TCP_PORT: String(port),
+          PI_COFFEE_FAKE_LSP_TCP_READY: ready,
+        },
+        stdio: "ignore",
+      },
+    );
+    try {
+      await expect.poll(() => existsSync(ready), { timeout: 5000 }).toBe(true);
+      const status = await invoke(["status", "--file", script, "--workspace", root], root, env);
+      expect(status.json).toMatchObject({
+        status: "ok",
+        server: { id: "gdscript", command: `tcp://127.0.0.1:${port}`, source: "tcp" },
+      });
+      const diagnostics = await invoke(
+        ["diagnostics", "--file", script, "--workspace", root, "--no-daemon"],
+        root,
+        env,
+      );
+      expect(diagnostics.json).toMatchObject({
+        status: "ok",
+        server: { id: "gdscript" },
+        diagnosticState: "findings",
+        items: [expect.objectContaining({ code: "fixture-error", path: script })],
+      });
+      const listing = await invoke(["servers", "--file", script, "--workspace", root], root, env);
+      expect(listing.json.items.find((item: any) => item.id === "gdscript")).toMatchObject({
+        status: "available",
+        appliesToFile: true,
+        source: "tcp",
+      });
+    } finally {
+      server.kill();
+      await new Promise((done) => server.once("exit", done));
+    }
+    try {
+      // Nothing listens any more: status says so, queries fail with the hint.
+      const closed = await invoke(["status", "--file", script, "--workspace", root], root, env);
+      expect(closed).toMatchObject({
+        code: 3,
+        json: { status: "unavailable", issues: [{ code: "missing_server" }] },
+      });
+      expect(closed.json.issues[0].message).toContain(`not listening on 127.0.0.1:${port}`);
+      const failed = await invoke(
+        ["hover", "--file", script, "--symbol", "x", "--workspace", root, "--no-daemon"],
+        root,
+        env,
+      );
+      expect(failed).toMatchObject({ code: 5, json: { issues: [{ code: "server_failed" }] } });
+      expect(failed.json.issues[0].message).toContain("not reachable at 127.0.0.1");
+      expect(failed.json.issues[0].message).toContain("Godot editor");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 20_000);
 });
 
 async function invoke(

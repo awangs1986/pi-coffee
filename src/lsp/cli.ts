@@ -1,7 +1,18 @@
-import { projectFingerprint } from "./snapshot.js";
+import {
+  MAX_SNAPSHOT_ENTRIES,
+  projectFingerprint,
+  projectSnapshot,
+} from "./snapshot.js";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, extname, relative, resolve, sep } from "node:path";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { connect as connectTcp } from "node:net";
+import { dirname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   LspClient,
@@ -58,13 +69,33 @@ const OPERATIONS = [
 type Operation = (typeof OPERATIONS)[number];
 /** Operations that describe the registry rather than one file; they never use the daemon. */
 const REGISTRY_OPERATIONS: readonly Operation[] = ["servers", "install"];
+const POSITIONAL_OPERATIONS: readonly Operation[] = [
+  "definition",
+  "references",
+  "hover",
+  "implementation",
+];
+/**
+ * Documents above this size are not synchronized: bundles and generated files
+ * stall language servers and are never what an agent is editing by hand.
+ */
+export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
+const VERSION: string = (() => {
+  try {
+    return JSON.parse(
+      readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+    ).version;
+  } catch {
+    return "unknown";
+  }
+})();
 
 export async function runCoffeeLsp(
   args: string[],
   io: CoffeeLspIo,
 ): Promise<number> {
   if (args.includes("--version") || args.includes("-v")) {
-    io.stdout("coffee-lsp 0.1.0\n");
+    io.stdout(`coffee-lsp ${VERSION}\n`);
     return 0;
   }
   if (shouldUseDaemon(args)) {
@@ -135,6 +166,32 @@ export async function runCoffeeLsp(
       parsed.projectRoot,
     );
   }
+  const oversized = parsed.files.find(
+    (file) => existsSync(file) && statSync(file).size > MAX_DOCUMENT_BYTES,
+  );
+  if (oversized)
+    return emitError(
+      io,
+      parsed.operation,
+      "file_too_large",
+      `${oversized} exceeds ${MAX_DOCUMENT_BYTES / 1024 / 1024} MiB; generated or bundled files are not synchronized with language servers.`,
+      3,
+      parsed.projectRoot,
+    );
+  if (parsed.symbol) {
+    const found = locateSymbol(primary, parsed.symbol, parsed.line);
+    if (!found)
+      return emitError(
+        io,
+        parsed.operation,
+        "symbol_not_found",
+        `'${parsed.symbol}' does not occur ${parsed.line ? `on line ${parsed.line}` : "as a whole word in the file"}; check the spelling or pass --line/--column.`,
+        2,
+        parsed.projectRoot,
+      );
+    parsed.line = found.line;
+    parsed.column = found.column;
+  }
   try {
     if (parsed.line && parsed.column)
       externalPosition(primary, parsed.line, parsed.column);
@@ -181,6 +238,14 @@ export async function runCoffeeLsp(
     );
   }
   if (parsed.operation === "status") {
+    if (profile.available && profile.tcp) {
+      const reachable = await tcpReachable(profile.tcp.host, profile.tcp.port);
+      if (!reachable) {
+        profile.available = false;
+        profile.reason =
+          `${profile.id} language server is not listening on ${profile.tcp.host}:${profile.tcp.port}. ${profile.definition?.install ?? ""}`.trim();
+      }
+    }
     return emit(
       io,
       {
@@ -278,7 +343,8 @@ export async function runCoffeeLsp(
   let unbind: (() => void) | undefined;
   try {
     const deadline = Date.now() + parsed.timeoutMs;
-    const initialSnapshot = projectFingerprint(parsed.projectRoot);
+    const initial = projectSnapshot(parsed.projectRoot);
+    const initialSnapshot = initial.fingerprint;
     client = io.clientPool
       ? await io.clientPool.acquire(
           profile,
@@ -304,6 +370,14 @@ export async function runCoffeeLsp(
         parsed.projectRoot,
         profile.id,
       );
+    if (initial.truncated)
+      result.envelope.issues = [
+        ...(result.envelope.issues ?? []),
+        {
+          code: "snapshot_truncated",
+          message: `The project has more than ${MAX_SNAPSHOT_ENTRIES} entries; changes outside the first ${MAX_SNAPSHOT_ENTRIES} are not detected. Add generated directories to .gitignore or narrow --workspace.`,
+        },
+      ];
     return emit(io, result.envelope, result.code);
   } catch (error) {
     if (client && io.clientPool && !client.isAlive())
@@ -323,7 +397,9 @@ export async function runCoffeeLsp(
     const hint =
       profile.id === "typescript" && /TypeScript installation/i.test(detail)
         ? " Add typescript to the project, or run coffee-lsp install typescript for a managed fallback."
-        : "";
+        : profile.tcp && /not reachable/i.test(detail)
+          ? ` ${profile.definition?.install ?? ""}`.trimEnd()
+          : "";
     return emitError(
       io,
       parsed.operation,
@@ -442,6 +518,7 @@ async function execute(
     return {
       envelope: {
         ...base,
+        position: { line: parsed.line, column: parsed.column },
         snapshot: client.snapshots(parsed.files),
         items,
         ...(items.length === 0 ? { emptyReason: "no_match" } : {}),
@@ -478,6 +555,7 @@ async function execute(
     return {
       envelope: {
         ...base,
+        position: { line: parsed.line, column: parsed.column },
         snapshot,
         items,
         ...(items.length === 0 ? { emptyReason: "no_match" } : {}),
@@ -506,6 +584,22 @@ async function execute(
         ? "findings"
         : "clean";
   const ok = diagnosticState !== "inconclusive";
+  // Fallout in the other documents this server has open (the files touched in
+  // this session): errors and warnings that were not there before this change.
+  let related: any[] = [];
+  let relatedFiles = 0;
+  if (ok) {
+    try {
+      const outcome = await client.relatedDiagnostics(parsed.files);
+      relatedFiles = outcome.examined;
+      related = outcome.items
+        .filter(({ diagnostic }) => (diagnostic.severity ?? 1) <= 2)
+        .map(({ path, diagnostic }) => normalizeDiagnostic(diagnostic, path))
+        .slice(0, parsed.limit);
+    } catch {
+      // Best effort: neighbour evidence never invalidates the confirmed result.
+    }
+  }
   return {
     envelope: {
       ...base,
@@ -513,11 +607,11 @@ async function execute(
       diagnosticState,
       snapshot: client.snapshots(parsed.files),
       items: all.slice(0, parsed.limit),
-      coverage: coverage(
-        parsed.files.length,
-        confirmed,
-        all.length > parsed.limit,
-      ),
+      related,
+      coverage: {
+        ...coverage(parsed.files.length, confirmed, all.length > parsed.limit),
+        relatedFiles,
+      },
       issues: ok
         ? []
         : [
@@ -548,6 +642,8 @@ interface ParsedArgs {
   limit: number;
   line?: number;
   column?: number;
+  /** `name` or `name#n`: locate the n-th whole-word occurrence instead of a column. */
+  symbol?: string;
   includeDeclaration: boolean;
   expectSha256?: string;
   noDaemon: boolean;
@@ -581,6 +677,7 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
   let limit = 50;
   let line: number | undefined;
   let column: number | undefined;
+  let symbol: string | undefined;
   let includeDeclaration = false;
   let noDaemon = false;
   let expectSha256: string | undefined;
@@ -597,6 +694,7 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
       line = positiveInt(requireValue(args, ++i, value), value);
     else if (value === "--column")
       column = positiveInt(requireValue(args, ++i, value), value);
+    else if (value === "--symbol") symbol = requireValue(args, ++i, value);
     else if (value === "--timeout-ms") {
       timeoutMs = positiveInt(requireValue(args, ++i, value), value);
       if (timeoutMs > 60000)
@@ -632,12 +730,19 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
   if (operation !== "diagnostics" && files.length !== 1)
     throw new Error(`${operation} accepts exactly one --file`);
   if (
-    ["definition", "references", "hover", "implementation"].includes(
-      operation,
-    ) &&
+    POSITIONAL_OPERATIONS.includes(operation) &&
+    !symbol &&
     (!line || !column)
   )
-    throw new Error(`${operation} requires --line and --column`);
+    throw new Error(
+      `${operation} requires --line and --column, or --symbol <name>[#n]`,
+    );
+  if (symbol && !POSITIONAL_OPERATIONS.includes(operation))
+    throw new Error(`--symbol applies to ${POSITIONAL_OPERATIONS.join(", ")}`);
+  if (symbol && column)
+    throw new Error("--symbol and --column are mutually exclusive");
+  if (symbol && !/^[^#\s]+(#[1-9]\d*)?$/.test(symbol))
+    throw new Error("--symbol expects <name> or <name>#<occurrence>");
   if (expectSha256 && !/^[a-f0-9]{64}$/i.test(expectSha256))
     throw new Error(
       "--expect-sha256 requires a 64-character hexadecimal SHA-256",
@@ -652,11 +757,62 @@ function parseArgs(args: string[], cwd: string): ParsedArgs {
     limit,
     line,
     column,
+    symbol,
     includeDeclaration,
     noDaemon,
     expectSha256,
     help: false,
   };
+}
+
+/**
+ * Position of the n-th whole-word occurrence of `spec` (`name` or `name#n`),
+ * on `line` when given or anywhere in the file. Columns are 1-based code points.
+ */
+export function locateSymbol(
+  file: string,
+  spec: string,
+  line?: number,
+): { line: number; column: number } | undefined {
+  const match = /^([^#]+)(?:#(\d+))?$/.exec(spec);
+  if (!match) return undefined;
+  const name = match[1];
+  const wanted = Number(match[2] ?? 1);
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{N}_$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_$])`,
+    "gu",
+  );
+  const lines = readFileSync(file, "utf8").split(/\r?\n/);
+  let seen = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (line !== undefined && index + 1 !== line) continue;
+    for (const hit of lines[index].matchAll(pattern)) {
+      if (++seen !== wanted) continue;
+      return {
+        line: index + 1,
+        column: Array.from(lines[index].slice(0, hit.index)).length + 1,
+      };
+    }
+  }
+  return undefined;
+}
+
+/** Whether something accepts connections on host:port within `timeoutMs`. */
+function tcpReachable(
+  host: string,
+  port: number,
+  timeoutMs = 1000,
+): Promise<boolean> {
+  return new Promise((done) => {
+    const socket = connectTcp({ host, port });
+    const finish = (value: boolean) => {
+      socket.destroy();
+      done(value);
+    };
+    socket.setTimeout(timeoutMs, () => finish(false));
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+  });
 }
 
 export function findProjectRoot(
@@ -702,12 +858,14 @@ function isWithin(root: string, path: string): boolean {
 function emit(io: CoffeeLspIo, value: any, code: number): number {
   let serialized = JSON.stringify(value);
   let truncated = false;
-  while (
-    Buffer.byteLength(serialized) > 16 * 1024 &&
-    Array.isArray(value.items) &&
-    value.items.length > 0
-  ) {
-    value.items.pop();
+  const droppable = () =>
+    Array.isArray(value.related) && value.related.length > 0
+      ? value.related
+      : Array.isArray(value.items) && value.items.length > 0
+        ? value.items
+        : undefined;
+  while (Buffer.byteLength(serialized) > 16 * 1024 && droppable()) {
+    droppable()!.pop();
     truncated = true;
     serialized = JSON.stringify(value);
   }
@@ -721,11 +879,8 @@ function emit(io: CoffeeLspIo, value: any, code: number): number {
       },
     ];
     serialized = JSON.stringify(value);
-    while (
-      Buffer.byteLength(serialized) > 16 * 1024 &&
-      value.items.length > 0
-    ) {
-      value.items.pop();
+    while (Buffer.byteLength(serialized) > 16 * 1024 && droppable()) {
+      droppable()!.pop();
       serialized = JSON.stringify(value);
     }
   }
@@ -967,12 +1122,17 @@ coffee-lsp install <id>
 Options:
   --workspace <path>       workspace root
   --line <n> --column <n>  1-based Unicode code point position
+  --symbol <name>[#n]      locate the n-th whole-word occurrence of name
+                           (on --line when given) instead of --column
   --include-declaration    include a symbol declaration in references
   --timeout-ms <n>         request timeout
   --limit <n>              maximum returned items
   --expect-sha256 <hash>   reject a stale navigation position
   --no-daemon              use one language-server process for this call
 
+diagnostics also returns "related": errors and warnings that appeared in the
+other files this session has open since they were last reported (best effort;
+an empty list is not proof that dependents are clean).
 servers lists the language-server registry (built-ins plus coffee-lsp.json
 "servers" entries) and which command each resolves to from the workspace.
 install <id> runs npm install for an npm-distributed server into the managed

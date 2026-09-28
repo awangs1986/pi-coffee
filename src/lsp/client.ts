@@ -6,9 +6,10 @@ import {
   type PublishedDiagnostics,
 } from "./diagnostics.js";
 import { MessageFramer } from "./message-framing.js";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { connect as connectTcp } from "node:net";
 import { pathToFileURL } from "node:url";
 
 type JsonObject = Record<string, any>;
@@ -24,6 +25,103 @@ export interface LspServerSpec {
   initializationOptions?: JsonObject;
   /** Fixed LSP language id for every document; otherwise derived from the file name. */
   languageId?: string;
+  /** Connect to a server that is already listening (Godot's editor) instead of spawning `command`. */
+  tcp?: { host: string; port: number };
+}
+
+/** Related-diagnostics delta for one document that is open next to the queried one. */
+export interface RelatedDiagnostics {
+  /** Other open documents examined. */
+  examined: number;
+  /** Diagnostics that were not present the last time each document was reported. */
+  items: Array<{ path: string; diagnostic: any }>;
+}
+
+/**
+ * Byte stream to a language server: a spawned stdio process or a TCP
+ * connection. Only the lifecycle differs; framing and protocol are shared.
+ */
+interface ServerChannel {
+  write(data: string, callback: (error?: Error | null) => void): void;
+  alive(): boolean;
+  /** Ask the server to stop: signal the process group, or drop the connection. */
+  kill(signal: NodeJS.Signals): void;
+  destroy(): void;
+}
+
+interface ChannelHandlers {
+  data(chunk: Buffer): void;
+  stderr(chunk: Buffer): void;
+  error(error: Error): void;
+  exit(detail: string): void;
+}
+
+function spawnChannel(spec: LspServerSpec, on: ChannelHandlers): ServerChannel {
+  const child = spawn(spec.command, spec.args, {
+    cwd: spec.cwd,
+    env: spec.env,
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: process.platform !== "win32",
+  });
+  child.stdout.on("data", on.data);
+  child.stderr.on("data", on.stderr);
+  child.stdin.on("error", (error) => on.error(classifyTransportError(error)));
+  child.on("error", (error) =>
+    on.error(new Error(`language server failed to start: ${error.message}`)),
+  );
+  child.on("exit", (code, signal) =>
+    on.exit(`exited (${code ?? signal ?? "unknown"})`),
+  );
+  const alive = () => child.exitCode === null && child.signalCode === null;
+  return {
+    write: (data, callback) => child.stdin.write(data, callback),
+    alive,
+    kill(signal) {
+      try {
+        if (process.platform !== "win32" && child.pid)
+          process.kill(-child.pid, signal);
+        else child.kill(signal);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    },
+    destroy() {
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+    },
+  };
+}
+
+function connectChannel(spec: LspServerSpec, on: ChannelHandlers): ServerChannel {
+  const { host, port } = spec.tcp!;
+  const socket = connectTcp({ host, port });
+  socket.setNoDelay(true);
+  let connected = false;
+  socket.on("connect", () => {
+    connected = true;
+  });
+  socket.on("data", on.data);
+  socket.on("error", (error) => {
+    // A closed port is transient (the editor is not running yet), never a
+    // configuration failure worth backing off from.
+    const code = (error as NodeJS.ErrnoException).code;
+    on.error(
+      connected
+        ? classifyTransportError(error)
+        : new LspTransportError(
+            `language server not reachable at ${host}:${port} (${code ?? error.message})`,
+            { cause: error },
+          ),
+    );
+  });
+  socket.on("close", () => on.exit("connection closed"));
+  return {
+    write: (data, callback) => socket.write(data, callback),
+    alive: () => !socket.destroyed,
+    kill: () => socket.destroy(),
+    destroy: () => socket.destroy(),
+  };
 }
 
 export interface NormalizedLocation {
@@ -53,7 +151,7 @@ export class LspServerExitedError extends LspTransportError {
 }
 
 export class LspClient {
-  private readonly child: ChildProcessWithoutNullStreams;
+  private readonly channel: ServerChannel;
   private readonly framer = new MessageFramer(Buffer.alloc(0));
   private nextId = 1;
   private readonly pending = new Map<
@@ -68,6 +166,14 @@ export class LspClient {
   private readonly openVersions = new EquivalentUriMap<number>();
   readonly openFiles = new EquivalentUriMap<{ version: number }>();
   readonly diagnostics = new EquivalentUriMap<PublishedDiagnostics>();
+  /**
+   * Latest report per open document, kept across workspace reconciliation
+   * (which clears `diagnostics` to re-establish freshness) so that a change to
+   * one file can be compared with what its neighbours reported before.
+   */
+  private readonly latest = new EquivalentUriMap<PublishedDiagnostics>();
+  /** Fingerprints of the diagnostics last reported to a caller, per document. */
+  private readonly reported = new EquivalentUriMap<Set<string>>();
   private readonly needsCleanRefresh = new EquivalentUriMap<boolean>();
   diagnosticsVersion = 0;
   readonly startedAt = Date.now();
@@ -91,39 +197,31 @@ export class LspClient {
     private readonly spec: LspServerSpec,
     private timeoutMs: number,
   ) {
-    this.child = spawn(spec.command, spec.args, {
-      cwd: spec.cwd,
-      env: spec.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      detached: process.platform !== "win32",
-    });
-    this.child.stdout.on("data", (chunk) => {
-      try {
-        this.framer.push(chunk);
-        this.consume();
-      } catch (error) {
-        this.failAll(error as Error);
-      }
-    });
-    this.child.stdin.on("error", (error) =>
-      this.failAll(classifyTransportError(error)),
-    );
-    this.child.stderr.on("data", (chunk) => {
-      this.stderr = (this.stderr + chunk.toString("utf8")).slice(-8_000);
-    });
-    this.child.on("error", (error) =>
-      this.failAll(
-        new Error(`language server failed to start: ${error.message}`),
-      ),
-    );
-    this.child.on("exit", (code, signal) => {
-      if (!this.closed)
-        this.failAll(
-          new LspServerExitedError(
-            `language server exited (${code ?? signal ?? "unknown"})${this.stderr ? `: ${this.stderr.trim()}` : ""}`,
-          ),
-        );
-    });
+    const handlers: ChannelHandlers = {
+      data: (chunk) => {
+        try {
+          this.framer.push(chunk);
+          this.consume();
+        } catch (error) {
+          this.failAll(error as Error);
+        }
+      },
+      stderr: (chunk) => {
+        this.stderr = (this.stderr + chunk.toString("utf8")).slice(-8_000);
+      },
+      error: (error) => this.failAll(error),
+      exit: (detail) => {
+        if (!this.closed)
+          this.failAll(
+            new LspServerExitedError(
+              `language server ${detail}${this.stderr ? `: ${this.stderr.trim()}` : ""}`,
+            ),
+          );
+      },
+    };
+    this.channel = spec.tcp
+      ? connectChannel(spec, handlers)
+      : spawnChannel(spec, handlers);
   }
 
   static async start(
@@ -232,12 +330,7 @@ export class LspClient {
   }
 
   isAlive(): boolean {
-    return (
-      !this.closed &&
-      !this.failure &&
-      this.child.exitCode === null &&
-      this.child.signalCode === null
-    );
+    return !this.closed && !this.failure && this.channel.alive();
   }
 
   serverCapabilities(): JsonObject {
@@ -364,11 +457,54 @@ export class LspClient {
       expectedDocumentVersion: version,
     });
     if (this.failure) throw this.failure;
-    if (result.confirmed) this.needsCleanRefresh.delete(uri);
+    if (result.confirmed) {
+      this.needsCleanRefresh.delete(uri);
+      this.reported.set(uri, new Set(result.items.map(fingerprint)));
+    }
     return {
       ...result,
       confirmed: result.confirmed && beforeHash === sha256(readFileSync(path)),
     };
+  }
+
+  /**
+   * Diagnostics that appeared in the other open documents since they were last
+   * reported: the cross-file fallout of the change just diagnosed. Servers push
+   * neighbour reports shortly after the changed document's own, so this waits
+   * for a short quiet period first. Pull-only servers have no neighbour reports.
+   * Best effort: an empty result never proves that dependents are clean.
+   */
+  async relatedDiagnostics(exclude: readonly string[]): Promise<RelatedDiagnostics> {
+    const skip = new Set(exclude.map((path) => pathToFileURL(path).href));
+    const others = [...this.openFiles.keys()]
+      .map((key) => uriToFile(key))
+      .filter((path) => !skip.has(pathToFileURL(path).href) && existsSync(path));
+    if (others.length === 0) return { examined: 0, items: [] };
+    if (!this.supportsDiagnosticPull()) {
+      const end = Date.now() + Math.min(1000, Math.max(0, this.deadline - Date.now()));
+      let seen = this.diagnosticsVersion;
+      let quietSince = Date.now();
+      while (Date.now() < end && Date.now() - quietSince < 300) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        if (this.failure) throw this.failure;
+        this.operationSignal?.throwIfAborted();
+        if (this.diagnosticsVersion !== seen) {
+          seen = this.diagnosticsVersion;
+          quietSince = Date.now();
+        }
+      }
+    }
+    const items: RelatedDiagnostics["items"] = [];
+    for (const path of others) {
+      const uri = pathToFileURL(path).href;
+      const current = this.latest.get(uri);
+      if (!current) continue;
+      const before = this.reported.get(uri);
+      for (const diagnostic of current.diagnostics)
+        if (!before?.has(fingerprint(diagnostic))) items.push({ path, diagnostic });
+      this.reported.set(uri, new Set(current.diagnostics.map(fingerprint)));
+    }
+    return { examined: others.length, items };
   }
 
   supportsDiagnosticPull(): boolean {
@@ -404,8 +540,7 @@ export class LspClient {
     this.operationSignal = undefined;
     this.deadline = Infinity;
     if (this.termination) clearTimeout(this.termination);
-    const alive = () =>
-      this.child.exitCode === null && this.child.signalCode === null;
+    const alive = () => this.channel.alive();
     if (alive() && !this.failure) {
       try {
         await this.request("shutdown", null, 500, undefined);
@@ -438,21 +573,13 @@ export class LspClient {
     const killEnd = Date.now() + 500;
     while (alive() && Date.now() < killEnd)
       await new Promise((r) => setTimeout(r, 10));
-    this.child.stdin.destroy();
-    this.child.stdout.destroy();
-    this.child.stderr.destroy();
+    this.channel.destroy();
     if (alive())
       throw new Error("LSP process termination could not be confirmed");
   }
 
   private killOwned(signal: NodeJS.Signals): void {
-    try {
-      if (process.platform !== "win32" && this.child.pid)
-        process.kill(-this.child.pid, signal);
-      else this.child.kill(signal);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-    }
+    this.channel.kill(signal);
   }
 
   private remainingMs(): number {
@@ -466,6 +593,12 @@ export class LspClient {
   async reconcileWorkspace(
     changes: readonly import("./snapshot.js").FileChange[],
   ): Promise<void> {
+    // Every warm query passes through here first. Reports that arrived between
+    // queries for documents never reported yet (opened by a warm-up) are the
+    // pre-existing state of those files, not fallout of the coming change.
+    for (const [key, report] of this.latest)
+      if (!this.reported.has(key))
+        this.reported.set(key, new Set(report.diagnostics.map(fingerprint)));
     if (!changes.length) return;
     const contentChanges = changes.filter((change) => {
       if (change.type !== 2) return true;
@@ -493,6 +626,8 @@ export class LspClient {
         this.openFiles.delete(uri);
         this.openHashes.delete(uri);
         this.needsCleanRefresh.delete(uri);
+        this.latest.delete(uri);
+        this.reported.delete(uri);
       } else if (this.openVersions.has(uri)) {
         const reopen = this.supports("symbols") && this.needsCleanRefresh.has(uri);
         await this.sync(change.path, false, reopen);
@@ -668,7 +803,7 @@ export class LspClient {
           Math.max(1, timeoutMs),
         );
         signal?.addEventListener("abort", abort, { once: true });
-        this.child.stdin.write(
+        this.channel.write(
           `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`,
           (error) => finish(error),
         );
@@ -722,10 +857,12 @@ export class LspClient {
       return;
     }
     if (message.method === "textDocument/publishDiagnostics") {
-      this.diagnostics.set(message.params.uri, {
+      const report = {
         diagnostics: message.params.diagnostics ?? [],
         version: message.params.version ?? null,
-      });
+      };
+      this.diagnostics.set(message.params.uri, report);
+      this.latest.set(message.params.uri, report);
       this.diagnosticsVersion++;
       return;
     }
@@ -915,6 +1052,17 @@ function externalRangePosition(
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** Identity of one diagnostic across publishes of the same document text. */
+function fingerprint(diagnostic: any): string {
+  return JSON.stringify([
+    diagnostic?.range?.start?.line ?? -1,
+    diagnostic?.range?.start?.character ?? -1,
+    diagnostic?.severity ?? null,
+    diagnostic?.code ?? null,
+    String(diagnostic?.message ?? ""),
+  ]);
 }
 
 function classifyTransportError(error: Error): Error {

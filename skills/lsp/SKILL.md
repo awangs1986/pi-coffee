@@ -15,12 +15,12 @@ The Bash interface is the `coffee-lsp` command. Start by checking the target fil
 coffee-lsp status --file src/example.ts
 ```
 
-Use the returned server state and only request supported operations. Positions are 1-based Unicode code-point line and column values. Obtain a reliable position from the current file or `symbols` before navigation:
+Use the returned server state and only request supported operations. Positions are 1-based Unicode code-point line and column values. Obtain a reliable position from the current file or `symbols` before navigation, or name the symbol and let the position be resolved from the file (`--symbol name` is the first whole-word occurrence, `name#2` the second, `--symbol name --line 12` the occurrence on that line; the envelope's `position` echoes what was used and `symbol_not_found` means the name is not in the current file):
 
 ```bash
 coffee-lsp symbols --file src/example.ts
-coffee-lsp definition --file src/example.ts --line 12 --column 8
-coffee-lsp references --file src/example.ts --line 12 --column 8 --include-declaration
+coffee-lsp definition --file src/example.ts --symbol loadLevel
+coffee-lsp references --file src/example.ts --symbol loadLevel#2 --include-declaration
 coffee-lsp hover --file src/example.ts --line 12 --column 8
 coffee-lsp diagnostics --file src/example.ts
 ```
@@ -28,6 +28,8 @@ coffee-lsp diagnostics --file src/example.ts
 When `status` says the server is available and the task depends on types or symbol identity, do not stop at the status probe. Run at least one semantic operation that answers the task. For a semantic code change, run `diagnostics` before editing, use `definition` or `references` when cross-file identity or impact matters, and run `diagnostics` again after editing.
 
 Read the JSON envelope, including `status`, `issues`, `coverage`, and `diagnosticState`. An empty navigation result means only that this query returned no match. Diagnostics are clean only when `diagnosticState` is `clean`; treat `inconclusive`, timeouts, missing servers, stale positions, and truncated coverage as explicit limitations.
+
+A diagnostics result for one file can also carry `related` (in Pi: an `LSP related diagnostics` section under the automatic check): errors and warnings that the latest change newly caused in other files open in this session, such as callers of a function whose signature you changed. Fix or consciously accept them; they are shown once, not repeated on every later edit. `coverage.relatedFiles` is how many other open files were watched. It is not a whole-project check: files nobody opened in the session are not covered, so still run the project's compiler or tests for interface changes.
 
 Read relevant source before editing. After a change, rerun diagnostics for changed files and affected callers, then run the project's own compiler, tests, and lint through Bash. LSP evidence complements project checks and does not replace them. Keep queries narrow; do not scan the whole workspace when the task names specific files or symbols.
 
@@ -50,7 +52,12 @@ every entry with its state, and `coffee-lsp install <id>` installs npm-distribut
 servers (html, css, json, yaml, vue, svelte, astro, eslint, bash, dockerfile, toml,
 tailwindcss, graphql, prisma, php) into a managed directory outside the project.
 Native servers (clangd, rust-analyzer, gopls, csharp-ls, lua-language-server, zls, …)
-must be installed by the user; ask before installing anything. Run from the task
+must be installed by the user; ask before installing anything. GDScript uses the
+language server inside the Godot editor (TCP 127.0.0.1:6005): when `status` reports it
+is not listening, ask the user to open the project in Godot or to run
+`godot --path <project> --editor --headless --lsp-port 6005`; do not start Godot
+yourself unless asked. Files over 2 MiB are refused (`file_too_large`): generated
+bundles are not worth checking. Run from the task
 checkout; use `--workspace` to bound project selection. SDKs, Cargo features/target and
 Go build tags/environment must match the project's checks. Use `--timeout-ms 30000`
 for a cold project. Missing dependencies or uncertain coverage require an explicit

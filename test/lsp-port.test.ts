@@ -362,7 +362,8 @@ it("bounds a write when a language server stops reading stdin", async () => {
     async (q, root) => {
       writeFileSync(
         join(root, "app.ts"),
-        "const target = 1;\n" + "// filler\n".repeat(300000),
+        // Just under the 2 MiB synchronization limit, far beyond the pipe buffer.
+        "const target = 1;\n" + "// filler\n".repeat(200000),
       );
       const started = Date.now();
       expect((await q("symbols", ["--timeout-ms", "250"])).code).toBe(4);

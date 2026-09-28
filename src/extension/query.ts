@@ -19,12 +19,17 @@ export interface LspEnvelope {
   capabilities?: string[];
   diagnosticState?: "clean" | "findings" | "inconclusive";
   snapshot?: unknown;
+  /** Position a navigation query actually used (after `symbol` resolution). */
+  position?: { line: number; column: number };
   items?: any[];
+  /** diagnostics: new errors/warnings in the other files the server has open. */
+  related?: any[];
   emptyReason?: string;
   coverage?: {
     requestedFiles?: number;
     confirmedFiles?: number;
     truncated?: boolean;
+    relatedFiles?: number;
   };
   issues?: Array<{ code: string; message: string }>;
   nextAction?: string;

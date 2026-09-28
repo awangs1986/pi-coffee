@@ -156,10 +156,26 @@ describe("Pi extension", () => {
       const root = mkdtempSync(join(tmpdir(), "coffee-lsp-ext-"));
       const project = join(root, "project");
       const source = join(project, "src/app.ts");
+      const library = join(project, "src/lib.ts");
       mkdirSync(join(project, "src"), { recursive: true });
       mkdirSync(join(root, "agent"));
       writeFileSync(join(project, "tsconfig.json"), "{}\n");
       writeFileSync(source, "export const target = 1;\n");
+      writeFileSync(library, "export const helper = 1;\nconst other = 2;\n");
+      // A registry entry whose executable is missing, to observe the one-time hint.
+      writeFileSync(
+        join(project, "coffee-lsp.json"),
+        JSON.stringify({
+          servers: {
+            haxe: {
+              command: "definitely-missing-haxe-language-server",
+              fileTypes: [".hx"],
+              rootMarkers: ["build.hxml"],
+              install: "lix install haxe-language-server",
+            },
+          },
+        }),
+      );
       const env: NodeJS.ProcessEnv = {
         ...process.env,
         XDG_RUNTIME_DIR: root,
@@ -168,6 +184,8 @@ describe("Pi extension", () => {
           process.execPath,
           resolve("test/fixtures/fake-lsp-server.mjs"),
         ]),
+        // Every open document depends on every other one in the fixture.
+        PI_COFFEE_FAKE_LSP_CASCADE: "1",
       };
       delete env.PI_COFFEE_ROOT_SESSION;
       delete env.PI_COFFEE_LSP_IDLE_MS;
@@ -181,15 +199,19 @@ describe("Pi extension", () => {
       );
       const harness = createHarness(project, "session-42");
       try {
-        module.createCoffeeLspExtension(harness.pi, { env, sessionId: "pi-session-42" });
+        const state = module.createCoffeeLspExtension(harness.pi, { env, sessionId: "pi-session-42" });
         expect(harness.tools.has("lsp")).toBe(true);
         expect(harness.commands.has("lsp")).toBe(true);
         await harness.emit("session_start", { type: "session_start", reason: "startup" });
 
-        // Reading a supported file warms the project without blocking.
+        // Reading supported files warms the project without blocking and opens
+        // them in the server, which makes them part of the related-diagnostics set.
         await harness.emit("tool_result", toolResult("read", { path: "src/app.ts" }));
+        await harness.emit("tool_result", toolResult("read", { path: "src/lib.ts" }));
+        await Promise.all([...state.prewarmed.values()].map((entry: any) => entry.done));
 
-        // A write that introduces an error gets the error appended.
+        // A write that introduces an error gets the error appended, followed by
+        // the fallout in the other open file.
         writeFileSync(source, "export const target = 1;\nconst value = BAD;\n");
         const failing = await harness.emit(
           "tool_result",
@@ -197,11 +219,18 @@ describe("Pi extension", () => {
         );
         expect(failing?.content).toHaveLength(2);
         const appended = failing!.content![1] as { type: "text"; text: string };
-        expect(appended.text).toContain("LSP diagnostics (typescript): 1 error in src/app.ts");
-        expect(appended.text).toContain("src/app.ts:2:7 error fixture-lsp(fixture-error): BAD is not assignable");
+        expect(appended.text).toBe(
+          [
+            "LSP diagnostics (typescript): 1 error in src/app.ts",
+            "  src/app.ts:2:7 error fixture-lsp(fixture-error): BAD is not assignable",
+            "LSP related diagnostics: this change newly caused 1 error in 1 other open file",
+            "  src/lib.ts:2:7 error fixture-lsp(fixture-error): BAD is not assignable",
+          ].join("\n"),
+        );
         expect(existsSync(socket)).toBe(true);
 
-        // A clean edit gets a one-line confirmation.
+        // A clean edit gets a one-line confirmation; the neighbour recovering
+        // is not news.
         writeFileSync(source, "export const target = 1;\nconst value = 2;\n");
         const clean = await harness.emit(
           "tool_result",
@@ -215,6 +244,19 @@ describe("Pi extension", () => {
         writeFileSync(join(project, "notes.md"), "# notes\n");
         expect(
           await harness.emit("tool_result", toolResult("write", { path: "notes.md", content: "" })),
+        ).toBeUndefined();
+
+        // A file type with a registry entry but no installed server is explained once.
+        writeFileSync(join(project, "Main.hx"), "class Main {}\n");
+        const hinted = await harness.emit(
+          "tool_result",
+          toolResult("write", { path: "Main.hx", content: "" }),
+        );
+        expect((hinted!.content![1] as { text: string }).text).toContain(
+          "LSP: no haxe language server is installed, so Main.hx is not checked after edits. Install: lix install haxe-language-server.",
+        );
+        expect(
+          await harness.emit("tool_result", toolResult("write", { path: "Main.hx", content: "" })),
         ).toBeUndefined();
         expect(
           await harness.emit("tool_result", {
@@ -244,6 +286,24 @@ describe("Pi extension", () => {
             harness.ctx,
           ),
         ).rejects.toThrow(/invalid_arguments/);
+        // symbol: "name" resolves the column; an unknown name is reported, not thrown.
+        const bySymbol = await tool.execute(
+          "call-2b",
+          { operation: "definition", file: "src/app.ts", symbol: "target" },
+          new AbortController().signal,
+          () => {},
+          harness.ctx,
+        );
+        expect(bySymbol.content[0].text).toContain("1 definition at 1:14 (typescript)");
+        expect(bySymbol.details).toMatchObject({ position: { line: 1, column: 14 } });
+        const unknownSymbol = await tool.execute(
+          "call-2c",
+          { operation: "hover", file: "src/app.ts", symbol: "nowhere" },
+          new AbortController().signal,
+          () => {},
+          harness.ctx,
+        );
+        expect(unknownSymbol.content[0].text).toContain("! symbol_not_found");
 
         // The registry is reachable without a file, from the tool and the command.
         const servers = await tool.execute(

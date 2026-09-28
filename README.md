@@ -59,15 +59,18 @@ calls share the session's language servers. Outside Pi, a plain
 
 ```
 lsp { operation: "symbols",     file: "src/game.ts" }
-lsp { operation: "definition",  file: "src/game.ts", line: 12, column: 8 }
-lsp { operation: "references",  file: "src/game.ts", line: 12, column: 8, includeDeclaration: true }
+lsp { operation: "definition",  file: "src/game.ts", symbol: "spawnEnemy" }
+lsp { operation: "references",  file: "src/game.ts", symbol: "spawnEnemy#2", includeDeclaration: true }
 lsp { operation: "hover",       file: "src/game.ts", line: 12, column: 8 }
 lsp { operation: "diagnostics", file: "src/game.ts", files: ["src/scene.ts"], timeoutMs: 30000 }
 lsp { operation: "servers" }
 ```
 
 Positions are 1-based lines and Unicode code-point columns, exactly as in the
-CLI. Results are one line per item (`path:line:col severity source(code) message`,
+CLI. `symbol: "name"` resolves the position from the current file content
+instead: the first whole-word occurrence, `name#2` the second, `line` alone
+restricts the search to that line (`symbol_not_found` otherwise). The resolved
+position is echoed in the result header. Results are one line per item (`path:line:col severity source(code) message`,
 `line:col kind name`), followed by `! code: message` for every limitation the
 CLI reports and a `next:` hint when one exists. The full JSON envelope is kept in
 the tool result `details`. `invalid_arguments`, `server_failed` and
@@ -96,11 +99,32 @@ Errors are listed before warnings, at most ten items, with a count of any
 remainder. When the result is inconclusive (cold server, stale snapshot, missing
 toolchain) nothing is appended: absence of the section is never evidence of a
 clean file. Failed tool calls and unsupported file types are left untouched.
-Only the edited file is checked; dependents are not re-diagnosed automatically,
-use `lsp diagnostics` with `files` for that.
 
-Reading a supported file (`read`) starts its project's language server in the
-background once per project, so the first edit usually meets a warm server.
+Language servers that push diagnostics (TypeScript, Pyright, rust-analyzer,
+gopls, …) re-check every open file after an edit. Errors (and warnings, unless
+`includeWarnings` is off) that an edit newly causes in *other* files the session
+has opened are appended once, under the edited file's verdict:
+
+```
+LSP diagnostics (typescript): src/enemy.ts has no errors.
+LSP related diagnostics: this change newly caused 1 error in 1 other open file
+  src/scene.ts:41:22 error typescript(2554): Expected 2 arguments, but got 1.
+```
+
+Only errors that were not present before the change are listed, so a long-broken
+file does not repeat under every edit; `lsp diagnostics` on that file lists its
+current state. The related set is the files opened in this session (reads,
+edits, queries) up to 40, not the whole project.
+
+Reading a supported file (`read`) opens it in its project's language server in
+the background, so the first edit usually meets a warm server and the files the
+model has looked at take part in related diagnostics. When the edited file's
+language has no working server, a one-line hint says so once per server
+(`LSP: no lua language server is installed, so main.lua is not checked after
+edits. Install: …`, or for Godot: `LSP: gdscript language server unavailable
+for player.gd (server_failed: language server not reachable at 127.0.0.1:6005
+(ECONNREFUSED) open the project in the Godot editor …)`); files over 2 MiB are
+skipped.
 
 ### `/lsp` command
 
@@ -144,11 +168,7 @@ extends or overrides the language-server registry (see
     "daemonIdleMs": 1800000
   },
   "servers": {
-    "gdscript": {
-      "command": "/path/to/gdscript-bridge",
-      "fileTypes": [".gd"],
-      "rootMarkers": ["project.godot"]
-    },
+    "gdscript": { "port": 6008 },
     "markdown": { "disabled": false },
     "lua": { "settings": { "Lua": { "diagnostics": { "globals": ["love"] } } } }
   },
@@ -173,19 +193,26 @@ extends or overrides the language-server registry (see
 coffee-lsp status --file src/example.ts
 coffee-lsp symbols --file src/example.ts
 coffee-lsp definition --file src/example.ts --line 12 --column 8
-coffee-lsp references --file src/example.ts --line 12 --column 8
-coffee-lsp hover --file src/example.ts --line 12 --column 8
+coffee-lsp definition --file src/example.ts --symbol loadLevel      # first whole-word occurrence
+coffee-lsp references --file src/example.ts --symbol loadLevel#2    # second occurrence
+coffee-lsp hover --file src/example.ts --symbol loadLevel --line 12 # occurrence on that line
 coffee-lsp implementation --file src/example.ts --line 12 --column 8
 coffee-lsp diagnostics --file src/example.ts --timeout-ms 30000
 coffee-lsp servers [--file src/App.vue]     # registry: installed / missing / disabled
 coffee-lsp install yaml                     # npm-distributed servers only
 ```
 
-Use actual symbol positions from the current source or a symbols result. Positions
-are 1-based Unicode code points. Default operation budget is 10 seconds, maximum
-60 seconds. `--workspace` bounds project selection; `--no-daemon` runs an isolated
-query. Diagnostics pass only when `diagnosticState` is `clean` with confirmed
-coverage. Empty, stale, unsupported and inconclusive results are not success.
+Use actual symbol positions from the current source or a symbols result, or
+`--symbol name[#n]` to have the position resolved from the file (the envelope's
+`position` field shows what was used). Positions are 1-based Unicode code
+points. Default operation budget is 10 seconds, maximum 60 seconds.
+`--workspace` bounds project selection; `--no-daemon` runs an isolated query.
+Diagnostics pass only when `diagnosticState` is `clean` with confirmed coverage.
+Empty, stale, unsupported and inconclusive results are not success. Through the
+daemon, a diagnostics envelope also carries `related`: errors and warnings the
+latest change newly caused in other files that are open in the same session
+(`coverage.relatedFiles` says how many were watched). Files over 2 MiB
+(bundles, generated code) are refused with `file_too_large`.
 
 ## Languages
 
@@ -236,7 +263,7 @@ picked up from PATH.
 | `odin` | .odin | ols | https://github.com/DanielGavin/ols |
 | `rust` | .rs | rust-analyzer (needs Cargo.toml or rust-project.json) | `rustup component add rust-analyzer` |
 | `cmake` | .cmake CMakeLists.txt | cmake-language-server | `pip install cmake-language-server` |
-| GDScript | .gd | not built in: Godot's language server runs inside the editor on TCP 6005 and cannot be spawned; add a stdio bridge as a `servers` entry | — |
+| `gdscript` | .gd (needs project.godot) | Godot's built-in language server over TCP (`127.0.0.1:6005`); start the editor, or headless: `godot --path <project> --editor --headless --lsp-port 6005` | ships with Godot; change the port with `"servers": {"gdscript": {"port": 6008}}` |
 
 **Applications & scripting**
 
@@ -272,13 +299,23 @@ read-only interface.
 Every registry field can be overridden per server in `coffee-lsp.json` →
 `servers.<id>`: `command`, `args`, `fileTypes`, `rootMarkers`,
 `requiredMarkers`, `languageId`, `settings`, `initializationOptions` (alias
-`initOptions`), `isLinter`, `disabled`, `install`, `npm`. New ids need
-`command`, `fileTypes` and `rootMarkers`. Files are read from the agent
-directory, the workspace and the project root (later files win); a malformed
-file is ignored rather than removing a language. `args`, `settings` and
-`initializationOptions` may use `${pid}`, `${root}`, `${rootUri}`,
-`${rootName}` and `${tsdk}` (the project's `node_modules/typescript/lib`;
-entries whose value cannot be resolved are dropped).
+`initOptions`), `isLinter`, `disabled`, `install`, `npm`, and for servers that
+listen on a socket instead of stdio `transport: "tcp"`, `host`, `port`. New ids
+need `command` (or `transport`/`port`), `fileTypes` and `rootMarkers`. Files are
+read from the agent directory, the workspace and the project root (later files
+win); a malformed file is ignored rather than removing a language. `args`,
+`settings` and `initializationOptions` may use `${pid}`, `${root}`,
+`${rootUri}`, `${rootName}` and `${tsdk}` (the project's
+`node_modules/typescript/lib`; entries whose value cannot be resolved are
+dropped).
+
+Project scanning (the change detection behind warm servers) skips VCS, package
+and build output directories (`node_modules`, `.git`, `dist`, `build`, `.next`,
+`target`, Unity `Library`/`Temp`/`Logs`/`obj`, Unreal `Intermediate`/`Saved`/
+`DerivedDataCache`/`Binaries`, Godot `.godot`/`.import`, …) plus plain directory
+names listed in the root `.gitignore`, and stops after 50,000 entries
+(`snapshot_truncated` is then reported and change detection covers the scanned
+part only).
 
 ## Embed
 

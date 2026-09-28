@@ -22,13 +22,15 @@ import {
 const requireFromHere = createRequire(import.meta.url);
 
 export type ServerSource =
-  "override" | "bundled" | "project" | "managed" | "path" | "missing";
+  "override" | "bundled" | "project" | "managed" | "path" | "tcp" | "missing";
 
 export interface LspProfileResolution {
   id: string;
   available: boolean;
   command?: string;
   args?: string[];
+  /** Connect instead of spawn (Godot's editor server). */
+  tcp?: { host: string; port: number };
   allowVersionlessDiagnostics?: boolean;
   reason?: string;
   /** Where the executable came from. */
@@ -182,6 +184,21 @@ export function resolveServer(
         }
       : { ...base, reason: `configured server does not exist: ${command}` };
   }
+  if (definition.transport === "tcp") {
+    // Nothing to install or resolve; the connection is attempted on first use
+    // and `status` probes the port.
+    const host = definition.host ?? "127.0.0.1";
+    const port = definition.port ?? 0;
+    return {
+      ...base,
+      available: true,
+      command: `tcp://${host}:${port}`,
+      args: [],
+      tcp: { host, port },
+      source: "tcp",
+      allowVersionlessDiagnostics: true,
+    };
+  }
   if (definition.command.startsWith("node:")) {
     try {
       const entry = requireFromHere.resolve(
@@ -297,7 +314,9 @@ export function listServers(
                 ? "not selected: this project uses typescript-language-server (TypeScript 5 tsserver)"
                 : "not selected: this project uses the native TypeScript 7 tsc --lsp",
           }
-        : {}),
+        : available && profile!.source === "tcp"
+          ? { note: "connects to a running server; not probed here" }
+          : {}),
     };
   });
 }
@@ -367,6 +386,7 @@ export function toServerSpec(
     env: childEnv,
     allowVersionlessDiagnostics: profile.allowVersionlessDiagnostics,
     languageId: profile.definition?.languageId,
+    ...(profile.tcp ? { tcp: profile.tcp } : {}),
   };
 }
 

@@ -143,9 +143,16 @@ describe("language-server registry", () => {
       });
       expect(registry.python.disabled).toBe(false);
       expect(registry.python.settings).toMatchObject({ python: { flag: 1 } });
+      // A command configured for the built-in TCP entry becomes a stdio bridge.
       expect(registry.gdscript).toMatchObject({
         command: "/usr/bin/false",
         fileTypes: [".gd"],
+      });
+      expect(registry.gdscript.transport).toBeUndefined();
+      expect(BUILTIN_SERVERS.gdscript).toMatchObject({
+        transport: "tcp",
+        port: 6005,
+        command: "tcp://127.0.0.1:6005",
       });
       expect(registry.broken).toBeUndefined();
       expect(registry.vue.initializationOptions).toEqual({
@@ -563,11 +570,11 @@ describe("language-server registry", () => {
         join(root, "coffee-lsp.json"),
         JSON.stringify({
           servers: {
-            gdscript: {
+            haxe: {
               command: process.execPath,
               args: [fakeServer],
-              fileTypes: [".gd"],
-              rootMarkers: ["project.godot"],
+              fileTypes: [".hx"],
+              rootMarkers: ["build.hxml"],
             },
           },
         }),
@@ -581,14 +588,20 @@ describe("language-server registry", () => {
         status: "missing",
         install: expect.stringContaining("coffee-lsp install yaml"),
       });
-      expect(listing.find((entry) => entry.id === "gdscript")).toMatchObject({
+      expect(listing.find((entry) => entry.id === "haxe")).toMatchObject({
         status: "available",
         configured: true,
+      });
+      expect(listing.find((entry) => entry.id === "gdscript")).toMatchObject({
+        status: "available",
+        source: "tcp",
+        command: "tcp://127.0.0.1:6005",
+        note: expect.stringContaining("not probed"),
       });
       expect(listing.find((entry) => entry.id === "markdown")?.status).toBe(
         "disabled",
       );
-      const file = join(root, "player.gd");
+      const file = join(root, "Player.hx");
       writeFileSync(file, "");
       const result = await invoke(
         ["servers", "--file", file, "--workspace", root],
@@ -606,7 +619,7 @@ describe("language-server registry", () => {
       expect(items.length).toBe(Object.keys(BUILTIN_SERVERS).length + 1);
       expect(
         items.filter((item) => item.appliesToFile).map((item) => item.id),
-      ).toEqual(["gdscript"]);
+      ).toEqual(["haxe"]);
       const install = await invoke(["install", "nope"], root, env);
       expect(install).toMatchObject({
         code: 2,
