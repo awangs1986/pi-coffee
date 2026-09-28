@@ -14,3 +14,4 @@
 Extraction acceptance is recorded in [Pi #70](http://gitea:3000/awangs/pi-coffee/issues/70), paired with [Server #19](http://gitea:3000/awangs/pi-coffee-server/issues/19). Referenced historical reports remain at their pinned Server revision; they do not certify this package or a new deployment.
 
 - [Standalone native Harness (P4)](spec/harness-native-package.md): package boundary, optional plugins and separate P5 integration.
+- [P4 acceptance evidence](reviews/harness-native-p4-20260928.md): fresh clone, packed native install and mode boundaries.
