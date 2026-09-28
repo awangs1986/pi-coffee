@@ -8,6 +8,8 @@ revision. Build, package and test paths were adapted to this repository root.
 ## Checks
 
 - `npm run check`: 6 test files / 41 Harness tests and 2 package tests passed.
+- A fresh clone of extraction commit `0b12000` passed `npm ci && npm run check`
+  with the same 41 + 2 results.
 - The packed-consumer test installs the tarball as an ordinary npm dependency
   outside the checkout, then installs the package through Pi's native manager.
   It verifies public exports, native discovery, Git execution, Chat/Work switching,
