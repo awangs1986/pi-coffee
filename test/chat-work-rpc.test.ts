@@ -17,6 +17,19 @@ it("removes system instructions across provider payload formats while preserving
   }
 });
 
+it("filters optional schemas across native provider formats without mutating the source", () => {
+  const fixtures = [
+    { tools: [{ type: "function", function: { name: "read" } }, { type: "function", function: { name: "lsp" } }] },
+    { tools: [{ name: "read" }, { name: "lsp" }] },
+    { config: { tools: [{ functionDeclarations: [{ name: "read" }, { name: "lsp" }] }] } },
+  ];
+  for (const payload of fixtures) {
+    const result = JSON.stringify(chatPayload(payload));
+    expect(result).toContain('"read"'); expect(result).not.toContain('"lsp"');
+    expect(JSON.stringify(payload)).toContain('"lsp"');
+  }
+});
+
 describe.skipIf(process.platform !== "linux")("Chat provider format integration", () => {
   it.each(["openai-responses", "anthropic-messages", "google-generative-ai"])("sends no system instructions through real Pi %s serialization", async api => {
     const root = await mkdtemp(join(tmpdir(), "coffee-provider-format-"));

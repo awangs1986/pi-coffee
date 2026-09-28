@@ -42,3 +42,7 @@ replacement and deployment remain a Server integration gate, not completed by
 this package change. LSP's independent package work is a separate deliverable.
 
 [Native migration acceptance](docs/reviews/native-subagents-20260928.md): 139 tests plus package validation, fresh clone, native npm installation and packed consumer passed. No production Host deployment.
+
+## Native Harness package (P4)
+
+[Pi #74](http://gitea:3000/awangs/pi-coffee/issues/74) packages `pi-coffee-harness` independently, with public tool/event discovery and optional-plugin degradation. [SPEC](docs/spec/harness-native-package.md) owns acceptance. P5 is limited to the Server Pi adapter and is not included in this task; Host remains a multi-engine service.
