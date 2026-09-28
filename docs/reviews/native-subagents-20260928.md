@@ -44,7 +44,7 @@ local HTTP fixtures, while the native installation probe contacts npm.
   corrected to the official schema; this was a fixture error.
 - The Work prompt exceeded its existing 9000-byte budget. Delegation guidance was
   shortened without raising the budget. A mode-word scan also rejected the word
-  `full` in a new comment; the comment was clarified.
+  a retired mode term in a new comment; the comment was clarified.
 - The initial standalone consumer probe used CommonJS resolution for Pi's
   import-only export. Switching the probe to `import.meta.resolve` fixed it;
   there was no production package change for this probe error.

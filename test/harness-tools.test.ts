@@ -26,6 +26,13 @@ describe("PI Coffee V5 tool adapters", () => {
     expect(table.missing).toEqual(["git", "search_tools"]);
   });
 
+  it("keeps independently installed recovery tools usable in Work but absent in Chat", () => {
+    const recovery = ["handoff_evidence", "handoff_evidence_search", "handoff_evidence_read", "handoff_reconcile"];
+    const available = [...WORK_TOOLS, ...recovery];
+    expect(resolveToolTable("work", available).active).toEqual([...WORK_TOOLS, ...recovery]);
+    expect(resolveToolTable("chat", available)).toMatchObject({ ready: true, active: ["read", "edit", "write", "bash"] });
+  });
+
   it("keeps native git status/diff observable and leaves snapshots to the VM owner", async () => {
     const calls: Array<{ command: string; args: string[] }> = [];
     const run: NativeCommandRunner = async (command, args) => {

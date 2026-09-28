@@ -207,11 +207,24 @@ describe("Chat/Work session and capability boundaries", () => {
     expect(pi.notifications.at(-1)?.message).toContain("Unknown mode");
     expect(pi.commands.has(oldMode)).toBe(false);
   });
-  it("refuses unavailable modes without silently changing the current mode", async () => {
+  it("enters Chat without the optional Web plugin and keeps zero system instructions", async () => {
     const pi = setup([], false); await pi.emit("session_start", {});
     await pi.runCommand("chat", "");
-    expect(pi.notifications.at(-1)?.message).toContain("missing tools [web_search]");
-    expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
+    expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash"]);
+    expect(await pi.emit("before_agent_start", { systemPrompt: "native instructions" })).toEqual({ systemPrompt: "" });
+  });
+  it("discovers installed native LSP through Pi tools and blocks optional calls in Chat", async () => {
+    const pi = setup([], false);
+    pi.registerTool({ name: "lsp", label: "LSP", description: "Language server operations", parameters: {} as never,
+      execute: async () => ({ content: [], details: {} }) });
+    await pi.emit("session_start", {});
+    expect(pi.getActiveTools()).not.toContain("lsp");
+    const discovery = await pi.runTool("search_tools", { action: "search", query: "lsp" });
+    expect(discovery.details.hits.map((hit: any) => hit.id)).toContain("lsp");
+    expect((await pi.runTool("search_tools", { action: "activate", capability_id: "lsp" })).details.ok).toBe(true);
+    expect(pi.getActiveTools()).toContain("lsp");
+    await pi.runCommand("chat", "");
+    expect(await pi.emit("tool_call", { toolName: "lsp" })).toMatchObject({ block: true });
   });
   it("blocks switching during a turn and restores the selected session branch", async () => {
     const pi = setup(); await pi.emit("session_start", {});

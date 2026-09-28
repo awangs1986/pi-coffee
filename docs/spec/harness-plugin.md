@@ -1,5 +1,7 @@
 > Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
 
+
+**P4 native package update:** [Native Harness contract](harness-native-package.md) governs independent packaging and optional-plugin degradation. Chat works with four built-in tools when Web is absent. Host integration remains a separate P5 task.
 # PI Coffee Harness Pi 插件
 
 产品模式只由 [Pi Agent 主规格](./pi-agent.md) 定义为 Chat/Work。Work 保留 Pi 原生 Base 并追加通用正文；Chat 不发送系统指令。工具数量和按需分配见主规格 PA-003/011，不在此维护第二张模式表。

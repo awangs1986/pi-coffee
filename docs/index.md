@@ -12,3 +12,5 @@
 - [Backlog](../BACKLOG.md): branch-specific work and open scope.
 
 Extraction acceptance is recorded in [Pi #70](http://gitea:3000/awangs/pi-coffee/issues/70), paired with [Server #19](http://gitea:3000/awangs/pi-coffee-server/issues/19). Referenced historical reports remain at their pinned Server revision; they do not certify this package or a new deployment.
+
+- [Standalone native Harness (P4)](spec/harness-native-package.md): package boundary, optional plugins and separate P5 integration.

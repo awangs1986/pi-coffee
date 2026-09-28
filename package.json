@@ -19,7 +19,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.json && node scripts/copy-runtime.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.json && node scripts/copy-runtime.mjs && node scripts/build-harness-package.mjs",
     "test": "vitest run",
     "check": "npm run build && npm test && npm run test:package",
     "smoke:subagents": "npm run build && node scripts/smoke-subagents.mjs",
@@ -28,7 +28,8 @@
     "smoke:lsp-agent": "npm run build && node scripts/smoke-lsp-agent.mjs",
     "smoke:web-access": "npm run build && node scripts/smoke-web-access.mjs",
     "prepare": "npm run build",
-    "test:package": "vitest run --config vitest.package.config.ts"
+    "test:package": "vitest run --config vitest.package.config.ts",
+    "pack:harness": "npm run build && npm pack ./packages/pi-coffee-harness"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.87.1",

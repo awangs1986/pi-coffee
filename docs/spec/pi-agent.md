@@ -1,5 +1,7 @@
 > Repository placement: [ADR-0021](../adr/0021-pi-only-source-authority.md). This package owns Pi behavior; Host/Web integration belongs to the Server consumer. Historical branch evidence is not current-main acceptance.
 
+
+**P4 native package update:** [Native Harness contract](harness-native-package.md) governs independent packaging and optional-plugin degradation. Chat works with four built-in tools when Web is absent. Host integration remains a separate P5 task.
 # Pi Agent 主规格
 
 文档类型：**持续维护的设计规格（Living SPEC）** · 修订：8 · 最近更新：2026-09-27。

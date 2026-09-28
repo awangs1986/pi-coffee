@@ -19,10 +19,11 @@ export function resolveToolTable(mode: HarnessMode, available: Iterable<string>)
   if (mode === "work" && registered.has("recall_folded")) active.push("recall_folded");
   if (mode === "work") {
     // The official loader owns activation of the delegation schema; no Coffee proxy.
-    for (const name of ["subagents_enable", "bg_wait", "subagent_supervisor"]) {
+    for (const name of ["subagents_enable", "bg_wait", "subagent_supervisor",
+      "handoff_evidence", "handoff_evidence_search", "handoff_evidence_read", "handoff_reconcile"]) {
       if (registered.has(name)) active.push(name);
     }
   }
-  const missing = desired.filter(name => !registered.has(name));
+  const missing = desired.filter(name => name !== "web_search" && !registered.has(name));
   return { desired, active, missing, ready: missing.length === 0 };
 }

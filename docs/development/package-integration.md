@@ -41,3 +41,7 @@ See [subagent ownership and consumer migration gate](../spec/subagents-plugin.md
 Do not install a native copy into a Host profile still using the old bundled
 adapter. The Server lifecycle consumer must replace `/coffee-workspace-jobs`
 before deployment; package publication alone is not that deployment.
+
+## Independent Harness package
+
+P4 adds `packages/pi-coffee-harness`, built from the same Harness source with no optional runtimes bundled. See its [installation and public API](../../packages/pi-coffee-harness/README.md) and [SPEC](../spec/harness-native-package.md). The aggregate exports above remain for existing Host consumers until P5. Use one Harness distribution per Pi process.

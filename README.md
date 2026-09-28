@@ -1,5 +1,7 @@
 # PI Coffee
 
+
+For the standalone native Harness plugin, see [pi-coffee-harness](packages/pi-coffee-harness/README.md). It packages Chat/Work, prompts, Git and tool discovery without optional runtimes. The root package remains the existing consumer compatibility distribution.
 Pi-only software development harness for the unmodified Pi coding agent. GitHub [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee) is authoritative; [Gitea](http://gitea:3000/awangs/pi-coffee) mirrors the same main commit.
 
 This repository owns Chat/Work prompts, capability discovery, Git and search integration, native subagent compatibility, context extensions, the LSP CLI and Skills. Browser, Web gateway, Relay, Host and native Pi/Codex/Claude adapters live in [pi-coffee-server](https://github.com/awangs1986/pi-coffee-server).

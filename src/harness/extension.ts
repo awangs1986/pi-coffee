@@ -1,3 +1,4 @@
+import { createLspManifest } from "./optional-tools.js";
 import { chatPayload } from "./chat-payload.js";
 import { registerHarnessMode } from "./runtime-mode.js";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -109,8 +110,8 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
 
   // Mode policy lives in Harness. Native subagent schemas and execution stay upstream.
   pi.on("tool_call", event => {
-    if (mode === "chat" && ["subagents_enable", "subagent", "bg_wait", "subagent_supervisor"].includes(event.toolName)) {
-      return { block: true, reason: "Subagents are unavailable to the model in Chat; select Work." };
+    if (mode === "chat" && !(CHAT_TOOLS as readonly string[]).includes(event.toolName)) {
+      return { block: true, reason: "This tool is unavailable to the model in Chat; select Work." };
     }
   });
 
@@ -140,6 +141,8 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
     });
 
     const registrations = capabilityManifestRegistrations(pi);
+    const lsp = createLspManifest(pi);
+    if (lsp !== undefined) next.register(lsp, "trusted");
     const webSearch = createWebSearchManifest(pi);
     if (webSearch !== undefined) next.register(webSearch, "trusted");
     const webAccess = createWebAccessManifest(pi, conformedCapabilities);

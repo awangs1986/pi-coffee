@@ -1,0 +1,18 @@
+{
+  "name": "pi-coffee-harness",
+  "version": "0.1.0",
+  "description": "Native Pi Chat/Work harness, development prompt, Git and optional tool discovery",
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "harness"],
+  "engines": { "node": ">=22.19.0" },
+  "pi": { "extensions": ["./dist/harness/extension.js"] },
+  "exports": {
+    ".": { "types": "./dist/harness/public.d.ts", "import": "./dist/harness/public.js" },
+    "./package.json": "./package.json"
+  },
+  "dependencies": { "typebox": "1.3.7" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": ">=0.87.1 <0.88.0" },
+  "peerDependenciesMeta": { "@earendil-works/pi-coding-agent": { "optional": true } },
+  "files": ["dist", "README.md"],
+  "repository": { "type": "git", "url": "https://github.com/awangs1986/pi-coffee.git", "directory": "packages/pi-coffee-harness" }
+}
