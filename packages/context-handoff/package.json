@@ -1,0 +1,56 @@
+{
+  "name": "context-handoff",
+  "version": "0.2.0-experimental.1",
+  "private": true,
+  "description": "Context-handoff: Pi plugin for same-conversation context handoff",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/plugin/extension.d.ts",
+      "import": "./dist/src/plugin/extension.js"
+    },
+    "./protocol": {
+      "types": "./dist/src/plugin/protocol.d.ts",
+      "import": "./dist/src/plugin/protocol.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check": "npm run build && npm test",
+    "test:plugin": "vitest run test/pi-plugin.test.ts",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "dependencies": {
+    "typebox": "1.3.7"
+  },
+  "license": "UNLICENSED",
+  "pi": {
+    "extensions": [
+      "./src/plugin/extension.ts"
+    ]
+  },
+  "files": [
+    "src/plugin/",
+    "dist/src/plugin/",
+    "README.md",
+    "SPEC.md",
+    "docs/plugin-acceptance.md",
+    "docs/plugin-design.md",
+    "CHANGELOG.md",
+    "docs/releases.md"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.1"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "origin": "Synthetic reproductions of revision3-live-02; no runtime transcript copied",
+  "exactValue": {
+    "instruction": "Write answer.json. Original record: Résumé-ID: ZX_729/β. The identifier field contains the value only, without its label.",
+    "field": "identifier",
+    "label": "Résumé-ID",
+    "separator": ": ",
+    "quote": "Résumé-ID: ZX_729/β",
+    "expected": "ZX_729/β",
+    "rejected": "Résumé-ID: ZX_729/β"
+  },
+  "procedure": {
+    "instruction": "After this Handoff, search handoff_evidence for ZX_729, then read the original anchor before writing answer.json. A search before this Handoff does not complete the required post-Handoff search.",
+    "step": "Search handoff_evidence for ZX_729",
+    "phase": "after_handoff",
+    "expectedStatus": "pending"
+  }
+}
