@@ -1,4 +1,4 @@
-import { registerPolicy, ConfigError } from "./config.js";
+import { registerPolicy } from "./config.js";
 import { HANDOFF_REQUEST, HANDOFF_VERSION } from "./protocol.js";
 import {
   load,
@@ -26,12 +26,7 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-/**
- * A transient condition (settling work, arriving input) or an owner decision
- * (cancellation, invalid configuration). The compaction is cancelled and the
- * next boundary retries. Every other preparation failure falls back to one
- * native summary compaction with a visible warning.
- */
+/** Preparation must be cancelled; the caller decides whether and when to retry. */
 class Deferral extends Error {}
 
 export default function handoff(pi: ExtensionAPI) {
@@ -44,12 +39,11 @@ export default function handoff(pi: ExtensionAPI) {
       if (args.trim() === "version") { ctx.ui.notify(`Context-handoff ${HANDOFF_VERSION}`, "info"); return; }
       if (args.trim()) { ctx.ui.notify("Usage: /handoff [version]", "error"); return; }
       if (!ctx.isIdle()) { ctx.ui.notify("Wait for active work to settle before Handoff.", "warning"); return; }
-      if (!await ctx.ui.confirm("交接压缩（实验性功能）", "交接压缩不保证避免上下文漂移，适合在多次系统自动压缩后重新聚焦当前项目。自动压缩仍使用 Pi 原生机制。是否继续？")) return;
+      if (!await ctx.ui.confirm("交接压缩（实验性功能）", "交接压缩将重建当前任务上下文，不保证避免上下文漂移。同一会话、原始历史和项目文件保留。是否继续？")) return;
       ctx.compact({ customInstructions: HANDOFF_REQUEST });
     },
   });
   let inputEpoch = 0;
-  let pendingContinuation: { epoch: number; nextAction: string } | undefined;
   let recoveryBlocked = false;
   let unsafePersistence = false;
   let currentContext: ExtensionContext | undefined;
@@ -112,40 +106,6 @@ export default function handoff(pi: ExtensionAPI) {
             "Continuation outcome uncertain after interruption. Inspect results before continuing; no action replayed.",
           );
       }
-    } catch (error) {
-      recoveryBlocked = true;
-      report(error);
-    }
-  });
-  pi.on("agent_before_settle", (event, ctx) => {
-    const pending = pendingContinuation;
-    pendingContinuation = undefined;
-    if (
-      !pending ||
-      pending.epoch !== inputEpoch ||
-      recoveryBlocked ||
-      ctx.signal?.aborted ||
-      ctx.hasPendingMessages()
-    )
-      return;
-    return {
-      continue: true,
-      entries: [
-        {
-          type: "custom_message",
-          customType: "pi-handoff-continue",
-          content: `Continue the existing authorized task: ${pending.nextAction}`,
-          display: false,
-        },
-      ],
-    };
-  });
-  pi.on("agent_settled", (_event, ctx) => {
-    pendingContinuation = undefined;
-    try {
-      const journal = load(ctx);
-      if (journal?.continuation === "claimed")
-        save(ctx, { ...journal, continuation: "settled" });
     } catch (error) {
       recoveryBlocked = true;
       report(error);
@@ -216,20 +176,13 @@ export default function handoff(pi: ExtensionAPI) {
   });
   pi.on("session_before_compact", async (event, ctx) => {
     const explicit = event.reason === "manual" && event.customInstructions === HANDOFF_REQUEST;
-    try { if (!explicit && policy.trigger() === "manual") return; }
-    catch (error) { report(error); return { cancel: true }; }
+    // Invocation policy belongs to the caller (Host); native boundaries stay Pi-owned.
+    if (!explicit) return;
     if (recoveryBlocked) {
       report("Repair Handoff state before compacting");
       return { cancel: true };
     }
-    let count = 0;
-    for (const e of ctx.sessionManager.getBranch())
-      if (e.type === "compaction") {
-        if ((e.details as any)?.plugin === "pi-handoff") count = 0;
-        else if (!e.fromHook) count++;
-      }
     try {
-      if (!explicit && count < policy.nativeLimit()) return;
       assertSettled(ctx.sessionManager.getBranch());
       const epoch = inputEpoch,
         leaf = ctx.sessionManager.getLeafId(),
@@ -385,11 +338,10 @@ export default function handoff(pi: ExtensionAPI) {
           details: {
             plugin: "pi-handoff",
             pluginVersion: HANDOFF_VERSION,
-            trigger: explicit ? "manual" : "cadence",
+            trigger: "manual",
             version: 1,
             state,
             generation: { ...generation, usage: response.usage },
-            nativeLimit: policy.nativeLimit(),
             evidenceRecord: {
               historyHash: history,
               sources: originals.map(({ id, role, hash, timestamp }) => ({
@@ -401,15 +353,8 @@ export default function handoff(pi: ExtensionAPI) {
         },
       };
     } catch (error) {
-      if (explicit || event.signal.aborted || recoveryBlocked || error instanceof Deferral || error instanceof ConfigError) {
-        report(error);
-        return { cancel: true };
-      }
-      // Owner policy (2026-09-26): a few native summaries are acceptable, a
-      // stalled conversation is not. Use one native compaction now and retry
-      // Handoff at the next boundary. The failure stays visible.
-      report(`${String(error).slice(0, 400)}. Used one native compaction instead; Handoff will retry at the next boundary.`, "Handoff failed");
-      return;
+      report(error);
+      return { cancel: true };
     }
   });
   pi.on("session_compact_failed", (event, ctx) => {
@@ -433,23 +378,11 @@ export default function handoff(pi: ExtensionAPI) {
       )
         throw new Error("Uncertain Handoff commit");
       confirmCommit(ctx, journal.summaryHash);
-      const active = d.state.status === "active" && event.reason !== "manual";
       save(ctx, {
         ...journal,
         phase: "installed",
-        continuation: active ? "claimed" : "none",
+        continuation: "none",
       });
-      if (
-        active &&
-        !event.willRetry &&
-        !ctx.hasPendingMessages() &&
-        !ctx.signal?.aborted
-      )
-        pendingContinuation = {
-          epoch: inputEpoch,
-          nextAction: d.state.nextAction,
-        };
-      if (!active && event.willRetry) ctx.abort();
       if (d.state.status === "uncertain")
         report(
           "Task state is unresolved. Inspect the attributed uncertainty before continuing.",

@@ -1,5 +1,47 @@
 # Context-handoff
 
+## Revision 7 — Host-owned invocation (2026-09-29)
+
+Owner-approved. Canonical source is `pi-coffee/packages/context-handoff`; the
+package has an independent version and release artifact. Host, Web and adapter
+implementation remain in pi-coffee-server. This revision supersedes **all**
+plugin-owned cadence, automatic continuation and native-fallback requirements in
+revisions 2–6, including the historical `cadence` opt-in.
+
+- Host decides whether to install/enable the plugin and when to request Handoff.
+  The plugin never counts native compactions or selects a compaction boundary.
+  Remove `handoff-trigger` and `handoff-native-limit`; no compatibility cadence mode.
+- Only a manual Pi compact request with the exact exported `HANDOFF_REQUEST`
+  marker invokes Handoff. Keep `context-handoff:manual:v1` for existing Host
+  compatibility; “manual” identifies the explicit RPC path, not a scheduling rule.
+  `/handoff` remains a confirmed explicit caller in native Pi.
+- Threshold, overflow and unmarked manual compactions always use native Pi,
+  regardless of earlier Handoffs, compaction counts, restarts or model changes.
+- Preserve the same session, workspace, attachments, original history, attributed
+  Task State, evidence recovery and structured evidence-order protections.
+- Preparation failure, timeout, cancellation or unsettled work rejects the
+  request visibly, with no replacement committed. Host decides retry/fallback.
+  Persistence failure after installation reports uncertain settlement and blocks
+  unsafe work until recovery; it cannot promise an uncommitted context.
+- Success installs the context and verifies its durable commit. The plugin does
+  not enqueue continuation or restart any work. Host owns later prompts, any
+  resumption policy, busy-state handling, cancellation and disconnect recovery.
+- Budget flags remain local execution configuration; synthesis uses the selected
+  Pi model and thinking strength. No semantic fidelity improvement is implied.
+
+Public contract and migration: [Host integration](docs/host-integration.md).
+Accept through native Pi RPC, installed-package behavior and actual provider
+requests using synthetic fixtures. Cover zero/multiple prior native compactions,
+ordinary threshold/overflow recovery, explicit success/failure, same-session
+identity, no autonomous continuation, evidence ordering, cancellation and restart.
+Historical live evaluators that assume cadence are incompatible and fail before
+making model calls; a future evaluator must own its schedule in the driver.
+
+## Historical specifications
+
+Earlier revisions below preserve decisions and evidence for their original
+versions. Revision 7 governs current invocation, failure and continuation policy.
+
 ## Revision 6 — Manual experimental Handoff (2026-09-29)
 
 Owner-approved; supersedes automatic cadence and fallback requirements below for
