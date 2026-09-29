@@ -1,3 +1,4 @@
+import './legacy-cadence-evaluation.mjs';
 // Give both arms the same fifth user prompt after scoring no-prompt continuation.
 // This measures what the retained context can recover when explicitly resumed.
 import { RpcClient } from '@earendil-works/pi-coding-agent';

@@ -1,5 +1,54 @@
 # Context-handoff acceptance
 
+## SPEC revision 7 — Host-owned invocation
+
+Date: 2026-09-29. Working version `0.2.0-experimental.3`, based on synchronized
+GitHub/Gitea main `296dcb29775d6cb80222963f5c6eeb73a7e43e06` in pi-coffee.
+Source: `packages/context-handoff`. This is local implementation acceptance,
+not a published package, deployed Host or new live-model fidelity result.
+
+**Package result:** `npm run check` passes TypeScript build and **85 tests in
+8 files** (55 Pi conversation/CLI/package cases, 4 legacy-runner compatibility
+checks, 22 fixture/scoring/provider cases, 4 historical imported packet cases).
+The 4 imported packet tests remain historical and are not current plugin evidence.
+Environment: Node 22.23.2, pinned Pi 0.87.1, Linux, ordinary-user permissions.
+
+**Repository result:** root `npm run check` passes Harness (49 + 2 package tests),
+LSP (81 + 1 package test), Handoff (85), and both combined artifact/installation
+checks: 220 checks total. `git diff --check` also passes. Installed artifacts were
+verified in a temporary consumer outside the monorepo; no release was published.
+
+| Claim | Public acceptance evidence |
+| --- | --- |
+| No plugin schedule | CLI exposes synthesis budgets and no trigger/count flags; native threshold and overflow remain native after earlier compactions |
+| Host chooses each invocation | Explicit requests succeed with zero, one or multiple native compactions; repeated requests never require a count |
+| Same conversation | Session ID/file, user history, instructions, images and workspace survive; actual later provider requests use installed Task State |
+| No hidden continuation | Explicit success ends at synthesis/commit; subsequent model work requires a caller prompt; restart does not replay actions |
+| Visible failure | Invalid synthesis, forged attribution, deadline, changed workspace/history and unwritable preparation reject with no extra native compaction |
+| Cancellation and concurrency | Abort prevents installation; queued corrections are retained exactly once; delegated work must report settlement |
+| Recovery | Native append failures block unsafe work; committed checkpoints, branch forks, corrupt journals and torn trailing lines retain their conservative recovery behavior |
+| Evidence fidelity safeguards | Exact values, original search/read, paged recovery, structured order, latest corrections and protected answer writes remain covered |
+| Installable package | Source and packed installs use native Pi discovery; packed artifact includes the Host integration contract and protocol |
+| Honest evaluation boundary | Four historical cadence runners stop before model calls; fixture scorers remain available |
+
+**Red → green evidence:** the new CLI test first failed because `--handoff-trigger`
+was still exposed; the four evaluator tests first failed because old entry points
+continued into their obsolete setup; the artifact test first failed because the
+new Host contract was absent from the tarball. Each passes after its corresponding
+implementation/manifest change.
+
+**Migration failures resolved:** the first broad run had 79 passes and two failures.
+One fixture compacted twice without new history, which Pi rejects; it now records
+an intervening turn. Another still used the autonomous-continuation metric after a
+new caller prompt. Current acceptance allows unrelated reads after that prompt but
+requires both fresh searches and verified original reads before the protected
+answer write. The scorer itself and its historical metrics were not changed.
+
+New tests use real Pi RPC processes with loopback scripted providers and isolated
+session stores. They establish orchestration and attribution behavior, not improved
+model understanding. Host dependency upgrades, production rollout and a new
+Host-scheduled A/B/C/D evaluator require their own work and acceptance.
+
 ## Historical SPEC revision 2 acceptance
 
 Date: 2026-09-24. Scope: PH-01–PH-08 (Gitea child issues #2–#9).
@@ -426,3 +475,14 @@ Robustness follow-up (same day):
 | Streaming commit confirmation | After a committed Handoff, a 9 MiB malformed line and a torn trailing line are appended; reopening confirms the commit without an error and accepts the next prompt. The previous implementation blocked recovery here. |
 | Incremental order guard | After search, verified read and write, an extension command navigates back to the Handoff entry; the next write to the protected path is blocked again. A mutation that kept stale state on branch change failed this case. |
 | Exact search | A differently cased query returns no user match and the exact-and-case-sensitive hint; the exact query matches, and a preview beginning next to an emoji does not start with a lone surrogate. |
+
+
+### PR review correction: historical evaluator entrypoints
+
+The review found four additional cadence-dependent runners: `evaluate-confiqa`,
+`evaluate-conflictqa`, `evaluate-followup` and `evaluate-conflictqa-followup`.
+They still supplied removed flags and had not received the explicit incompatibility
+guard. All eight historical runners now fail with migration guidance before setup.
+At the CLI seam, the expanded test first reported four failures and four passes;
+adding the shared guard made all eight pass. No provider credentials or live model
+calls were used. The existing scoring implementations remain unchanged.

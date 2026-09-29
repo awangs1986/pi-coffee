@@ -1,3 +1,4 @@
+import './legacy-cadence-evaluation.mjs';
 // Explicitly opt-in real-provider evaluation; never invoked by npm test/check.
 // Credentials are accepted only through the environment; artifacts must be outside the repository.
 import { RpcClient } from '@earendil-works/pi-coding-agent';

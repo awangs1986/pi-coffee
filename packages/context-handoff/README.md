@@ -1,8 +1,8 @@
-> Canonical source: [pi-coffee/packages/context-handoff](https://github.com/awangs1986/pi-coffee/tree/main/packages/context-handoff). Version `0.2.0-experimental.2`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/context-handoff](https://github.com/awangs1986/pi-coffee/tree/main/packages/context-handoff). Version `0.2.0-experimental.3`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # Context-handoff
 
-Version **0.2.0-experimental.2** · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
+Version **0.2.0-experimental.3** (unreleased) · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
 
 An experimental Pi plugin for explicit, same-conversation context Handoff.
 Automatic threshold/overflow compaction and ordinary `/compact` use native Pi.
@@ -23,7 +23,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/context-handoff
 ```
 
-For installation from the built `context-handoff/v0.2.0-experimental.2` release artifact, follow the
+When this working version is released as `context-handoff/v0.2.0-experimental.3`, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
@@ -35,7 +35,7 @@ this package does not deploy a Coffee Host.
 
 ## Behavior and limits
 
-- Default `manual` policy only intercepts explicitly marked Handoff requests.
+- Host owns enablement and invocation. The plugin only intercepts explicitly marked Handoff requests.
   Automatic compaction remains native Pi, even after many prior compactions.
 - Original user constraints/corrections are retained as source inputs. A small model state cites source IDs; the program binds hashes, timestamps, authority labels and supersession links. Original history and recorded project observations remain recoverable.
 - Exact-value records separate labels from values and retain quoted originals. Ordered steps preserve pending/completed/uncertain status, required timing and completion evidence. These checks do not prove complete semantic coverage.
@@ -58,7 +58,7 @@ this package does not deploy a Coffee Host.
 
 ## Project documents
 
-- [Specification](SPEC.md): authoritative revision 6.
+- [Specification](SPEC.md): authoritative revision 7.
 - [Implementation and budgets](docs/plugin-design.md).
 - [Acceptance and TDD evidence](docs/plugin-acceptance.md).
 - [Domain vocabulary](CONTEXT.md).
@@ -81,40 +81,38 @@ Coffee references. The new package entry does not import them; their passing tes
 are not new-plugin acceptance. [Historical status](docs/implementation-status.md)
 and [provenance](provenance.json) remain available.
 
+## Host integration
+
+Host chooses whether to load this independent package and when to send its public
+`HANDOFF_REQUEST` through Pi RPC. The plugin has no compression counter, automatic
+trigger, retry schedule or continuation queue. See [the integration contract](docs/host-integration.md)
+for success validation, failure handling and migration. Existing Host callers keep
+the same protocol; consuming the new artifact requires a separate Host upgrade.
+
 ## Configuration
 
 ```sh
-pi --handoff-trigger manual --handoff-output-tokens 16384 --handoff-timeout-ms 120000
+pi --handoff-output-tokens 16384 --handoff-timeout-ms 120000
 ```
 
-The following cadence settings only apply with explicit `--handoff-trigger cadence`
-for historical research, never in the default manual policy. Cadence counts committed successes on the active branch; three is a default policy,
-not an experimentally established optimum. Set `--handoff-native-limit 0` to use
-Handoff at the first and every later compaction boundary; the default remains 3.
-Numeric flags are validated. Generation
+Only synthesis budget flags are supported. Generation
 inherits Pi's current thinking strength, including `high`. Without budget flags,
 reasoning uses up to 16,384 output tokens / 120 seconds and thinking-off uses
 4,096 / 60 seconds. Model/context limits can reduce the output cap. A higher cap
 allows reasoning room; it does not enlarge the concise installed task state.
-Failed explicit manual generation reports the specific reason and cancels. Only
-the historical cadence policy uses one native fallback. There is no full-generation retry. A parsed but invalid state may receive one
+Failed generation reports the specific reason and cancels. The caller decides whether
+to retry or request native compaction. There is no full-generation retry. A parsed but invalid state may receive one
 restricted field patch within the same deadline, followed by complete validation.
 See [repair and ordering limits](docs/plugin-design.md#bounded-state-repair-and-durable-evidence-ordering).
 
-Optional real-model acceptance from a source checkout (never run by `npm test`): set
-`PI_HANDOFF_EVAL_API_KEY`, `PI_HANDOFF_EVAL_BASE_URL`, and
-`PI_HANDOFF_EVAL_MODEL` in the environment, then run
-`node scripts/evaluate-live.mjs /absolute/artifacts/outside/the/repository`.
-This makes paid requests, uses synthetic files and records raw synthetic requests
-outside Git. The script forwards requests unchanged and requires automatic
-compaction, autonomous continuation, exact task results and original recovery.
+## Historical evaluations
 
-For a paired comparison, run `scripts/evaluate-paired.mjs` for every scenario,
-repetition and arm listed in `test/fixtures/paired-evaluation.json`; then use
-`scripts/evaluate-followup.mjs` on each run directory for the common prompted
-continuation. `scripts/rescore-paired.mjs` and `scripts/aggregate-paired.mjs`
-produce one consistent metric summary from all saved runs. These scripts also
-require the same environment credentials and an artifact directory outside Git.
-`node scripts/run-paired.mjs /absolute/new/artifact/directory` runs the whole
-predeclared cohort in order, keeps failures and raw traces, and writes the
-aggregate. A new directory is required to prevent overwriting prior evidence.
+The recorded question banks, transcripts' synthetic fixtures, scorers and reports
+remain available. `evaluate-live.mjs`, `evaluate-paired.mjs`, `evaluate-drift.mjs`
+and `evaluate-abcd.mjs` assume the retired plugin-owned cadence and now stop before
+creating provider requests. Batch wrappers cannot produce a current-contract comparison with these runners. Reproduce
+old experiments from the exact revision recorded in the corresponding report.
+
+A new comparison must put the A/B/C/D schedule in its driver, issue explicit
+Handoff requests and validate committed outcomes; it must not reintroduce cadence
+inside this plugin. No new live evaluation was performed for revision 7.

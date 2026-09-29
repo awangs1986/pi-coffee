@@ -1,3 +1,4 @@
+import './legacy-cadence-evaluation.mjs';
 // Opt-in, paid Pi conversation evaluation. Artifacts must live outside Git.
 import { RpcClient } from '@earendil-works/pi-coding-agent';
 import { createServer } from 'node:http';

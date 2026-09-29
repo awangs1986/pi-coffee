@@ -1,3 +1,4 @@
+import './legacy-cadence-evaluation.mjs';
 // Opt-in, paid fifth-turn diagnostic. Copy each saved Pi session before resuming it.
 import { RpcClient } from '@earendil-works/pi-coding-agent';
 import { createServer } from 'node:http';

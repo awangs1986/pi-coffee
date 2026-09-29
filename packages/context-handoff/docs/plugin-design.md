@@ -1,30 +1,30 @@
 # Context-handoff implementation
 
-Implements SPEC revision 4 as a new Pi package. Revision 4 changes are summarized in
-[Revision 4 changes](#revision-4-changes-2026-09-26); where older paragraphs below
-disagree, that section governs. The Coffee import remains unchanged
-and is not linked by the package entry. Supported and tested runtime: Pi 0.87.1,
-Node 22.23.2, Linux, persistent local session storage outside the workspace.
+Implements [SPEC revision 7](../SPEC.md). Source and independent package releases
+live in `pi-coffee/packages/context-handoff`; Host owns enablement and timing.
+The Coffee import remains historical and is not linked by the package entry.
+Supported runtime: Pi 0.87.1, Node >=22.19.0, Linux, persistent local session
+storage outside the workspace.
 
 ## Public integration
 
-`session_before_compact` reads successful native compactions from the active
-branch. The configured count (default three) is allowed; the next preparation is replaced by an attributed
-Handoff summary. Failed attempts have no committed native entry and do not count.
-A plugin compaction starts a new cycle. Existing native history is counted, rather
-than guessing a process-local counter. Pi owns its pairing-safe cut point, session
-identity, original history, system instructions, tool schemas and selected model.
-No Pi core patch or Coffee Host is involved.
+See [Host integration](host-integration.md) for the exported protocol and lifecycle.
+`session_before_compact` returns immediately unless Pi reports a manual request
+with the exact `HANDOFF_REQUEST` marker. Ordinary manual, threshold and overflow
+compactions stay Pi-owned. There is no count, cadence setting or automatic retry.
+Pi owns its pairing-safe cut point, session identity, original history, system
+instructions, tool schemas and selected model.
 
 Synthesis uses `ctx.modelRegistry.streamSimple()` with the selected provider,
-including its request-time authentication and Pi thinking level via the provider-neutral `reasoning` option. Budget settings are captured for each attempt; a thinking-level change during generation invalidates the result. It is separate from native synthesis.
-Manual compaction aborts the active run in Pi; this plugin does not restart that
-manually stopped run. Threshold Handoff prepares one continuation at
-`agent_before_settle`, using a hidden custom-message draft and `continue: true`.
-It does **not** leave a follow-up queued after cancellation. Overflow uses Pi's
-existing retry, with no second continuation. Completed/stopped/uncertain states
-suppress automatic retry. The ordinary Pi compaction indicator may still appear;
-there is no new conversation or user handoff ceremony.
+request-time authentication and Pi thinking level via the provider-neutral
+`reasoning` option. Budgets are captured per attempt; a thinking-level change
+invalidates the result. This is separate from native synthesis.
+
+Explicit Pi compaction can abort an active run. Host should settle work first and
+own any later authorized prompt. The plugin commits attributed context in the same
+session and verifies persistence; it does not enqueue or perform continuation.
+Failed preparation cancels visibly without native fallback. A native commit or
+journal failure can leave settlement uncertain and requires recovery.
 
 ## Attributed Task State and original sources
 
@@ -33,7 +33,7 @@ corrections and later paragraphs. Current bounded project observations are also
 mandatory. Optional assistant/tool observations are ranked by exact identifiers
 and recency to fit the remaining budget. Source coverage and omissions are
 explicit. Synthesis cannot claim omitted observations were verified. Critical
-unresolved conflicts must produce `uncertain`, which stops automatic continuation.
+unresolved conflicts must produce `uncertain`, which is reported to the caller.
 There is no recursive summary ladder and no continuously maintained notes.
 
 The model returns at most 12 claims of 512 characters each, using source IDs instead of reproducing quotations and metadata. The program binds source IDs to original hashes and observation timestamps. Legacy quoted evidence is still accepted and checked literally. Validation checks source existence, claim kinds and replacement targets. Tool/assistant evidence alone cannot become an objective, owner constraint,
@@ -116,21 +116,19 @@ through this interface; such hosts need an adapter before claiming seamless
 settlement. No delegation subsystem is included.
 
 Queued new input invalidates preparation and remains in Pi's queue exactly once.
-Cancellation is checked throughout synthesis and before commit. A new user message
-also invalidates a pending continuation. Routine success requires no attention;
-failures produce a bounded visible status and, per revision 4, one native summary for that boundary.
+Cancellation is checked throughout synthesis and before commit. Failures produce
+a bounded visible status and cancel the request. Host owns further decisions.
 
 ## Persistence and recovery
 
 The native compaction entry is the canonical installed context. A sibling
 `<session-file>.handoff.json` records a checksummed preparation/installation phase,
-summary identity and continuation ownership. It contains bounded metadata, not a
+summary identity and legacy continuation status. It contains bounded metadata, not a
 second transcript. Journal writes use a private temporary file, file fsync, rename
-and directory fsync. Before continuation, the native entry is read back and synced.
+and directory fsync. Before reporting installed context, the native entry is read back and synced.
 
-A normal restart restores the native branch count. An explicit Pi fork inherits
-its committed checkpoint with fresh continuation ownership; unrelated branches do
-not share source scope. A crash after installation with uncertain continuation
+An explicit Pi fork inherits its committed checkpoint; unrelated branches do
+not share source scope. A legacy journal with uncertain continuation
 shows recovery status and does not replay work. Corrupt/missing required journal
 state blocks new input until repaired and reloaded. Storage failure during native
 append blocks execution and reports through Pi UI notifications, avoiding additional
@@ -169,7 +167,7 @@ owner authority nor verification of a later workspace revision.
 The model's 12-claim budget makes omission possible; complete original owner input
 remains in synthesis and original recovery stays available. Hash/reference checks
 cannot prove coverage or semantic correctness. Fidelity must be checked against
-independent expected outcomes after automatic continuation.
+independent expected outcomes after continuation (historical cadence experiment).
 
 
 ## Exact values and ordered procedures
@@ -227,7 +225,7 @@ recovery remains completed after restart, avoiding mandatory duplicate reads.
 
 The guard recognizes consecutive pending `Search handoff_evidence for MARKER`
 steps followed by an original-anchor read, all attributed to original user input.
-During automatic continuation, those obligations precede other tools. Once new
+For legacy context without a new user prompt, those obligations precede other tools. Once new
 user input arrives, unrelated work is allowed and recognized `Write <path>`
 deliverables remain protected for `write` and `edit` calls. This is not enforcement
 for arbitrary prose, shell writes, alternate path spellings or all possible tools.
@@ -253,15 +251,10 @@ per tool call; large-history latency has not been benchmarked in this follow-up.
 
 ## Revision 4 changes (2026-09-26)
 
-**Failure classes.** `session_before_compact` distinguishes a *deferral* from a
-*fallback*. Deferrals cancel the compaction and retry Handoff at a later boundary:
-cancellation, `ConfigError` (invalid flags), blocked recovery, unsettled running
-tools or reported delegated work, and new input before or during preparation. Every
-other preparation error returns no replacement, so Pi performs one native summary.
-The visible notice reads `Handoff failed: <reason>. Used one native compaction
-instead; Handoff will retry at the next boundary.` A repair failure reports both
-the first validation error and the repair error. Native entry persistence failure
-still blocks execution.
+**Historical failure policy (superseded by revision 7).** Revision 4 fell back to
+one native summary for most preparation failures. Current explicit requests cancel
+on every preparation failure; retry/fallback is a caller decision. The project,
+excerpting and structured-step changes below remain in use.
 
 **Project snapshot** (`project.ts`). `projectSnapshot(cwd, hints)` never throws for
 size. Inline selection: paths mentioned in original conversation text (most recent
