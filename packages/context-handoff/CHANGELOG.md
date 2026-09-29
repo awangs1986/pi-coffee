@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0-experimental.2 — 2026-09-29
+
+- Move canonical source to `awangs1986/pi-coffee/packages/context-handoff` and the identical Gitea mirror. Preserve independent package identity, runtime behavior and prior history.
+- Install built release artifacts from the monorepo; this version changes packaging and source location only.
+
 ## 0.2.0-experimental.1 — 2026-09-29
 
 - Default to explicit manual Handoff; native Pi owns automatic compaction.

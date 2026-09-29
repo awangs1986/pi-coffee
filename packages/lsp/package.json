@@ -1,6 +1,6 @@
 {
   "name": "pi-coffee-lsp",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Pi package: language-server tool, automatic diagnostics after edits, read-only coffee-lsp CLI and Skill (adapted from oh-my-pi)",
   "type": "module",
   "keywords": [
@@ -62,7 +62,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/awangs1986/pi-coffee-lsp.git"
+    "url": "https://github.com/awangs1986/pi-coffee.git",
+    "directory": "packages/lsp"
   },
   "files": [
     "dist",

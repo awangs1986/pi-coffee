@@ -1,6 +1,8 @@
+> Canonical source: [pi-coffee/packages/context-handoff](https://github.com/awangs1986/pi-coffee/tree/main/packages/context-handoff). Version `0.2.0-experimental.2`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+
 # Context-handoff
 
-Version **0.2.0-experimental.1** · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
+Version **0.2.0-experimental.2** · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
 
 An experimental Pi plugin for explicit, same-conversation context Handoff.
 Automatic threshold/overflow compaction and ordinary `/compact` use native Pi.
@@ -10,25 +12,26 @@ workspace remain intact; this does not establish freedom from semantic drift.
 
 ## Install
 
-Supported runtime: **Pi 0.87.1**, Node **>=22.19.0**, Linux with persistent local
-session storage outside the workspace. From a trusted local source checkout:
+Requires Node >=22.19.0 and Pi 0.87.1. From a pinned checkout of
+[pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
+its directory with Pi:
 
 ```sh
-pi install /absolute/path/to/Context-handoff
-```
-
-Pi loads the package's TypeScript extension directly. It is a plugin, with no Skill
-or Coffee Host prerequisite. Installing exposes manual Handoff in sessions that load the package; it does not enable automatic Handoff.
-This repository task does not activate it in the owner's production installation.
-
-For a standalone artifact, build and pack, extract the tarball into a permanent
-local directory, then install the extracted `package` directory with `pi install`:
-
-```sh
-npm ci --ignore-scripts
+cd packages/context-handoff
+npm ci
 npm run check
-npm pack
+pi install /absolute/path/to/pi-coffee/packages/context-handoff
 ```
+
+For installation from the built `context-handoff/v0.2.0-experimental.2` release artifact, follow the
+[shared install and release guide](../../../docs/releases/README.md). Install the
+verified tarball with npm into a permanent plugin directory, then use `pi install`
+on that installed package directory. Public npm-registry publication is separate.
+Keep exactly one registered copy; remove the previous registration before switching.
+
+Installing exposes manual Handoff; automatic compaction remains native Pi.
+Persistent session storage stays outside the workspace. Installing or publishing
+this package does not deploy a Coffee Host.
 
 ## Behavior and limits
 

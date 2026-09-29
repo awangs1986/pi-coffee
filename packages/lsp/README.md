@@ -1,6 +1,8 @@
+> Canonical source: [pi-coffee/packages/lsp](https://github.com/awangs1986/pi-coffee/tree/main/packages/lsp). Version `0.4.2`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+
 # pi-coffee-lsp
 
-Version **0.4.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.4.2** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/lsp version` in Pi, or `coffee-lsp --version` in a terminal.
 
 Language-server intelligence for [Pi](https://github.com/earendil-works/pi-mono)
@@ -20,41 +22,27 @@ subagent, context-management or OMP Agent/TUI framework is included.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.87.1.
+Requires Node >=22.19.0 and Pi 0.87.1. From a pinned checkout of
+[pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
+its directory with Pi:
 
-```bash
-pi install npm:pi-coffee-lsp          # personal install (~/.pi/agent/settings.json)
-pi install npm:pi-coffee-lsp --local  # project install (.pi/settings.json)
-pi -e npm:pi-coffee-lsp               # try it for one session without installing
+```sh
+cd packages/lsp
+npm ci
+npm run check
+pi install /absolute/path/to/pi-coffee/packages/lsp
 ```
 
-Pi installs the package into its own npm root, loads
-`dist/src/extension/index.js` and `dist/skills/lsp` from the `pi` manifest, and
-keeps the bundled `typescript-language-server` / `pyright` inside that root. Pi
-itself and `typebox` are `peerDependencies`, as the Pi package specification
-requires; they are never copied into the package. Use `pi update` to upgrade and
-`pi remove npm:pi-coffee-lsp` to uninstall.
+For installation from the built `lsp/v0.4.2` release artifact, follow the
+[shared install and release guide](../../../docs/releases/README.md). Install the
+verified tarball with npm into a permanent plugin directory, then use `pi install`
+on that installed package directory. Public npm-registry publication is separate.
+Keep exactly one registered copy; remove the previous registration before switching.
 
-From a checkout (for development):
-
-```bash
-npm ci && npm run build
-pi install /absolute/path/to/pi-coffee-lsp
-```
-
-`pi install git:github.com/awangs1986/pi-coffee-lsp` clones the repository and
-runs `npm install --omit=dev`, which cannot build TypeScript; the install
-succeeds with a notice but nothing loads until `dist/` exists. Prefer the npm
-package, or run `npm install && npm run build` inside the cloned directory.
-
-Load the extension once: Pi rejects a second copy (`Tool "lsp" conflicts`), so
-do not combine `pi install` with `pi -e ./dist/src/extension/index.js` or with
-the older all-in-one pi-coffee package.
-
-Inside a Pi session the extension puts the package's `coffee-lsp` launcher on
-the Bash `PATH` and exports `PI_COFFEE_ROOT_SESSION`, so Skill-driven Bash
-calls share the session's language servers. Outside Pi, a plain
-`npm install --global pi-coffee-lsp` provides the executable.
+Pi loads the extension and Skill declared in the package manifest. Its bundled
+TypeScript and Python servers stay with the package. Inside Pi, the extension adds
+`coffee-lsp` to Bash PATH so Skill calls share the session daemon. For shell use
+outside Pi, use the installed plugin directory's `node_modules/.bin/coffee-lsp`.
 
 ## Inside Pi
 

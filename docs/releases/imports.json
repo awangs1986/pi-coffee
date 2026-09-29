@@ -1,0 +1,6 @@
+{
+  "aggregate": {"commit":"a1c4e4acc88ffd774a09598f1cbd67337ab9522e","path":"compatibility/aggregate","status":"frozen compatibility"},
+  "harness": {"repository":"https://github.com/awangs1986/pi-coffee-harness","commit":"d068251dc1b4de59c4178eb04e0d4a0fcc117187","path":"packages/harness"},
+  "lsp": {"repository":"https://github.com/awangs1986/pi-coffee-lsp","commit":"77f0a1942d08645569eace6fa765cb0bde7ae987","path":"packages/lsp"},
+  "context-handoff": {"repository":"https://github.com/awangs1986/pi-context-handoff","commit":"ce7a6d07b215473da3b2703d9c2a6b83dbb5e162","path":"packages/context-handoff"}
+}
