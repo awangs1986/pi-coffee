@@ -27,7 +27,7 @@ test('release artifacts install together outside the monorepo and report indepen
   assert.equal(release.plugins.length,3);
   for(const item of release.plugins){assert.equal(item.integrity,'sha512-'+createHash('sha512').update(await readFile(join(root,'artifacts',item.file))).digest('base64'));}
   await writeFile(join(root,'package.json'),JSON.stringify({name:'synthetic-plugin-consumer',private:true,type:'module'}));
-  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund','@earendil-works/pi-coding-agent@0.87.1','typebox@1.3.7',...release.plugins.map(p=>join(root,'artifacts',p.file))],{cwd:root,stdio:'pipe'});
+  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund','@earendil-works/pi-coding-agent@0.99.1','typebox@1.3.27',...release.plugins.map(p=>join(root,'artifacts',p.file))],{cwd:root,stdio:'pipe'});
   await mkdir(join(root,'work'));await mkdir(join(root,'agent'));
   await writeFile(join(root,'probe.mjs'), `
 import assert from 'node:assert/strict';

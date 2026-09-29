@@ -12,7 +12,7 @@ workspace remain intact; this does not establish freedom from semantic drift.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.87.1. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 
@@ -73,7 +73,7 @@ this package does not deploy a Coffee Host.
 - [ABCD 250k comparison method](测试方法.md) and
   [completed diagnostic pilot report](docs/abcd-250k-pilot-2026-09-27.md) (all 16 planned
   case/arm combinations have terminal records; no overall comparison is claimed).
-- [Pi 0.87.1 native compaction source snapshot](integrations/pi-native-compaction/README.md)
+- [Pi 0.99.1 native compaction source snapshot](integrations/pi-native-compaction/README.md)
   for side-by-side inspection; the A arm executes the pinned Pi package.
 
 The old `src/context`, Pi-Coffee integration snapshot and four packet tests are historical

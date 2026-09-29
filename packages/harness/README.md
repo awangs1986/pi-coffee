@@ -1,16 +1,16 @@
-> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.1.3`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.1.4`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # pi-coffee-harness
 
-Version **0.1.3** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.1.4** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
-and optional-tool discovery. Tested with Pi 0.87.1 and Node 22.23.2 / 24.19.0.
+and optional-tool discovery. Tested with Pi 0.99.1 and Node 22.23.2 / 24.19.0.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.87.1. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 
@@ -21,7 +21,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/harness
 ```
 
-For installation from the built `harness/v0.1.3` release artifact, follow the
+For installation from the built `harness/v0.1.4` release artifact, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.

@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.2.0-experimental.3 — unreleased
+## 0.2.0-experimental.3 — 2026-09-29
 
+- Validate Pi 0.99.1 and declare host-provided typebox as a peer dependency.
 - Give Host full control of plugin enablement and Handoff timing; remove internal native-compaction counting and both scheduling flags.
 - Preserve the public request marker, same-session installation, original-evidence recovery and generation budgets.
 - Remove automatic continuation and native fallback; explicit failures reject, and Host owns retry/resumption decisions.

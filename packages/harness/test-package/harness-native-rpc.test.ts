@@ -46,7 +46,7 @@ it("installs a standalone tarball through Pi and restores modes with native opti
   try {
     const [pack] = JSON.parse(execFileSync("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", root], { cwd: resolve("."), encoding: "utf8" }));
     const consumer = join(root, "consumer"); await mkdir(consumer);
-    await writeFile(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "pi-coffee-harness": `file:${join(root, pack.filename)}` } }));
+    await writeFile(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "typebox": "1.3.27", "pi-coffee-harness": `file:${join(root, pack.filename)}` } }));
     execFileSync("npm", ["install", "--omit=peer", "--no-audit", "--no-fund"], { cwd: consumer, stdio: "pipe" });
     const pkg = join(consumer, "node_modules/pi-coffee-harness");
     const exports = execFileSync(process.execPath, ["--input-type=module", "-e", 'import {currentHarnessMode,registerCapabilityManifest} from "pi-coffee-harness"; console.log(typeof currentHarnessMode,typeof registerCapabilityManifest)'], { cwd: pkg, encoding: "utf8" });

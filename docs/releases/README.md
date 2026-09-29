@@ -21,7 +21,7 @@ GitHub/Gitea release, verify its checksum, install it with npm into a dedicated 
 register the installed directory with Pi:
 
 ```sh
-npm install --prefix /absolute/path/pi-plugins /absolute/path/pi-coffee-harness-0.1.3.tgz
+npm install --prefix /absolute/path/pi-plugins /absolute/path/pi-coffee-harness-0.1.4.tgz
 pi install /absolute/path/pi-plugins/node_modules/pi-coffee-harness
 ```
 
@@ -41,8 +41,8 @@ Harness/context behavior. Existing Server adapters explicitly compose selected e
 
 ## Publish
 
-1. Update only changed package versions/lockfiles and changelogs. Packaging migration
-   uses Harness 0.1.3, LSP 0.4.2 and Handoff 0.2.0-experimental.2.
+1. Update only changed package versions/lockfiles and changelogs. Current validated versions
+   are Harness 0.1.4, LSP 0.4.3 and Handoff 0.2.0-experimental.3.
 2. In a fresh clone run `npm ci`, `npm run bootstrap`, `npm run check`. Each package
    runs its own native/CLI tests; the root also tests all three installed together.
 3. Commit, then `npm run pack:plugins`. `artifacts/releases.json` records source SHA,

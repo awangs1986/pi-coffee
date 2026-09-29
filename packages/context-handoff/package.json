@@ -26,14 +26,13 @@
     "prepare": "npm run build"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@earendil-works/pi-coding-agent": "0.99.1",
     "@types/node": "22.19.19",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "typebox": "1.3.27"
   },
-  "dependencies": {
-    "typebox": "1.3.7"
-  },
+  "dependencies": {},
   "license": "UNLICENSED",
   "pi": {
     "extensions": [
@@ -52,7 +51,8 @@
     "docs/releases.md"
   ],
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "0.87.1"
+    "@earendil-works/pi-coding-agent": ">=0.99.1 <0.100.0",
+    "typebox": "*"
   },
   "repository": {
     "type": "git",

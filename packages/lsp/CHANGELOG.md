@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3 — 2026-09-29
+
+- Validate native Pi 0.99.1 with the complete plugin and installed-package checks.
+- Update the pinned development runtime and supported installation guidance.
+
 ## 0.4.2 — 2026-09-29
 
 - Move canonical source to `awangs1986/pi-coffee/packages/lsp` and the identical Gitea mirror. Preserve independent package identity, runtime behavior and prior history.

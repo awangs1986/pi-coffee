@@ -5,11 +5,11 @@ plugin and public entry. GitHub [awangs1986/pi-coffee](https://github.com/awangs
 and [Gitea awangs/pi-coffee](http://gitea:3000/awangs/pi-coffee) share one source tree.
 [pi-coffee-server](https://github.com/awangs1986/pi-coffee-server) owns Web and Host.
 
-| Plugin | Source | Current packaging migration |
+| Plugin | Source | Current release |
 | --- | --- | --- |
-| Harness | [packages/harness](packages/harness/README.md) | 0.1.3 |
-| LSP | [packages/lsp](packages/lsp/README.md) | 0.4.2 |
-| Context Handoff | [packages/context-handoff](packages/context-handoff/README.md) | 0.2.0-experimental.2 |
+| Harness | [packages/harness](packages/harness/README.md) | 0.1.4 |
+| LSP | [packages/lsp](packages/lsp/README.md) | 0.4.3 |
+| Context Handoff | [packages/context-handoff](packages/context-handoff/README.md) | 0.2.0-experimental.3 |
 
 Versions are independent. Each plugin has its own manifest, lockfile, changelog,
 tests and release artifact. [Install/release/rollback guide](docs/releases/README.md).
