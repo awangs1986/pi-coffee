@@ -1,5 +1,8 @@
 # pi-coffee-lsp
 
+Version **0.4.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Query the installed version with `/lsp version` in Pi, or `coffee-lsp --version` in a terminal.
+
 Language-server intelligence for [Pi](https://github.com/earendil-works/pi-mono)
 0.87.1, shipped as a standard Pi package (extension + Skill + CLI):
 

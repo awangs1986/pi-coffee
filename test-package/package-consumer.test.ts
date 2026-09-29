@@ -18,6 +18,7 @@ it("installs the LSP-only tarball and uses its public helpers and real CLI", () 
     writeFileSync(join(consumer, "package.json"), JSON.stringify({ private: true, type: "module" }));
     execFileSync("npm", ["install", "--no-audit", "--no-fund", join(consumer, pack.filename), "typescript@5.9.3"], { cwd: consumer, stdio: "pipe", timeout: 120000 });
     const manifest = JSON.parse(readFileSync(join(consumer, "node_modules/pi-coffee-lsp/package.json"), "utf8"));
+    expect(execFileSync(process.execPath, [join(consumer, "node_modules/pi-coffee-lsp/dist/src/lsp/bin.js"), "--version"], { cwd: consumer, encoding: "utf8" }).trim()).toBe(`pi-coffee-lsp ${manifest.version}`);
     // Standard Pi package: `pi` manifest, gallery keyword, host packages only as peers.
     expect(manifest.pi).toEqual({ extensions: ["./dist/src/extension/index.js"], skills: ["./dist/skills/lsp"] });
     expect(manifest.keywords).toEqual(expect.arrayContaining(["pi-package", "pi-extension"]));

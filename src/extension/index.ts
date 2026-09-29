@@ -10,6 +10,7 @@ import { MAX_DOCUMENT_BYTES, findProjectRoot } from "../lsp/cli.js";
 import { resolveProfile, type LspProfileResolution } from "../lsp/profiles.js";
 import { lspDaemonSocket, stopLspDaemon } from "../lsp/transport.js";
 import { withCoffeeLspPath } from "../pi-skills.js";
+import { PACKAGE_VERSION } from "../version.js";
 import {
   loadExtensionConfig,
   type CoffeeLspExtensionConfig,
@@ -274,13 +275,16 @@ export function createCoffeeLspExtension(
 
   pi.registerCommand("lsp", {
     description:
-      "LSP extension: /lsp [status|check <file>|servers|install <id>|auto on|off|stop|restart]",
+      "LSP extension: /lsp [version|status|check <file>|servers|install <id>|auto on|off|stop|restart]",
     handler: async (rawArgs, ctx) => {
       bind(ctx);
       const [command = "status", ...rest] = rawArgs.trim().split(/\s+/).filter(Boolean);
       const notify = (message: string, type: "info" | "warning" | "error" = "info") =>
         ctx.ui.notify(message, type);
       switch (command) {
+        case "version":
+          notify(`pi-coffee-lsp ${PACKAGE_VERSION}`);
+          return;
         case "status": {
           const env = environment();
           const socket = lspDaemonSocket(env);
