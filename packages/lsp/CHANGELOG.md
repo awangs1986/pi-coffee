@@ -3,6 +3,7 @@
 ## 0.4.4 — 2026-09-29
 
 - Report native tool, automatic diagnostics and background warm-up settlement through the optional Handoff event contract. Completed LSP calls no longer block manual Handoff; outstanding queries still defer it. No Handoff dependency or native compaction change.
+- Reconcile inactive LSP read-only query records on resume and branch navigation; do not replay operations or mark other plugins' work settled.
 - Reproduced and verified through Server Web/Host → real Pi LSP → manual Handoff integration (Server #4, Pi #3).
 
 ## 0.4.3 — 2026-09-29

@@ -145,6 +145,7 @@ export function createCoffeeLspExtension(
   options: ExtensionOptions,
 ): ExtensionState {
   const baseEnv = options.env ?? process.env;
+  const activeWork = new Set<string>();
   // One daemon per Pi process: it stays warm across /new, /resume, /fork and
   // /reload and is stopped on quit. A PI_COFFEE_ROOT_SESSION that was already
   // present and not exported by an earlier instance of this extension (before
@@ -216,9 +217,13 @@ export function createCoffeeLspExtension(
     state.prewarmed.clear();
     bind(ctx);
     exportHostEnvironment();
+    reconcileReadOnlyWork(ctx);
   });
 
+  pi.on("session_tree", (_event, ctx) => { reconcileReadOnlyWork(ctx); });
+
   pi.on("session_shutdown", async (event) => {
+    await drainPrewarm();
     // Session switches and reloads keep the process daemon warm; quitting Pi
     // retires it. A caller-provided session id is the caller's to stop.
     if (event.reason !== "quit" || userSession) return;
@@ -358,7 +363,7 @@ export function createCoffeeLspExtension(
             return;
           }
           notify(`installing ${id} into the managed prefix; this runs npm and may take a minute`);
-          const outcome = await trackedQuery(["install", id], {
+          const outcome = await runQuery(["install", id], {
             cwd: ctx.cwd,
             env: environment(),
             signal: ctx.signal,
@@ -403,13 +408,31 @@ export function createCoffeeLspExtension(
 
   return state;
 
+  function reconcileReadOnlyWork(ctx: ExtensionContext): void {
+    // A restored branch can omit the completion record. These read-only queries
+    // do not delegate task work or replay actions after restart. Retire only our
+    // own inactive records; never infer settlement for another plugin's jobs.
+    const latest = new Map<string, string>();
+    for (const entry of ctx.sessionManager.getBranch()) {
+      if (entry.type !== "custom" || entry.customType !== "pi-handoff-work") continue;
+      const data = entry.data as { id?: unknown; tool?: unknown; status?: unknown } | undefined;
+      if (data?.tool === "lsp" && typeof data.id === "string" && data.id.startsWith("lsp:") && typeof data.status === "string")
+        latest.set(data.id, data.status);
+    }
+    for (const [id, status] of latest)
+      if (status === "running" && !activeWork.has(id))
+        pi.events.emit("pi-handoff:work", { id, tool: "lsp", status: "settled" });
+  }
+
   // Optional Handoff listeners observe work; LSP has no dependency on that plugin.
   async function trackWork<T>(operation: () => Promise<T>): Promise<T> {
     const id = `lsp:${randomUUID()}`;
+    activeWork.add(id);
     pi.events.emit("pi-handoff:work", { id, tool: "lsp", status: "running" });
     try {
       return await operation();
     } finally {
+      activeWork.delete(id);
       pi.events.emit("pi-handoff:work", { id, tool: "lsp", status: "settled" });
     }
   }

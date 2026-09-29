@@ -391,7 +391,7 @@ function createHarness(cwd: string, sessionId: string) {
     hasUI: false,
     mode: "rpc",
     signal: undefined,
-    sessionManager: { getSessionId: () => sessionId },
+    sessionManager: { getSessionId: () => sessionId, getBranch: () => [] },
     ui: {
       notify: (message: string) => {
         notifications.push(message);
