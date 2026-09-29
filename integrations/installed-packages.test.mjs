@@ -1,10 +1,23 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,mkdir,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,mkdir,rm,rename} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+
+test('packing rejects a missing public protocol even when the Pi source entry exists', async () => {
+ const protocol=resolve('packages/context-handoff/dist/src/plugin/protocol.js');
+ const backup=protocol+'.pack-test-backup';
+ const output=await mkdtemp(join(tmpdir(),'coffee-incomplete-artifact-'));
+ await rename(protocol,backup);
+ try {
+  assert.throws(()=>execFileSync(process.execPath,['scripts/pack-plugins.mjs',output],{stdio:'pipe'}), /missing .*protocol\.js/);
+ } finally {
+  await rename(backup,protocol);
+  await rm(output,{recursive:true,force:true});
+ }
+});
 
 test('release artifacts install together outside the monorepo and report independent versions', {timeout:180000}, async()=>{
  const root=await mkdtemp(join(tmpdir(),'coffee-monorepo-consumer-'));
@@ -21,6 +34,9 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
 import {RpcClient} from '@earendil-works/pi-coding-agent';
+import {HANDOFF_REQUEST} from 'context-handoff/protocol';
+import {currentHarnessMode} from 'pi-coffee-harness';
+assert.equal(typeof HANDOFF_REQUEST,'string');assert.equal(typeof currentHarnessMode,'function');
 import {execFileSync} from 'node:child_process';
 const require=createRequire(import.meta.url),names=${JSON.stringify(release.plugins.map(p=>({name:p.name,version:p.version})))};
 const extensions=names.flatMap(p=>{const manifest=require(p.name+'/package.json');assert.equal(manifest.version,p.version);return manifest.pi.extensions.map(e=>join(dirname(require.resolve(p.name+'/package.json')),e));});
