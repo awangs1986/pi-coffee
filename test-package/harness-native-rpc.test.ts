@@ -34,9 +34,9 @@ it("installs a standalone tarball through Pi and restores modes with native opti
   const chat = ["bash", "edit", "read", "write"];
   const work = [...chat, "git", "search_tools"].sort();
   const results: any[] = [];
-  const start = async () => {
+  const start = async (extraArgs: string[] = []) => {
     client = new RpcClient({ cliPath: cli, cwd: root, provider: "fixture", model: "fixture", env,
-      args: ["--offline", "--session", join(root, "session.jsonl")] });
+      args: ["--offline", "--session", join(root, "session.jsonl"), ...extraArgs] });
     client.onEvent(event => {
       if (event.type === "extension_error") errors.push(event);
       if (event.type === "tool_execution_end") results.push(event);
@@ -86,10 +86,44 @@ it("installs a standalone tarball through Pi and restores modes with native opti
     expect(results.find(e => e.toolName === "search_tools")?.result.details.hits.map((h: any) => h.id)).toContain("lsp");
     await c.promptAndWait("fixture activate", undefined, 15000);
     expect(results.filter(e => e.toolName === "search_tools").at(-1)?.result.details.ok).toBe(true);
+    expect(names()).toContain("lsp");
+    expect(JSON.stringify(requests.at(-1))).toContain("active lsp tool");
+    await c.promptAndWait("work with lsp", undefined, 15000);
+    expect(JSON.stringify(requests.at(-1))).toContain("active lsp tool");
     await c.stop(); c = await start(); await c.promptAndWait("restored work", undefined, 15000);
     expect(names()).toContain("lsp");
     expect(JSON.stringify(requests.at(-1))).toContain("Software development");
+    expect(JSON.stringify(requests.at(-1))).toContain("active lsp tool");
     expect(errors).toEqual([]);
+
+    // Corrupt only the isolated installed package, never the working checkout.
+    const bodyPath = join(pkg, "dist/harness/prompts/software-development.md");
+    const body = await readFile(bodyPath, "utf8");
+    const beforeInvalid = requests.length;
+    for (const invalid of ["<!-- empty base with active LSP -->", "é".repeat(7000), "Unresolved {{marker}}"] ) {
+      await writeFile(bodyPath, invalid);
+      await c.promptAndWait("invalid work body", undefined, 15000);
+      expect(requests.length).toBe(beforeInvalid);
+    }
+    await rm(bodyPath);
+    await c.promptAndWait("missing work body", undefined, 15000);
+    expect(requests.length).toBe(beforeInvalid);
+    await c.prompt("/chat");
+    await c.promptAndWait("chat with broken work body", undefined, 15000);
+    expect(requests.length).toBeGreaterThan(beforeInvalid);
+    expect(requests.at(-1).messages.some((m: any) => ["system", "developer"].includes(m.role))).toBe(false);
+    await writeFile(bodyPath, body);
+    await c.prompt("/work");
+    const beforeRepair = requests.length;
+    await c.promptAndWait("repaired work body", undefined, 15000);
+    expect(requests.length).toBeGreaterThan(beforeRepair);
+    await c.stop();
+    c = await start(["--system-prompt", "CUSTOM_SYSTEM_SENTINEL"]);
+    await c.promptAndWait("fixture activate", undefined, 15000);
+    const system = requests.at(-1).messages.filter((m: any) => ["system", "developer"].includes(m.role));
+    expect(JSON.stringify(system)).toContain("CUSTOM_SYSTEM_SENTINEL");
+    expect(JSON.stringify(system)).toContain("Software development");
+    expect(JSON.stringify(system)).toContain("active lsp tool");
   } finally {
     await client?.stop(); server.closeAllConnections();
     await new Promise<void>(r => server.close(() => r()));

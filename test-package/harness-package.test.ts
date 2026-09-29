@@ -11,6 +11,9 @@ it("packs Harness independently without bundled optional engines or private pack
   const [pack] = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], { cwd, encoding: "utf8" }));
   const files: string[] = pack.files.map((file: { path: string }) => file.path);
   expect(files).toContain("dist/harness/prompts/software-development.md");
+  expect(files).toContain("dist/harness/prompts/subagents.md");
+  expect(files).toContain("dist/harness/prompts/recall-folded.md");
+  expect(files).toContain("dist/harness/prompts/lsp.md");
   expect(files).toContain("dist/harness/public.d.ts");
   expect(files.some(path => /\/(host|lsp|context|subagents)\//.test(path))).toBe(false);
   for (const file of files.filter(path => path.endsWith(".js"))) {
