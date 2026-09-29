@@ -86,9 +86,12 @@ it("installs a standalone tarball through Pi and restores modes with native opti
     expect(results.find(e => e.toolName === "search_tools")?.result.details.hits.map((h: any) => h.id)).toContain("lsp");
     await c.promptAndWait("fixture activate", undefined, 15000);
     expect(results.filter(e => e.toolName === "search_tools").at(-1)?.result.details.ok).toBe(true);
+    await c.promptAndWait("work with lsp", undefined, 15000);
+    expect(JSON.stringify(requests.at(-1))).toContain("active lsp tool");
     await c.stop(); c = await start(); await c.promptAndWait("restored work", undefined, 15000);
     expect(names()).toContain("lsp");
     expect(JSON.stringify(requests.at(-1))).toContain("Software development");
+    expect(JSON.stringify(requests.at(-1))).toContain("active lsp tool");
     expect(errors).toEqual([]);
   } finally {
     await client?.stop(); server.closeAllConnections();

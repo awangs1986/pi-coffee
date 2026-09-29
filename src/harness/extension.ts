@@ -95,7 +95,6 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   let catalog: CapabilityCatalog | undefined;
   let epoch: ExecutionEpoch | undefined;
   const startupDiagnostics: string[] = [];
-  const prompt = renderHarnessPrompt("work");
   let verifyState = createMemoryVerifyState();
   const run: NativeCommandRunner = (command, args, options) => pi.exec(command, args, options);
   const persistVerify = (cwd: string, state: VerifyWorkspaceState): void => {
@@ -407,6 +406,14 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
         "Shared/default branch merge, force-push, remote deletion, and publication remain scoped to explicit user intent.",
       ] : []),
     ].join("\n");
+    let prompt: string;
+    try {
+      prompt = renderHarnessPrompt("work", active);
+    } catch (error) {
+      ctx.abort();
+      ctx.ui.notify(`Work prompt unavailable: ${errorMessage(error)}`, "error");
+      return { systemPrompt: "" };
+    }
     const block = `${BLOCK_START}\n${prompt}\n\n## Runtime harness state\n\n${runtime}\n${BLOCK_END}`;
     const base = event.systemPrompt.replace(BLOCK_PATTERN, "").trimEnd();
     return { systemPrompt: base.length === 0 ? block : `${base}\n\n${block}` };

@@ -38,6 +38,13 @@ loader, while installed Handoff recovery tools remain usable in Work. Execution,
 credentials, output limits, language-server lifecycle and compression policy belong
 to those plugins.
 
+The Work addition has a stable software-development body plus guidance for active
+`subagents_enable`, `recall_folded`, and `lsp` tools. Its rendered size therefore
+changes with the active tool set. Harness enforces a 12,711 UTF-8 byte ceiling on
+that addition; Pi's base instructions, project context, runtime state, tool schemas,
+and conversation history are separate. Chat remains zero-system even when those
+tools are installed. Newly activated tool guidance appears on the next Work turn.
+
 Chat filters optional model tools and system instructions at the outgoing request
 boundary. This is mode selection, not a shell sandbox: Bash and file operations
 retain the VM user's rights. Explicit user slash commands are not intercepted.

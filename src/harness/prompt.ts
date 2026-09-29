@@ -3,14 +3,25 @@ import { fileURLToPath } from "node:url";
 
 export type HarnessPromptProfile = "chat" | "work";
 
+/** Bound only the Harness Work addition, not Pi Base, project context, or tool schemas. */
+export const MAX_WORK_PROMPT_BYTES = 12711;
+
+const OPTIONAL_GUIDANCE = [
+  { tool: "subagents_enable", file: "subagents.md" },
+  { tool: "recall_folded", file: "recall-folded.md" },
+  { tool: "lsp", file: "lsp.md" },
+] as const;
+
 /** Packaged Work body; Chat never loads a system prompt. */
-export function renderHarnessPrompt(profile: HarnessPromptProfile = "work"): string {
+export function renderHarnessPrompt(profile: HarnessPromptProfile = "work", activeTools: readonly string[] = []): string {
   if (profile === "chat") return "";
   if (profile !== "work") throw new Error("Unknown prompt profile; use chat or work");
-  const fileName = "software-development.md";
-  const sourcePath = fileURLToPath(new URL(`./prompts/${fileName}`, import.meta.url));
-  const source = readFileSync(sourcePath, "utf8");
-  const rendered = stripAuthorComments(source).replace(/\r\n/g, "\n").trim();
+  const active = new Set(activeTools);
+  const pieces = [readPrompt("software-development.md")];
+  for (const guidance of OPTIONAL_GUIDANCE) {
+    if (active.has(guidance.tool)) pieces.push(readPrompt(guidance.file));
+  }
+  const rendered = pieces.join("\n\n");
 
   if (rendered.length === 0) {
     throw new Error(`Harness prompt '${profile}' is empty`);
@@ -18,7 +29,17 @@ export function renderHarnessPrompt(profile: HarnessPromptProfile = "work"): str
   if (/\{\{[^}]+\}\}/.test(rendered)) {
     throw new Error(`Harness prompt '${profile}' contains an unresolved marker`);
   }
+  const bytes = Buffer.byteLength(rendered, "utf8");
+  if (bytes > MAX_WORK_PROMPT_BYTES) {
+    throw new Error(`Harness prompt '${profile}' exceeds ${MAX_WORK_PROMPT_BYTES} UTF-8 bytes (${bytes})`);
+  }
   return rendered;
+}
+
+function readPrompt(fileName: string): string {
+  const sourcePath = fileURLToPath(new URL(`./prompts/${fileName}`, import.meta.url));
+  const source = readFileSync(sourcePath, "utf8");
+  return stripAuthorComments(source).replace(/\r\n/g, "\n").trim();
 }
 
 /** Remove source-control metadata before prompt text reaches the model. */
