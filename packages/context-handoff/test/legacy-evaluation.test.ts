@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
 
-it.each(["evaluate-live", "evaluate-paired", "evaluate-drift", "evaluate-abcd"])(
+it.each([
+  "evaluate-live", "evaluate-paired", "evaluate-drift", "evaluate-abcd",
+  "evaluate-confiqa", "evaluate-conflictqa", "evaluate-followup", "evaluate-conflictqa-followup",
+])(
   "%s rejects its obsolete cadence contract before starting a model evaluation",
   (script) => {
     const result = spawnSync(process.execPath, [`scripts/${script}.mjs`], {

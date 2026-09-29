@@ -475,3 +475,14 @@ Robustness follow-up (same day):
 | Streaming commit confirmation | After a committed Handoff, a 9 MiB malformed line and a torn trailing line are appended; reopening confirms the commit without an error and accepts the next prompt. The previous implementation blocked recovery here. |
 | Incremental order guard | After search, verified read and write, an extension command navigates back to the Handoff entry; the next write to the protected path is blocked again. A mutation that kept stale state on branch change failed this case. |
 | Exact search | A differently cased query returns no user match and the exact-and-case-sensitive hint; the exact query matches, and a preview beginning next to an emoji does not start with a lone surrogate. |
+
+
+### PR review correction: historical evaluator entrypoints
+
+The review found four additional cadence-dependent runners: `evaluate-confiqa`,
+`evaluate-conflictqa`, `evaluate-followup` and `evaluate-conflictqa-followup`.
+They still supplied removed flags and had not received the explicit incompatibility
+guard. All eight historical runners now fail with migration guidance before setup.
+At the CLI seam, the expanded test first reported four failures and four passes;
+adding the shared guard made all eight pass. No provider credentials or live model
+calls were used. The existing scoring implementations remain unchanged.
