@@ -78,6 +78,6 @@ See the [final prompt acceptance report](docs/final-acceptance-20260929.md).
 Extracted from [pi-coffee](https://github.com/awangs1986/pi-coffee) at
 `a1c4e4acc88ffd774a09598f1cbd67337ab9522e`; see [provenance](provenance.json).
 Harness runtime sources were unchanged at extraction; subsequent prompt changes
-are recorded in the acceptance report. This repository contains no
+are recorded in the acceptance report. This Harness package contains no
 Host, Web gateway, Codex/Claude adapters, LSP daemon or compression implementation.
-The source repository and current production installations remain unchanged.
+This source consolidation does not change production installations.
