@@ -1,0 +1,15 @@
+{
+  "name": "pi-coffee-monorepo",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Independent Pi plugins with one source authority",
+  "type": "module",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": {
+    "bootstrap": "node scripts/plugins.mjs install",
+    "build": "node scripts/plugins.mjs build",
+    "check": "node scripts/plugins.mjs check && node --test integrations/installed-packages.test.mjs",
+    "pack:plugins": "node scripts/pack-plugins.mjs",
+    "check:compatibility": "npm --prefix compatibility/aggregate ci && npm --prefix compatibility/aggregate run check"
+  }
+}

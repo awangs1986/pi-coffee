@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 — 2026-09-29
+
+- Move canonical source to `awangs1986/pi-coffee/packages/harness` and the identical Gitea mirror. Preserve independent package identity, runtime behavior and prior history.
+- Install built release artifacts from the monorepo; this version changes packaging and source location only.
+
 ## 0.1.2 — 2026-09-29
 
 - Keep independently installed Handoff evidence/reconciliation tools usable in Chat as well as Work. Chat still removes system instructions and unrelated optional tools.

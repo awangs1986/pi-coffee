@@ -1,35 +1,24 @@
-# Context-handoff releases
+# Independent context-handoff releases
 
-Current version: **0.2.0-experimental.1**. Git tag: **v0.2.0-experimental.1**.
-Package version is independent of Harness, LSP, Server and the native Pi version.
-`package.json` is authoritative; keep package-lock.json consistent. Query `/handoff version`.
+Current version: **0.2.0-experimental.2**. Immutable tag: **context-handoff/v0.2.0-experimental.2** in
+[awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee).
 
-PATCH records compatible fixes, MINOR new behavior, and MAJOR incompatible public
-contracts after stabilization. Pre-1.0 changes must document migration. Experimental
-versions retain the `-experimental.N` suffix. Tags and published artifacts are immutable.
+`package.json` owns this plugin's version; its lockfile must agree. Versions are
+independent of other plugins, native Pi and Server. Follow the shared
+[release, installation and rollback procedure](../../../../docs/releases/README.md).
+PATCH records compatible fixes or packaging changes, MINOR compatible capabilities,
+and MAJOR incompatible contracts after stabilization. Pre-1.0 releases must state
+migration requirements. Never move a published tag or overwrite release assets.
 
-Before publishing: run npm ci and npm run check in a fresh clone, test the packed
-plugin, update CHANGELOG.md and tag the tested commit. Push GitHub main/tag before
-synchronizing the same Gitea main/tag. npm publication and Host deployment are
-separate. No transcript, credential or generated evidence body belongs in a release.
+Query the installed version using `/handoff version` in native Pi.
+Retain the previous artifact and task data, settle active work, replace the previous
+registration and verify exactly one plugin copy loads. A source release does not
+update a running Host or establish production acceptance. Old standalone repositories
+and their tags remain historical records; new maintenance happens in this package.
 
-Server pins the exact source commit and imports context-handoff/protocol. The
-public HANDOFF_REQUEST marker uses Pi RPC compact(customInstructions). Check for
-the handoff command before invoking it and verify the resulting compaction belongs
-to this plugin; never silently fall back to native compaction under a Handoff label.
-The runtime may take longer than Pi RpcClient's default response timeout; consumers
-must retain operation ownership until native compaction finishes or is cancelled.
-
-Keep exactly one installed plugin copy. Replace the old local context-fold adapter
-when enabling this integration. Harness, native Codex/Claude and LSP remain separate.
-Before upgrade or rollback, settle active tasks and keep the prior plugin and Server
-release plus task data. Reopen the same Conversation; do not delete native history.
-Version 0.1.0 defaults to automatic cadence, so rolling back to it also requires an
-explicit policy decision; disabling Handoff and using native Pi is the safe fallback.
-
-Historical live evaluations were inconclusive about semantic improvement. This
-release remains experimental and does not certify zero drift or live-provider quality.
-
-Unknown or asynchronous third-party tools remain fail-closed until their extension
-reports `pi-handoff:work` settlement. Git and tool discovery are recognized as
-synchronous Coffee tools; no blanket exemption applies to web or subagents.
+Handoff retains the experimental suffix and makes no zero-drift guarantee. Server
+consumes the built artifact and the public `context-handoff/protocol` API; operation
+ownership must survive native RPC timeout/cancellation. Automatic compaction remains
+native Pi. Version 0.1.0 used automatic cadence: restoring it requires an explicit
+policy decision; disabling Handoff preserves the native Pi fallback without that
+policy change. Unknown asynchronous tools still require documented settlement.

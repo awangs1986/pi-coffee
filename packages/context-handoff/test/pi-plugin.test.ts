@@ -260,7 +260,7 @@ it('defaults to native automatic compaction and only hands off an explicitly mar
     await c.compact('context-handoff:manual:v1');
     const entries=(await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
-    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.1',trigger:'manual'});
+    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.2',trigger:'manual'});
     expect((await c.getState()).sessionId).toBe(before.sessionId);
     expect((await c.getState()).sessionFile).toBe(before.sessionFile);
     expect(entries.filter((e:any)=>e.type==='message' && e.message.role==='user')).toHaveLength(5);

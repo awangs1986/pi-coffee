@@ -1,6 +1,6 @@
 {
   "name": "context-handoff",
-  "version": "0.2.0-experimental.1",
+  "version": "0.2.0-experimental.2",
   "private": true,
   "description": "Context-handoff: Pi plugin for same-conversation context handoff",
   "type": "module",
@@ -52,5 +52,10 @@
   ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "0.87.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/awangs1986/pi-coffee.git",
+    "directory": "packages/context-handoff"
   }
 }

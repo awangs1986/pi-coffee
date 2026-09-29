@@ -1,0 +1,5 @@
+{
+  "harness": "packages/harness",
+  "lsp": "packages/lsp",
+  "context-handoff": "packages/context-handoff"
+}
