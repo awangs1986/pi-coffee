@@ -404,6 +404,7 @@ function createHarness(cwd: string, sessionId: string) {
     on(event: string, handler: (event: any, ctx: ExtensionContext) => unknown) {
       handlers.set(event, [...(handlers.get(event) ?? []), handler]);
     },
+    events: { emit() {} },
     registerTool(definition: any) {
       tools.set(definition.name, definition);
     },

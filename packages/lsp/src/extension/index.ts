@@ -3,6 +3,7 @@ import type {
   ExtensionContext,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
+import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { delimiter, join, resolve } from "node:path";
 import { Type, type Static } from "typebox";
@@ -199,6 +200,15 @@ export function createCoffeeLspExtension(
     }
   };
 
+  // Prewarm can outlive a read tool; settle it in its original session before
+  // Pi changes the branch receiving Handoff's durable work records.
+  const drainPrewarm = async () => {
+    await Promise.all([...state.prewarmed.values()].map((entry) => entry.done));
+  };
+  pi.on("session_before_switch", drainPrewarm);
+  pi.on("session_before_fork", drainPrewarm);
+  pi.on("session_before_tree", drainPrewarm);
+
   pi.on("session_start", async (_event, ctx) => {
     state.cwd = ctx.cwd;
     state.config = loadExtensionConfig(ctx.cwd, baseEnv);
@@ -248,28 +258,30 @@ export function createCoffeeLspExtension(
     ],
     parameters: lspParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      bind(ctx);
-      if (params.operation !== "servers" && !params.file)
-        throw new Error(`lsp ${params.operation} requires file`);
-      const args = buildArgs(params, ctx.cwd);
-      const outcome = await runQuery(args, {
-        cwd: ctx.cwd,
-        env: environment(),
-        signal,
-      });
-      const envelope = outcome.envelope;
-      if (!envelope) {
-        throw new Error(
-          outcome.stderr.trim() ||
-            `coffee-lsp ${params.operation} produced no result (exit ${outcome.code})`,
+      return trackWork(async () => {
+        bind(ctx);
+        if (params.operation !== "servers" && !params.file)
+          throw new Error(`lsp ${params.operation} requires file`);
+        const args = buildArgs(params, ctx.cwd);
+        const outcome = await runQuery(args, {
+          cwd: ctx.cwd,
+          env: environment(),
+          signal,
+        });
+        const envelope = outcome.envelope;
+        if (!envelope) {
+          throw new Error(
+            outcome.stderr.trim() ||
+              `coffee-lsp ${params.operation} produced no result (exit ${outcome.code})`,
+          );
+        }
+        const text = formatEnvelope(envelope, ctx.cwd);
+        const failure = envelope.issues?.find((issue) =>
+          ["invalid_arguments", "server_failed", "daemon_failed"].includes(issue.code),
         );
-      }
-      const text = formatEnvelope(envelope, ctx.cwd);
-      const failure = envelope.issues?.find((issue) =>
-        ["invalid_arguments", "server_failed", "daemon_failed"].includes(issue.code),
-      );
-      if (failure) throw new Error(text);
-      return { content: [{ type: "text", text }], details: envelope };
+        if (failure) throw new Error(text);
+        return { content: [{ type: "text" as const, text }], details: envelope };
+      });
     },
   });
 
@@ -307,7 +319,7 @@ export function createCoffeeLspExtension(
             notify("Usage: /lsp check <file>", "warning");
             return;
           }
-          const outcome = await runQuery(
+          const outcome = await trackedQuery(
             [
               "diagnostics",
               "--file",
@@ -326,7 +338,7 @@ export function createCoffeeLspExtension(
           return;
         }
         case "servers": {
-          const outcome = await runQuery(["servers"], {
+          const outcome = await trackedQuery(["servers"], {
             cwd: ctx.cwd,
             env: environment(),
             signal: ctx.signal,
@@ -346,7 +358,7 @@ export function createCoffeeLspExtension(
             return;
           }
           notify(`installing ${id} into the managed prefix; this runs npm and may take a minute`);
-          const outcome = await runQuery(["install", id], {
+          const outcome = await trackedQuery(["install", id], {
             cwd: ctx.cwd,
             env: environment(),
             signal: ctx.signal,
@@ -391,6 +403,21 @@ export function createCoffeeLspExtension(
 
   return state;
 
+  // Optional Handoff listeners observe work; LSP has no dependency on that plugin.
+  async function trackWork<T>(operation: () => Promise<T>): Promise<T> {
+    const id = `lsp:${randomUUID()}`;
+    pi.events.emit("pi-handoff:work", { id, tool: "lsp", status: "running" });
+    try {
+      return await operation();
+    } finally {
+      pi.events.emit("pi-handoff:work", { id, tool: "lsp", status: "settled" });
+    }
+  }
+
+  function trackedQuery(...args: Parameters<typeof runQuery>): ReturnType<typeof runQuery> {
+    return trackWork(() => runQuery(...args));
+  }
+
   function prewarm(event: ToolResultEvent, ctx: ExtensionContext): void {
     const file = inputPath(event, ctx.cwd);
     if (!file) return;
@@ -403,7 +430,7 @@ export function createCoffeeLspExtension(
     if (state.prewarmed.size >= MAX_PREWARMED_FILES) return;
     // symbols opens the document and initialises the project without waiting
     // for diagnostics, so the first edit usually meets a warm server.
-    const done = runQuery(
+    const done = trackedQuery(
       ["symbols", "--file", file, "--timeout-ms", "30000", "--limit", "1"],
       { cwd: ctx.cwd, env },
     )
@@ -442,7 +469,7 @@ export function createCoffeeLspExtension(
     await Promise.all(
       [...state.prewarmed.values()].filter((entry) => entry.project === key).map((entry) => entry.done),
     );
-    const outcome = await runQuery(
+    const outcome = await trackedQuery(
       [
         "diagnostics",
         "--file",
