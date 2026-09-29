@@ -219,12 +219,21 @@ describe("Chat/Work session and capability boundaries", () => {
       execute: async () => ({ content: [], details: {} }) });
     await pi.emit("session_start", {});
     expect(pi.getActiveTools()).not.toContain("lsp");
+    const before = await pi.emit("before_agent_start", { systemPrompt: "PI BASE" }) as { systemPrompt: string };
+    expect(before.systemPrompt).not.toContain("active lsp tool");
     const discovery = await pi.runTool("search_tools", { action: "search", query: "lsp" });
     expect(discovery.details.hits.map((hit: any) => hit.id)).toContain("lsp");
     expect((await pi.runTool("search_tools", { action: "activate", capability_id: "lsp" })).details.ok).toBe(true);
     expect(pi.getActiveTools()).toContain("lsp");
+    const after = await pi.emit("before_agent_start", before) as { systemPrompt: string };
+    expect(after.systemPrompt).toContain("active lsp tool");
+    expect(Buffer.byteLength(after.systemPrompt, "utf8")).toBeGreaterThan(Buffer.byteLength(before.systemPrompt, "utf8"));
+    await pi.emit("model_select", {});
+    const reset = await pi.emit("before_agent_start", after) as { systemPrompt: string };
+    expect(reset.systemPrompt).not.toContain("active lsp tool");
     await pi.runCommand("chat", "");
     expect(await pi.emit("tool_call", { toolName: "lsp" })).toMatchObject({ block: true });
+    expect(await pi.emit("before_agent_start", reset)).toEqual({ systemPrompt: "" });
   });
   it("blocks switching during a turn and restores the selected session branch", async () => {
     const pi = setup(); await pi.emit("session_start", {});

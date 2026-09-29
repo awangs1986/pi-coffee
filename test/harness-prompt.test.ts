@@ -23,7 +23,7 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     const prompt = renderHarnessPrompt("work");
     expect(renderHarnessPrompt()).toBe(prompt);
     expect(prompt).toContain("# Software development");
-    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(9000);
+    expect(Buffer.byteLength(prompt, "utf8")).toBeLessThanOrEqual(12711);
     expect(prompt).not.toMatch(/sandbox|devloop|\{\{|<!--/i);
     expect(prompt).not.toMatch(/\b(?:Simple|Lean|Full)\b|Runtime harness state|3 per|5 per|8\/10|9\/11/);
   });
@@ -106,7 +106,7 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
   });
 
   it("uses actual tool contracts instead of importing another agent's APIs", () => {
-    const prompt = renderHarnessPrompt("work");
+    const prompt = renderHarnessPrompt("work", ["subagents_enable"]);
     expect(prompt).toMatch(/active tool schemas.*authority/i);
     expect(prompt).toMatch(/field names.*types.*required fields/i);
     expect(prompt).toContain("next model request");
@@ -118,7 +118,7 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
   });
 
   it("budgets evidence before reading it and makes recovery conditional", () => {
-    const prompt = renderHarnessPrompt("work");
+    const prompt = renderHarnessPrompt("work", ["recall_folded"]);
     expect(prompt).toMatch(/Limit output before requesting it/i);
     expect(prompt).toMatch(/Reuse.*evidence/i);
     expect(prompt).toMatch(/truncated preview is not complete evidence/i);
@@ -133,6 +133,23 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).not.toMatch(/unlimited context|not limited by the context window|always.*compress|automatically.*succeed/i);
   });
 
+  it("includes optional instructions only for active Work tools", () => {
+    const base = renderHarnessPrompt("work");
+    const delegation = renderHarnessPrompt("work", ["subagents_enable"]);
+    const recovery = renderHarnessPrompt("work", ["recall_folded"]);
+    const lsp = renderHarnessPrompt("work", ["lsp"]);
+    const all = renderHarnessPrompt("work", ["subagents_enable", "recall_folded", "lsp"]);
+    expect(base).not.toContain("native subagents_enable");
+    expect(base).not.toContain("Use recall_folded");
+    expect(base).not.toContain("active lsp tool");
+    expect(delegation).toContain("native subagents_enable");
+    expect(recovery).toContain("Use recall_folded");
+    expect(lsp).toContain("active lsp tool");
+    expect(Buffer.byteLength(all, "utf8")).toBeLessThanOrEqual(12711);
+    expect(Buffer.byteLength(all, "utf8")).toBeGreaterThan(Buffer.byteLength(base, "utf8"));
+    expect(renderHarnessPrompt("chat", ["subagents_enable", "recall_folded", "lsp"])).toBe("");
+  });
+
   it("requires evidence without manufacturing success or extra work", () => {
     const prompt = renderHarnessPrompt("work");
     expect(prompt).toContain("failing test");
@@ -145,6 +162,19 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/unit test is not end-to-end verification/i);
     expect(prompt).toContain("Report outcomes faithfully");
     expect(prompt).toMatch(/request is satisfied, stop/i);
+  });
+
+  it("adopts only software-development lessons from Oh My Pi", () => {
+    const prompt = renderHarnessPrompt("work");
+    expect(prompt).toMatch(/correctness.*maintainability/i);
+    expect(prompt).toMatch(/exported|public (?:API|symbol)/i);
+    expect(prompt).toMatch(/callers|consumers|references/i);
+    expect(prompt).toMatch(/file changes?.*re-read|re-read.*file changes?/i);
+    expect(prompt).toMatch(/consumer-visible|user-visible regression/i);
+    expect(prompt).toMatch(/mock.*implementation|implementation.*mock/i);
+    expect(prompt).toMatch(/run.*changed path|smoke run/i);
+    expect(prompt).toMatch(/named acceptance criteri(?:on|a)/i);
+    expect(prompt).not.toMatch(/personality|emoji|reaction|latex|mermaid|internal URLs?|xd:\/\//i);
   });
 
   it("preserves user control and treats incidental instructions as data", () => {

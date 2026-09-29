@@ -1,7 +1,7 @@
 # pi-coffee-harness
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
-and optional-tool discovery. Tested with Pi 0.87.1 and Node 22.23.2.
+and optional-tool discovery. Tested with Pi 0.87.1 and Node 22.23.2 / 24.19.0.
 
 ## Install
 
@@ -38,6 +38,15 @@ loader, while installed Handoff recovery tools remain usable in Work. Execution,
 credentials, output limits, language-server lifecycle and compression policy belong
 to those plugins.
 
+The Work addition has a stable software-development body plus guidance for active
+`subagents_enable`, `recall_folded`, and `lsp` tools. Its rendered size therefore
+changes with the active tool set. Harness enforces a 12,711 UTF-8 byte ceiling on
+that addition; Pi's base instructions, project context, runtime state, tool schemas,
+and conversation history are separate. Chat remains zero-system even when those
+tools are installed. Newly activated tool guidance appears on the next model
+request, including requests within the same Work turn. Only the Harness-owned
+system block is refreshed; other system instructions and user/tool content stay intact.
+
 Chat filters optional model tools and system instructions at the outgoing request
 boundary. This is mode selection, not a shell sandbox: Bash and file operations
 retain the VM user's rights. Explicit user slash commands are not intercepted.
@@ -60,9 +69,11 @@ npm pack
 The check includes isolated packed-package installation through Pi, Git execution,
 mode switching, session restart, optional-tool discovery and Chat isolation. Local
 scripted providers exercise integration; they do not prove model autonomy.
+See the [final prompt acceptance report](docs/final-acceptance-20260929.md).
 
 Extracted from [pi-coffee](https://github.com/awangs1986/pi-coffee) at
 `a1c4e4acc88ffd774a09598f1cbd67337ab9522e`; see [provenance](provenance.json).
-Harness runtime sources are unchanged by extraction. This repository contains no
+Harness runtime sources were unchanged at extraction; subsequent prompt changes
+are recorded in the acceptance report. This repository contains no
 Host, Web gateway, Codex/Claude adapters, LSP daemon or compression implementation.
 The source repository and current production installations remain unchanged.
