@@ -24,7 +24,7 @@ pi install /absolute/path/to/pi-coffee/packages/context-handoff
 ```
 
 For installation from the built `context-handoff/v0.2.0-experimental.2` release artifact, follow the
-[shared install and release guide](../../../docs/releases/README.md). Install the
+[shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
 Keep exactly one registered copy; remove the previous registration before switching.

@@ -34,7 +34,7 @@ pi install /absolute/path/to/pi-coffee/packages/lsp
 ```
 
 For installation from the built `lsp/v0.4.2` release artifact, follow the
-[shared install and release guide](../../../docs/releases/README.md). Install the
+[shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
 Keep exactly one registered copy; remove the previous registration before switching.
