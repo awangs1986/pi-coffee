@@ -1,4 +1,5 @@
 import { createLspManifest } from "./optional-tools.js";
+import { PACKAGE_VERSION } from "../version.js";
 import { chatPayload } from "./chat-payload.js";
 import { HARNESS_BLOCK_PATTERN, refreshWorkPayload } from "./work-payload.js";
 import { registerHarnessMode } from "./runtime-mode.js";
@@ -222,9 +223,13 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
     ctx.ui.notify(`Mode: ${mode}; system prompt: ${promptProfileForMode(mode)}; active tools: ${table.active.join(", ")}.`, "info");
   }
   pi.registerCommand("harness", {
-    description: "Show or switch Chat/Work: /harness [chat|work]",
+    description: "Show version or switch Chat/Work: /harness [version|chat|work]",
     handler: async (args, ctx) => {
       const requested = args.trim().toLowerCase();
+      if (requested === "version") {
+        ctx.ui.notify(`pi-coffee-harness ${PACKAGE_VERSION}`, "info");
+        return;
+      }
       if (!requested) {
         ctx.ui.notify(`Mode: ${mode}; system prompt: ${promptProfileForMode(mode)}; active tools: ${pi.getActiveTools().join(", ")}.`, "info");
         return;
