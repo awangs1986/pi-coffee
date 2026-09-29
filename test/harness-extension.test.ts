@@ -9,6 +9,7 @@ import harnessExtension, { createHarnessExtension } from "../src/harness/extensi
 import { MemoryCapabilitySettingsStore } from "../src/capabilities/settings.js";
 import { WORK_TOOLS, CHAT_TOOLS } from "../src/harness/mode.js";
 import { renderHarnessPrompt } from "../src/harness/prompt.js";
+import { PACKAGE_VERSION } from "../src/version.js";
 function createWebExtension(_options: unknown) {return (pi: ExtensionAPI)=>pi.registerTool({
  name:'web_search',label:'Official search fixture',description:'search',parameters:{} as never,
  execute:async()=>({content:[],details:{}}),
@@ -158,6 +159,9 @@ describe("Chat/Work migration", () => {
     createWebExtension({ delegateByDefault: false })(pi.asExtensionApi());
     createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
     await pi.emit("session_start", {});
+    expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash", "git", "search_tools"]);
+    await pi.runCommand("harness", "version");
+    expect(pi.notifications.at(-1)).toEqual({ message: `pi-coffee-harness ${PACKAGE_VERSION}`, level: "info" });
     expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash", "git", "search_tools"]);
     await pi.runCommand("chat", "");
     expect(pi.getActiveTools()).toEqual(["read", "edit", "write", "bash", "web_search"]);

@@ -1,5 +1,8 @@
 # pi-coffee-harness
 
+Version **0.1.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Query the installed version with `/harness version` in Pi.
+
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
 and optional-tool discovery. Tested with Pi 0.87.1 and Node 22.23.2 / 24.19.0.
 

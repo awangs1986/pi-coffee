@@ -1,6 +1,6 @@
 {
   "name": "pi-coffee-harness",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Native Pi Chat/Work harness, development prompt, Git and optional tool discovery",
   "type": "module",
   "keywords": [
@@ -37,7 +37,9 @@
   "files": [
     "dist",
     "README.md",
-    "provenance.json"
+    "provenance.json",
+    "CHANGELOG.md",
+    "docs/releases.md"
   ],
   "repository": {
     "type": "git",
