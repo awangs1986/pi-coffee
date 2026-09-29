@@ -32,8 +32,9 @@ test('release artifacts install together outside the monorepo and report indepen
   await writeFile(join(root,'probe.mjs'), `
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
+import {writeFileSync,readFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
-import {RpcClient} from '@earendil-works/pi-coding-agent';
+import {RpcClient,SessionManager} from '@earendil-works/pi-coding-agent';
 import {HANDOFF_REQUEST} from 'context-handoff/protocol';
 import {currentHarnessMode} from 'pi-coffee-harness';
 assert.equal(typeof HANDOFF_REQUEST,'string');assert.equal(typeof currentHarnessMode,'function');
@@ -42,9 +43,19 @@ const require=createRequire(import.meta.url),names=${JSON.stringify(release.plug
 const extensions=names.flatMap(p=>{const manifest=require(p.name+'/package.json');assert.equal(manifest.version,p.version);return manifest.pi.extensions.map(e=>join(dirname(require.resolve(p.name+'/package.json')),e));});
 const cli=join(process.cwd(),'node_modules/.bin/pi');
 for(const p of names)execFileSync(process.execPath,[cli,'install',dirname(require.resolve(p.name+'/package.json'))],{env:{...process.env,PI_CODING_AGENT_DIR:join(process.cwd(),'agent'),PI_OFFLINE:'1'},stdio:'pipe'});
-const c=new RpcClient({cliPath:join(process.cwd(),'node_modules/.bin/pi'),cwd:join(process.cwd(),'work'),env:{PI_CODING_AGENT_DIR:join(process.cwd(),'agent'),PI_OFFLINE:'1'},args:['--offline','--session-dir',join(process.cwd(),'sessions')]});
+const seeded=SessionManager.create(join(process.cwd(),'work'),join(process.cwd(),'sessions'));
+seeded.appendMessage({role:'user',content:'synthetic branch recovery fixture',timestamp:1});
+seeded.appendMessage({role:'assistant',content:[{type:'text',text:'fixture'}],api:'openai-completions',provider:'fixture',model:'fixture',usage:{input:1,output:1,cacheRead:0,cacheWrite:0,totalTokens:2,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}},stopReason:'stop',timestamp:1});
+seeded.appendCustomEntry('pi-handoff-work',{id:'lsp:interrupted-query',tool:'lsp',status:'running'});
+const branchPoint=seeded.appendMessage({role:'user',content:'branch before query settlement',timestamp:2});
+seeded.appendCustomEntry('pi-handoff-work',{id:'lsp:interrupted-query',tool:'lsp',status:'settled'});
+seeded.branch(branchPoint);
+seeded.appendCustomEntry('fixture-branch',{});
+const observer=join(process.cwd(),'observer.mjs');
+writeFileSync(observer, "import {writeFileSync} from 'node:fs';export default pi=>pi.registerCommand('fixture-branch',{handler:(_,ctx)=>{writeFileSync("+JSON.stringify(join(process.cwd(),'branch.json'))+",JSON.stringify(ctx.sessionManager.getBranch()));}});");
+const c=new RpcClient({cliPath:join(process.cwd(),'node_modules/.bin/pi'),cwd:join(process.cwd(),'work'),env:{PI_CODING_AGENT_DIR:join(process.cwd(),'agent'),PI_OFFLINE:'1'},args:['--offline','-e',observer,'--session',seeded.getSessionFile(),'--session-dir',join(process.cwd(),'sessions')]});
 const events=[];c.onEvent(e=>events.push(e));
-try {await c.start();const commands=await c.getCommands();for(const name of ['harness','lsp','handoff'])assert.equal(commands.filter(c=>c.name===name).length,1);
+try {await c.start();await c.getState();await c.prompt("/fixture-branch");const restored=JSON.parse(readFileSync(join(process.cwd(),'branch.json'),'utf8'));assert.equal(restored.filter(e=>e.type==='custom' && e.customType==='pi-handoff-work' && e.data.id==='lsp:interrupted-query').at(-1)?.data.status,'settled','LSP reconciles a branch with completed/interrupted read-only work');const commands=await c.getCommands();for(const name of ['harness','lsp','handoff'])assert.equal(commands.filter(c=>c.name===name).length,1);
 for(const command of ['harness','lsp','handoff'])await c.prompt('/'+command+' version');
 await c.getState();for(const p of names)assert.ok(events.some(e=>e.type==='extension_ui_request' && String(e.message).includes(p.version)),p.name+' version not reported');
 assert.ok(!events.some(e=>e.type==='extension_error'));console.log('THREE_PLUGIN_INSTALL_AND_VERSION_OK');
