@@ -1,0 +1,10 @@
+{
+  "package": "context-fold",
+  "version": "0.5.1",
+  "resolved": "https://registry.npmjs.org/context-fold/-/context-fold-0.5.1.tgz",
+  "integrity": "sha512-XXOuo+Zi5KKiysaIAjtsGeAD3cLRoNx0AJZczuJpOl8abNpFaWg2oxQJIhAQiK7BD7uxK+4htSsPaDJ7rpOOdw==",
+  "repository": "https://github.com/Middlewatch/context-fold",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 Jake Gardner",
+  "reuseStatus": "Source inspected as design reference only; no upstream source imported in this change."
+}

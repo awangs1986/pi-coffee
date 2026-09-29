@@ -1,0 +1,32 @@
+[
+  {
+    "id": "correction-and-identifier",
+    "oldMode": "legacy",
+    "oldLimit": 90,
+    "newMode": "conservative",
+    "newLimit": 17,
+    "rejected": "recursive-summary-ladder",
+    "label": "Résumé-ID",
+    "identifier": "ZX_729/β",
+    "retryMs": 137,
+    "untrustedRetryMs": 900,
+    "sourceVersion": "4.2.1",
+    "initialState": { "revision": "r1", "tests_at": "r1", "error": "none" },
+    "finalState": { "revision": "r3", "tests_at": "r1", "error": "E_PARSE_42" }
+  },
+  {
+    "id": "revision-and-quoted-suggestion",
+    "oldMode": "relaxed",
+    "oldLimit": 64,
+    "newMode": "strict",
+    "newLimit": 23,
+    "rejected": "rolling-summary-loop",
+    "label": "Case-ID",
+    "identifier": "QK_583/λ",
+    "retryMs": 271,
+    "untrustedRetryMs": 1200,
+    "sourceVersion": "5.0.2",
+    "initialState": { "revision": "r2", "tests_at": "r2", "error": "none" },
+    "finalState": { "revision": "r5", "tests_at": "r4", "error": "E_SCHEMA_07" }
+  }
+]

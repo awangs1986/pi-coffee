@@ -1,0 +1,152 @@
+{
+  "sourceRepository": "http://gitea:3000/awangs/pi-coffee",
+  "sourceCommit": "03ba7ea83e49cf94fab8a2ed317863b0f27be2ad",
+  "sourceBranch": "codex/pi-0-87-upgrade",
+  "files": [
+    {
+      "source": "src/context/handoff.ts",
+      "destination": "src/context/handoff.ts",
+      "sha256": "d7a190101561662834036f1c81f493e573e6ea3da041379ef654a88ce6ecbf94",
+      "kind": "runnable-core",
+      "modifications": "none"
+    },
+    {
+      "source": "src/context/handoff-cli.ts",
+      "destination": "src/context/handoff-cli.ts",
+      "sha256": "9ea13d73b575c4bce6d2c9f3c5c658d8b5b818755c4f38ca0ab8c75a84a4a183",
+      "kind": "runnable-core",
+      "modifications": "none"
+    },
+    {
+      "source": "test/handoff-packet.test.ts",
+      "destination": "test/handoff-packet.test.ts",
+      "sha256": "4dd51bd530cee9a565b37dcc4ad6aec39aa7deb275007679c436a0db23f62530",
+      "kind": "runnable-core",
+      "modifications": "none"
+    },
+    {
+      "source": "src/context/handoff-extension.ts",
+      "destination": "integrations/pi-coffee/reference/src/context/handoff-extension.ts",
+      "sha256": "e63f7e0306f9c0030501a4a3128e8d34295303722785e19ed2d88a22e21538e3",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/context/extension.ts",
+      "destination": "integrations/pi-coffee/reference/src/context/extension.ts",
+      "sha256": "737eceb195b20b42b215b945970c4a4752b195848bdee0452f92b8b78fda21c5",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/context/policy.ts",
+      "destination": "integrations/pi-coffee/reference/src/context/policy.ts",
+      "sha256": "cc16d521bafe993af9c4bce58bf4b0030e5045f2077a4c7a09c72d1820965f4a",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/host/pi-segments.ts",
+      "destination": "integrations/pi-coffee/reference/src/host/pi-segments.ts",
+      "sha256": "d426f8bd84029a05086d5d0ce82997bc490fa60409c5501e814ef3eb5f52b523",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/host/pi-adapter.ts",
+      "destination": "integrations/pi-coffee/reference/src/host/pi-adapter.ts",
+      "sha256": "a439054f37893ce8f4011369a8f65f44e297391afcc18e097cc3b0a2f9a967e0",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/host/agent-adapter.ts",
+      "destination": "integrations/pi-coffee/reference/src/host/agent-adapter.ts",
+      "sha256": "b5c61c5fa5c83a5aa795b2371ff4166201c03d414aa67a7166e7a03a649de85d",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/shared/protocol.ts",
+      "destination": "integrations/pi-coffee/reference/src/shared/protocol.ts",
+      "sha256": "fc215c7efde617a94dcf28d604bb8593634b083866b713099fbc8115bf5cf526",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/harness/runtime-mode.ts",
+      "destination": "integrations/pi-coffee/reference/src/harness/runtime-mode.ts",
+      "sha256": "854e323b9a6a7f0e2c92a5133a0daaecbc5a9ce208ba0d87f41b3d15d12dcd33",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/harness/mode.ts",
+      "destination": "integrations/pi-coffee/reference/src/harness/mode.ts",
+      "sha256": "9f270e43b184382dbee1b23987cd9128960ae837d2e0884a596129051986f734",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "src/pi-extensions.ts",
+      "destination": "integrations/pi-coffee/reference/src/pi-extensions.ts",
+      "sha256": "5c36a98869379a08be4aca7677adb64aca43002b626742b2789e2a8609f09b86",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    },
+    {
+      "source": "test/handoff-rollover.test.ts",
+      "destination": "integrations/pi-coffee/reference/test/handoff-rollover.test.ts",
+      "sha256": "a261f45ea339eb1f5d87005cbf1b88db67049012ddffe69edd8689aabf35bc01",
+      "kind": "coffee-integration-reference",
+      "modifications": "none"
+    }
+  ],
+  "referenceSnapshots": [
+    {
+      "name": "pi-native-compaction-0.87.1",
+      "sourceRepository": "https://github.com/earendil-works/pi",
+      "sourceCommit": "f07218c4d4bbc12bef056a7058c3dd49dfe41abe",
+      "package": "@earendil-works/pi-coding-agent@0.87.1",
+      "license": "MIT",
+      "licenseFile": "integrations/pi-native-compaction/LICENSE",
+      "files": [
+        {
+          "source": "packages/coding-agent/src/core/compaction/compaction.ts",
+          "destination": "integrations/pi-native-compaction/src/core/compaction/compaction.ts",
+          "sha256": "07c92263026e4c7792a64a1097246199dae70c8ecf3abc8ee55971cd1fcfc41b",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/compaction/utils.ts",
+          "destination": "integrations/pi-native-compaction/src/core/compaction/utils.ts",
+          "sha256": "6e9d2c0b6076d5cac5fd444e5381a1fc01da5acf30eb776319a6b562fc42a02c",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/agent-session.ts",
+          "destination": "integrations/pi-native-compaction/src/core/agent-session.ts",
+          "sha256": "e5c020bced4ada5c5e116cbd160f66e111016fc717ae30d79994a45527e7f3d7",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/session-manager.ts",
+          "destination": "integrations/pi-native-compaction/src/core/session-manager.ts",
+          "sha256": "ded5d65112f8666f0e3ae71dab39a302607c29a000745a3d06e00c2103c8f257",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        },
+        {
+          "source": "packages/coding-agent/src/core/messages.ts",
+          "destination": "integrations/pi-native-compaction/src/core/messages.ts",
+          "sha256": "5397e3c96c9504266e4ee8b6e88d5098b3280ee7dbb0c687b74708c62a06c8d4",
+          "kind": "upstream-reference",
+          "modifications": "none"
+        }
+      ]
+    }
+  ]
+}
