@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — 2026-09-29
+
+- Keep independently installed Handoff evidence/reconciliation tools usable in Chat as well as Work. Chat still removes system instructions and unrelated optional tools.
+- Verify the packaged plugin through native Pi RPC; no Handoff execution or automatic compression policy moves into Harness.
+
+
 ## 0.1.1 — 2026-09-29
 
 - Establish an immutable `v0.1.1` release tag and the release procedure.

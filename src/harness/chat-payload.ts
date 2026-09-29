@@ -1,4 +1,4 @@
-import { CHAT_TOOLS } from "./mode.js";
+import { CHAT_TOOLS, HANDOFF_TOOLS } from "./mode.js";
 /** Remove provider system-instruction fields, without rewriting user/tool content. */
 export function chatPayload(payload: unknown): unknown {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
@@ -24,7 +24,7 @@ export function chatPayload(payload: unknown): unknown {
   return result;
 }
 
-const ALLOWED_TOOLS = new Set<string>(CHAT_TOOLS);
+const ALLOWED_TOOLS = new Set<string>([...CHAT_TOOLS, ...HANDOFF_TOOLS]);
 function chatToolsOnly(tools: unknown[]): unknown[] {
   return tools.flatMap(tool => {
     if (!tool || typeof tool !== "object") return [tool];

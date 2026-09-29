@@ -1,6 +1,6 @@
 # Versioning and releases
 
-Current version: **0.1.1**. The Git tag is **v0.1.1**.
+Current version: **0.1.2**. The Git tag is **v0.1.2**.
 
 Harness and LSP have independent version sequences. Neither version is the Pi
 engine version or the Server release version. `package.json` is authoritative;
@@ -36,8 +36,8 @@ Build a pinned tag before installing its directory; this also handles LSP's
 TypeScript build requirement:
 
 ```sh
-git clone --branch v0.1.1 --depth 1 https://github.com/awangs1986/pi-coffee-harness.git pi-coffee-harness-0.1.1
-cd pi-coffee-harness-0.1.1
+git clone --branch v0.1.2 --depth 1 https://github.com/awangs1986/pi-coffee-harness.git pi-coffee-harness-0.1.2
+cd pi-coffee-harness-0.1.2
 npm ci
 npm run check
 pi install "$PWD"

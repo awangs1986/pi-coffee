@@ -26,6 +26,7 @@ import { createWebAccessManifest, createWebSearchManifest } from "../extensions/
 import {
   WORK_TOOLS,
   CHAT_TOOLS,
+  HANDOFF_TOOLS,
   promptProfileForMode,
   resolveToolTable,
   toolsForMode,
@@ -110,7 +111,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
 
   // Mode policy lives in Harness. Native subagent schemas and execution stay upstream.
   pi.on("tool_call", event => {
-    if (mode === "chat" && !(CHAT_TOOLS as readonly string[]).includes(event.toolName)) {
+    if (mode === "chat" && !([...CHAT_TOOLS, ...HANDOFF_TOOLS] as readonly string[]).includes(event.toolName)) {
       return { block: true, reason: "This tool is unavailable to the model in Chat; select Work." };
     }
   });

@@ -1,6 +1,7 @@
 /** Product modes and their exact resident tool contracts. */
 export type HarnessMode = "chat" | "work";
 export const CHAT_TOOLS = ["read", "edit", "write", "bash", "web_search"] as const;
+export const HANDOFF_TOOLS = ["handoff_evidence", "handoff_evidence_search", "handoff_evidence_read", "handoff_reconcile"] as const;
 export const WORK_TOOLS = ["read", "edit", "write", "bash", "git", "search_tools"] as const;
 export type HarnessToolName = (typeof CHAT_TOOLS)[number] | (typeof WORK_TOOLS)[number];
 
@@ -19,11 +20,11 @@ export function resolveToolTable(mode: HarnessMode, available: Iterable<string>)
   if (mode === "work" && registered.has("recall_folded")) active.push("recall_folded");
   if (mode === "work") {
     // The official loader owns activation of the delegation schema; no Coffee proxy.
-    for (const name of ["subagents_enable", "bg_wait", "subagent_supervisor",
-      "handoff_evidence", "handoff_evidence_search", "handoff_evidence_read", "handoff_reconcile"]) {
+    for (const name of ["subagents_enable", "bg_wait", "subagent_supervisor"]) {
       if (registered.has(name)) active.push(name);
     }
   }
+  for(const name of HANDOFF_TOOLS)if(registered.has(name))active.push(name);
   const missing = desired.filter(name => name !== "web_search" && !registered.has(name));
   return { desired, active, missing, ready: missing.length === 0 };
 }

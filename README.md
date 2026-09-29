@@ -1,6 +1,6 @@
 # pi-coffee-harness
 
-Version **0.1.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.1.2** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
@@ -37,7 +37,7 @@ Do not load this package alongside the old pi-coffee aggregate Harness.
 Optional plugins are installed independently. Their absence never blocks the core
 modes. Installed Web and LSP tools are discovered through Pi's public registry;
 Work activates them through search_tools. Native subagents retain their upstream
-loader, while installed Handoff recovery tools remain usable in Work. Execution,
+loader, while installed Handoff recovery tools remain usable in Work and Chat. Execution,
 credentials, output limits, language-server lifecycle and compression policy belong
 to those plugins.
 
