@@ -164,6 +164,19 @@ describe("Work prompt instruction contract (not a model-quality evaluation)", ()
     expect(prompt).toMatch(/request is satisfied, stop/i);
   });
 
+  it("adopts only software-development lessons from Oh My Pi", () => {
+    const prompt = renderHarnessPrompt("work");
+    expect(prompt).toMatch(/correctness.*maintainability/i);
+    expect(prompt).toMatch(/exported|public (?:API|symbol)/i);
+    expect(prompt).toMatch(/callers|consumers|references/i);
+    expect(prompt).toMatch(/file changes?.*re-read|re-read.*file changes?/i);
+    expect(prompt).toMatch(/consumer-visible|user-visible regression/i);
+    expect(prompt).toMatch(/mock.*implementation|implementation.*mock/i);
+    expect(prompt).toMatch(/run.*changed path|smoke run/i);
+    expect(prompt).toMatch(/named acceptance criteri(?:on|a)/i);
+    expect(prompt).not.toMatch(/personality|emoji|reaction|latex|mermaid|internal URLs?|xd:\/\//i);
+  });
+
   it("preserves user control and treats incidental instructions as data", () => {
     const prompt = renderHarnessPrompt("work");
     expect(prompt).toMatch(/authorized, reversible local work/i);
