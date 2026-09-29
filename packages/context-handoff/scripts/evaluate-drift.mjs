@@ -1,3 +1,4 @@
+import './legacy-cadence-evaluation.mjs';
 // Paid, real Pi conversation evaluation for the frozen D01-D13 fixture.
 // Raw synthetic evidence and credentials must remain outside this repository.
 import { RpcClient } from '@earendil-works/pi-coding-agent';

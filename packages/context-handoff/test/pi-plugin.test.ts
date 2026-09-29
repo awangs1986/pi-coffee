@@ -18,7 +18,7 @@ import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "vitest";
 import { scoreConflictProcedure } from "../scripts/score-conflict-procedure.mjs";
 
-async function fixture(extra?: string, packagePath?: string, flags: string[] = [], reasoning = false, legacyCadence = true) {
+async function fixture(extra?: string, packagePath?: string, flags: string[] = [], reasoning = false) {
   const root = await mkdtemp(join(tmpdir(), "pi-handoff-"));
   const cwd = join(root, "workspace"),
     agent = join(root, "agent");
@@ -200,7 +200,6 @@ async function fixture(extra?: string, packagePath?: string, flags: string[] = [
   };
   const args = [
     "--offline",
-    ...(legacyCadence ? ["--handoff-trigger", "cadence"] : []),
     ...(packagePath
       ? []
       : ["--no-extensions", "--extension", resolve("src/plugin/extension.ts")]),
@@ -244,11 +243,23 @@ const handoffs = (entries: any[]) =>
   entries.filter(
     (e) => e.type === "compaction" && e.details?.plugin === "pi-handoff",
   );
+const requestHandoff = (c: RpcClient) => c.compact("context-handoff:manual:v1");
 const nativeCompactions = (entries: any[]) =>
   entries.filter((e) => e.type === "compaction" && e.details?.plugin !== "pi-handoff");
 
+it("exposes generation budgets but no plugin-owned scheduling flags", () => {
+  const help = execFileSync(process.execPath, [
+    resolve("node_modules/@earendil-works/pi-coding-agent/dist/cli.js"),
+    "--offline", "--no-extensions", "--extension", resolve("src/plugin/extension.ts"), "--help",
+  ], { encoding: "utf8", env: { ...process.env, PI_OFFLINE: "1" } });
+  expect(help).toContain("--handoff-output-tokens");
+  expect(help).toContain("--handoff-timeout-ms");
+  expect(help).not.toContain("--handoff-trigger");
+  expect(help).not.toContain("--handoff-native-limit");
+});
+
 it('defaults to native automatic compaction and only hands off an explicitly marked manual request in the same session',async()=>{
-  const f=await fixture(undefined,undefined,[],false,false),c=f.client();
+  const f=await fixture(undefined,undefined,[],false),c=f.client();
   try {
     await c.start();await three(c);
     f.control.pressure=true;
@@ -260,16 +271,23 @@ it('defaults to native automatic compaction and only hands off an explicitly mar
     await c.compact('context-handoff:manual:v1');
     const entries=(await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
-    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.2',trigger:'manual'});
+    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.3',trigger:'manual'});
     expect((await c.getState()).sessionId).toBe(before.sessionId);
     expect((await c.getState()).sessionFile).toBe(before.sessionFile);
     expect(entries.filter((e:any)=>e.type==='message' && e.message.role==='user')).toHaveLength(5);
     expect(await readFile(join(f.cwd,'protected.txt'),'utf8')).toBe('keep this exact file');
+    await c.promptAndWait("Keep inspecting after Handoff.", undefined, 15000);
+    await c.compact("Keep the existing task constraints in the native summary.");
+    f.control.pressure = true;
+    await c.promptAndWait("Inspect again without requesting another Handoff.", undefined, 20000);
+    expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
+    expect(nativeCompactions((await c.getEntries()).entries)).toHaveLength(6);
+
   } finally {await c.stop();await f.cleanup();}
 },60000);
 
 it('keeps the old context when an explicit manual Handoff fails instead of reporting native compaction as success',async()=>{
-  const f=await fixture(undefined,undefined,[],false,false),c=f.client();
+  const f=await fixture(undefined,undefined,[],false),c=f.client();
   try {
     await c.start();await c.promptAndWait('Preserve protected.txt and inspect it.',undefined,15000);
     const before=await c.getState();f.control.synthesis=()=>({});
@@ -280,17 +298,17 @@ it('keeps the old context when an explicit manual Handoff fails instead of repor
     expect(entries.some((e:any)=>e.type==='message' && e.message.role==='user')).toBe(true);
   }finally{await c.stop();await f.cleanup();}
 },30000);
-const fallbackNotices = (entries: any[]) =>
+const failureNotices = (entries: any[]) =>
   entries.filter((e) => e.customType === "pi-handoff-error" &&
-    String(e.content).includes("Used one native compaction")).length;
-/** A failed Handoff is visible and replaced by exactly one native summary. */
-async function expectNativeFallback(c: RpcClient) {
+    String(e.content).includes("Handoff stopped")).length;
+/** The caller sees rejection; neither kind of compaction is committed. */
+async function expectHandoffFailure(c: RpcClient) {
   const before = (await c.getEntries()).entries;
-  await c.compact();
+  await expect(requestHandoff(c)).rejects.toThrow();
   const after = (await c.getEntries()).entries;
   expect(handoffs(after)).toHaveLength(handoffs(before).length);
-  expect(nativeCompactions(after)).toHaveLength(nativeCompactions(before).length + 1);
-  expect(fallbackNotices(after)).toBe(fallbackNotices(before) + 1);
+  expect(nativeCompactions(after)).toHaveLength(nativeCompactions(before).length);
+  expect(failureNotices(after)).toBe(failureNotices(before) + 1);
   const errors = after.filter((e) => e.customType === "pi-handoff-error").map((e) => String(e.content));
   if (process.env.DEBUG_HANDOFF) console.log(errors);
   // Pi refuses a second compaction without new history.
@@ -302,19 +320,21 @@ const evidenceStep = (index: number, markers: string[], path = "answer.json") =>
   index < markers.length ? { action: "search_evidence", target: markers[index] }
     : index === markers.length ? { action: "read_evidence" }
     : { action: "write", target: path };
-it("performs the fourth-boundary Handoff in one Pi conversation and automatically continues", async () => {
+it("hands off when the caller requests it and uses the new context on the next prompt", async () => {
   const f = await fixture(),
     c = f.client();
   try {
     await c.start();
     await three(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
-    f.control.pressure = true;
+
     await c.promptAndWait(
       "Inspect protected.txt and continue remaining work.",
       undefined,
       20000,
     );
+    await requestHandoff(c);
+    await c.promptAndWait("Continue the authorized task after the requested Handoff.", undefined, 30000);
     const entries = (await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
     expect(
@@ -324,7 +344,7 @@ it("performs the fourth-boundary Handoff in one Pi conversation and automaticall
       entries.filter(
         (e: any) => e.type === "message" && e.message.role === "user",
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect((await c.getState()).sessionId).toBe(f.id);
     expect(JSON.stringify(f.requests.at(-1))).toContain("Read protected.txt");
     expect(
@@ -335,7 +355,7 @@ it("performs the fourth-boundary Handoff in one Pi conversation and automaticall
     await f.cleanup();
   }
 }, 60000);
-it("restores cadence after failures, restart, model change and branch fork across two cycles", async () => {
+it("accepts caller-selected Handoffs after failure, restart and model change without applying them to a new branch", async () => {
   const f = await fixture();
   let c = f.client();
   try {
@@ -348,18 +368,18 @@ it("restores cadence after failures, restart, model change and branch fork acros
       15000,
     );
     f.control.fail = true;
-    await expect(c.compact()).rejects.toThrow();
+    await expect(requestHandoff(c)).rejects.toThrow();
     f.control.fail = false;
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     await c.stop();
     c = f.client(file);
     await c.start();
     await c.setModel("fixture", "alternate");
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     await three(c);
     await c.promptAndWait("Continue the next step.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(2);
     const first = (await c.getForkMessages())[0];
     await c.fork(first.entryId);
@@ -447,7 +467,7 @@ it("keeps old corrections with verified quotations and rejects invented source e
         ],
       };
     };
-    await c.compact();
+    await requestHandoff(c);
     await c.promptAndWait("Continue authorized work.", undefined, 15000);
     expect(JSON.stringify(f.requests.at(-1))).toContain(
       "Never publish credentials.",
@@ -471,7 +491,7 @@ it("keeps old corrections with verified quotations and rejects invented source e
         },
       ],
     });
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
   } finally {
     await c.stop();
@@ -500,7 +520,7 @@ it("attributes current project facts and invalidates a checkout changed during s
       undefined,
       15000,
     );
-    await c.compact();
+    await requestHandoff(c);
     const synthesis = f.requests.find((r) =>
       r.messages.some((m: any) =>
         String(m.content).startsWith("PI_HANDOFF_SYNTHESIS"),
@@ -518,12 +538,12 @@ it("attributes current project facts and invalidates a checkout changed during s
       entered();
       await gate;
     };
-    const pending = c.compact();
+    const pending = expect(requestHandoff(c)).rejects.toThrow();
     await started;
     await writeFile(join(f.cwd, "protected.txt"), "Changed while preparing");
     release();
     await pending;
-    expect(fallbackNotices((await c.getEntries()).entries)).toBe(1);
+    expect(failureNotices((await c.getEntries()).entries)).toBe(1);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
   } finally {
     release();
@@ -569,7 +589,7 @@ it("searches and reads original evidence through the model tool after two Handof
     for (let i = 0; i < 2; i++) {
       await three(c);
       await c.promptAndWait("Continue inspection.", undefined, 15000);
-      await c.compact();
+      await requestHandoff(c);
     }
     expect(
       handoffs((await c.getEntries()).entries).at(-1).summary,
@@ -656,16 +676,13 @@ it("invalidates preparation for arriving input and delivers the newest correctio
       entered();
       await gate;
     };
-    f.control.pressure = true;
-    const pending = c.promptAndWait(
-      "Continue the authorized task.",
-      undefined,
-      20000,
-    );
+    await c.promptAndWait("Continue the authorized task.", undefined, 15000);
+    const pending = expect(requestHandoff(c)).rejects.toThrow();
     await started;
     await c.followUp("LATEST_CORRECTION: never remove protected.txt.");
     release();
     await pending;
+    await c.promptAndWait("Apply the queued correction.", undefined, 15000);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     const users = (await c.getEntries()).entries.filter(
       (e: any) => e.type === "message" && e.message.role === "user",
@@ -692,8 +709,8 @@ it("respects cancellation during preparation without committing or continuing", 
       entered();
       await gate;
     };
-    f.control.pressure = true;
-    const pending = c.promptAndWait("Continue inspection.", undefined, 20000);
+    await c.promptAndWait("Continue inspection.", undefined, 15000);
+    const pending = expect(requestHandoff(c)).rejects.toThrow();
     await started;
     await c.abort();
     release();
@@ -734,8 +751,9 @@ it("does not autonomously restart work classified completed or stopped", async (
         },
       ],
     });
-    f.control.pressure = true;
+
     await c.promptAndWait("Task completed.", undefined, 15000);
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     expect(
       f.requests
@@ -763,10 +781,10 @@ it("defers Handoff for delegated work until the owning extension reports settlem
       undefined,
       15000,
     );
-    await expect(c.compact()).rejects.toThrow();
+    await expect(requestHandoff(c)).rejects.toThrow();
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     await c.prompt("/settle-probe");
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
   } finally {
     await c.stop();
@@ -774,7 +792,7 @@ it("defers Handoff for delegated work until the owning extension reports settlem
   }
 }, 60000);
 
-it("falls back to one native summary when durable preparation cannot be stored, then retries Handoff", async () => {
+it("rejects unwritable preparation and accepts a later explicit retry", async () => {
   const f = await fixture(),
     c = f.client();
   try {
@@ -782,10 +800,10 @@ it("falls back to one native summary when durable preparation cannot be stored, 
     await three(c);
     await c.promptAndWait("Continue bounded work.", undefined, 15000);
     await chmod(join(f.root, "sessions"), 0o500);
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     await chmod(join(f.root, "sessions"), 0o700);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
   } finally {
     await chmod(join(f.root, "sessions"), 0o700).catch(() => {});
@@ -802,10 +820,8 @@ it("reopens a committed Handoff after process death without replaying its uncert
     await c.start();
     await three(c);
     const file = (await c.getState()).sessionFile!;
-    f.control.pressure = true;
-    await expect(
-      c.promptAndWait("Continue after this checkpoint.", undefined, 15000),
-    ).rejects.toThrow();
+    await c.promptAndWait("Continue after this checkpoint.", undefined, 15000);
+    await expect(requestHandoff(c)).rejects.toThrow();
     await c.stop();
     const count = f.requests.length;
     c = f.client(file);
@@ -813,9 +829,7 @@ it("reopens a committed Handoff after process death without replaying its uncert
     expect((await c.getState()).sessionId).toBe(f.id);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     expect(f.requests).toHaveLength(count);
-    expect(JSON.stringify((await c.getEntries()).entries)).toContain(
-      "Continuation outcome uncertain",
-    );
+    expect((await c.getEntries()).entries.some((e:any)=>e.customType === "pi-handoff-continue")).toBe(false);
     await c.promptAndWait(
       "Inspect existing results before proceeding.",
       undefined,
@@ -834,7 +848,7 @@ it("reports corrupt required state and prevents automatic or prompted execution 
     await c.start();
     await three(c);
     await c.promptAndWait("Continue inspection.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     await c.promptAndWait(
       "Pending known context before restart.",
       undefined,
@@ -848,7 +862,7 @@ it("reports corrupt required state and prevents automatic or prompted execution 
     const count = f.requests.length;
     await c.prompt("Continue work.");
     await c.getState();
-    await expect(c.compact()).rejects.toThrow("Compaction cancelled");
+    await expect(requestHandoff(c)).rejects.toThrow("Compaction cancelled");
     expect(f.requests).toHaveLength(count);
     expect(JSON.stringify((await c.getEntries()).entries)).toContain(
       "Repair Handoff state before submitting new work",
@@ -875,6 +889,7 @@ it("installs the shipped package in clean Pi and continues with original resourc
       "-C",
       packDir,
     ]);
+    expect(await readFile(join(packDir, "package/docs/host-integration.md"), "utf8")).toContain("Host-owned Handoff");
     f = await fixture(undefined, join(packDir, "package"));
     c = f.client();
     await c.start();
@@ -905,12 +920,14 @@ it("installs the shipped package in clean Pi and continues with original resourc
           ],
         };
       };
-      f.control.pressure = true;
+
       await c.promptAndWait(
         "Continue the authorized inspection.",
         undefined,
         20000,
       );
+    await requestHandoff(c);
+    await c.promptAndWait("Continue the authorized task after the requested Handoff.", undefined, 30000);
       expect(JSON.stringify(f.requests.at(-1))).toContain(
         "keep this exact file",
       );
@@ -944,7 +961,7 @@ it("bounds synthesis while preserving older user constraints among large histori
       await c.promptAndWait(`Observation checkpoint ${i}`, undefined, 15000);
     await three(c);
     await c.promptAndWait("Continue the bounded inspection.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     const r = f.requests.find((r) =>
       r.messages.some((m: any) =>
         String(m.content).startsWith("PI_HANDOFF_SYNTHESIS"),
@@ -983,7 +1000,7 @@ it("rejects a tool observation promoted into owner authority despite a valid quo
         ],
       };
     };
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
   } finally {
     await c.stop();
@@ -1012,7 +1029,7 @@ it("rejects an active continuation without attributed next-action authorization"
         ],
       };
     };
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
   } finally {
     await c.stop();
     await f.cleanup();
@@ -1025,7 +1042,7 @@ it("inherits a valid branch checkpoint when the user forks after Handoff", async
     await c.start();
     await three(c);
     await c.promptAndWait("Continue inspection.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     await c.promptAndWait("Branch from this checkpoint.", undefined, 15000);
     const point = (await c.getForkMessages()).at(-1)!;
     await c.fork(point.entryId);
@@ -1060,7 +1077,7 @@ it("invalidates original history changed on disk during preparation", async () =
       entered();
       await gate;
     };
-    const pending = c.compact();
+    const pending = expect(requestHandoff(c)).rejects.toThrow();
     await started;
     const file = (await c.getState()).sessionFile!;
     const original = await readFile(file, "utf8");
@@ -1073,7 +1090,7 @@ it("invalidates original history changed on disk during preparation", async () =
     );
     release();
     await pending;
-    expect(fallbackNotices((await c.getEntries()).entries)).toBe(1);
+    expect(failureNotices((await c.getEntries()).entries)).toBe(1);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
   } finally {
     release();
@@ -1082,7 +1099,7 @@ it("invalidates original history changed on disk during preparation", async () =
   }
 }, 60000);
 
-it("counts automatic native successes and suppresses overflow retry for a completed task", async () => {
+it("leaves threshold and overflow recovery native after any number of prior compactions", async () => {
   const f = await fixture(),
     c = f.client();
   try {
@@ -1115,14 +1132,15 @@ it("counts automatic native successes and suppresses overflow retry for a comple
     await c.promptAndWait("Last inspection checkpoint.", undefined, 15000);
     f.control.overflow = true;
     await c.promptAndWait("Task completed.", undefined, 15000);
-    expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
+    expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
+    expect(nativeCompactions((await c.getEntries()).entries)).toHaveLength(4);
     expect(
       f.requests
         .at(-1)
         .messages.some((m: any) =>
           String(m.content).startsWith("PI_HANDOFF_SYNTHESIS"),
         ),
-    ).toBe(true);
+    ).toBe(false);
   } finally {
     await c.stop();
     await f.cleanup();
@@ -1159,8 +1177,10 @@ it("retains instructions and image history and sends paired tool calls after Han
     ).toHaveLength(1);
     await three(c);
     f.control.tools.push({ name: "read", args: { path: "protected.txt" } });
-    f.control.pressure = true;
+
     await c.promptAndWait("Continue authorized inspection.", undefined, 15000);
+    await requestHandoff(c);
+    await c.promptAndWait("Continue the authorized task after the requested Handoff.", undefined, 30000);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     expect(
       (await c.getEntries()).entries.flatMap((e: any) =>
@@ -1204,7 +1224,7 @@ it("blocks execution after native context persistence fails and recovers the pre
     await three(c);
     await c.promptAndWait("Continue inspection.", undefined, 15000);
     file = (await c.getState()).sessionFile!;
-    await expect(c.compact()).rejects.toThrow();
+    await expect(requestHandoff(c)).rejects.toThrow();
     await chmod(file, 0o600);
     await c.prompt("Inspect recovery status.");
     expect(JSON.stringify(events)).toContain("Repair Handoff state");
@@ -1232,8 +1252,9 @@ it("cancels after context commit without leaving an old continuation queued for 
   try {
     await c.start();
     await three(c);
-    f.control.pressure = true;
+
     await c.promptAndWait("Continue inspection.", undefined, 15000);
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     const count = f.requests.length;
     await c.promptAndWait(
@@ -1260,7 +1281,7 @@ it("rejects a replacement that cannot leave room for the real instructions, tool
     await c.start();
     await three(c);
     await c.promptAndWait("Continue inspection.", undefined, 15000);
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
   } finally {
     await c.stop();
@@ -1281,12 +1302,13 @@ it("loads a source checkout as a Pi package without a prebuilt dist directory", 
     c = f.client();
     await c.start();
     await three(c);
-    f.control.pressure = true;
+
     await c.promptAndWait(
       "Continue inspecting protected.txt.",
       undefined,
       15000,
     );
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
   } finally {
     await c?.stop();
@@ -1294,7 +1316,7 @@ it("loads a source checkout as a Pi package without a prebuilt dist directory", 
     await rm(checkout, { recursive: true, force: true });
   }
 }, 60000);
-it("times out a stalled synthesis and falls back to one native summary", async () => {
+it("times out a stalled synthesis without changing context", async () => {
   const f = await fixture(undefined, undefined, ["--handoff-timeout-ms", "1000"]),
     c = f.client();
   let release = () => {};
@@ -1305,10 +1327,10 @@ it("times out a stalled synthesis and falls back to one native summary", async (
     const gate = new Promise<void>((r) => (release = r));
     f.control.gate = () => gate;
     const start = Date.now();
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(Date.now() - start).toBeLessThan(15000);
     const entries = (await c.getEntries()).entries;
-    expect(nativeCompactions(entries)).toHaveLength(4);
+    expect(nativeCompactions(entries)).toHaveLength(3);
     expect(JSON.stringify(entries)).toContain("Synthesis deadline exceeded (1000 ms)");
   } finally {
     release();
@@ -1326,7 +1348,7 @@ it("reports an installed checkpoint honestly when recovery journal updates remai
     await three(c);
     await c.promptAndWait("Continue inspection.", undefined, 15000);
     const file = (await c.getState()).sessionFile!;
-    await c.compact();
+    await requestHandoff(c);
     await c.stop();
     c = f.client(file);
     await c.start();
@@ -1345,15 +1367,16 @@ it("reports an installed checkpoint honestly when recovery journal updates remai
   }
 }, 60000);
 
-it("uses configured native cadence without handing off immediately after a success", async () => {
- const f=await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c=f.client();
+it("waits for an explicit caller request after a native compaction", async () => {
+ const f=await fixture(undefined, undefined, []), c=f.client();
  try {
   await c.start();
   await c.promptAndWait("Preserve protected.txt. Read protected.txt when requested.", undefined,15000);
   await c.compact();
   expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
-  f.control.pressure=true;
+
   await c.promptAndWait("Read protected.txt and continue authorized work.",undefined,20000);
+    await requestHandoff(c);
   const entries=(await c.getEntries()).entries;
   expect(handoffs(entries)).toHaveLength(1);
   expect(entries.filter((e:any)=>e.type==="compaction"&&!e.fromHook)).toHaveLength(1);
@@ -1361,13 +1384,14 @@ it("uses configured native cadence without handing off immediately after a succe
  } finally { await c.stop(); await f.cleanup(); }
 },60000);
 
-it("inherits high reasoning and bounded configurable generation budgets at automatic Handoff", async () => {
- const f=await fixture(undefined,undefined,["--handoff-native-limit","1","--handoff-output-tokens","20000","--handoff-timeout-ms","90000"],true), c=f.client();
+it("inherits high reasoning and bounded configurable generation budgets at caller-requested Handoff", async () => {
+ const f=await fixture(undefined,undefined,["--handoff-output-tokens","20000","--handoff-timeout-ms","90000"],true), c=f.client();
  try {
   await c.start();await c.setThinkingLevel("high");
   await c.promptAndWait("Preserve protected.txt. Read protected.txt.",undefined,15000);await c.compact();
-  f.control.pressure=true;
+
   await c.promptAndWait("Read protected.txt and continue.",undefined,20000);
+    await requestHandoff(c);
   const r=f.requests.find(r=>JSON.stringify(r.messages).includes("PI_HANDOFF_SYNTHESIS"));
   expect(r.reasoning_effort).toBe("high");
   expect(r.max_completion_tokens??r.max_tokens).toBe(20000);
@@ -1376,7 +1400,7 @@ it("inherits high reasoning and bounded configurable generation budgets at autom
 },60000);
 
 it("binds concise source references and recovers program-recorded project evidence", async () => {
- const f=await fixture(undefined,undefined,["--handoff-native-limit","1"]),c=f.client();
+ const f=await fixture(undefined,undefined,[]),c=f.client();
  try {
   await writeFile(join(f.cwd,"status.json"),'{"revision":"r3","tests_at":"r1","error":"E_SNAPSHOT_42"}');
   f.control.synthesis=input=>({status:"active",nextAction:"Read protected.txt",claims:[
@@ -1384,7 +1408,8 @@ it("binds concise source references and recovers program-recorded project eviden
    {id:"verify",kind:"uncertainty",text:"Historical tests do not verify r3",refs:["project:status.json"]}
   ]});
   await c.start();await c.promptAndWait("Preserve protected.txt. Read protected.txt.",undefined,15000);await c.compact();
-  f.control.pressure=true;await c.promptAndWait("Read protected.txt and finish pending work.",undefined,20000);
+  await c.promptAndWait("Read protected.txt and finish pending work.",undefined,20000);
+    await requestHandoff(c);
   const h=handoffs((await c.getEntries()).entries)[0];expect(h).toBeDefined();
   const summary=JSON.parse(h.summary);
   expect(summary.state.claims[0].evidence[0].hash).toMatch(/^[a-f0-9]{64}$/);
@@ -1405,11 +1430,12 @@ it.each([
  [[],16384],
  [["--handoff-output-tokens","65536"],32768],
 ] as const)("bounds high generation capacity for flags %j", async (flags, expected) => {
- const f=await fixture(undefined,undefined,["--handoff-native-limit","1",...flags],true),c=f.client();
+ const f=await fixture(undefined,undefined,[...flags],true),c=f.client();
  try {
   await c.start();await c.setThinkingLevel("high");
   await c.promptAndWait("Preserve protected.txt. Read protected.txt.",undefined,15000);await c.compact();
-  f.control.pressure=true;await c.promptAndWait("Read protected.txt.",undefined,20000);
+  await c.promptAndWait("Read protected.txt.",undefined,20000);
+    await requestHandoff(c);
   const r=f.requests.find(r=>JSON.stringify(r.messages).includes("PI_HANDOFF_SYNTHESIS"));
   expect(r.max_completion_tokens??r.max_tokens).toBe(expected);
   const h=handoffs((await c.getEntries()).entries)[0];
@@ -1417,35 +1443,38 @@ it.each([
  }finally{await c.stop();await f.cleanup();}
 },60000);
 
-it("reports deadline failure visibly and uses one native summary instead", async () => {
- const f=await fixture(undefined,undefined,["--handoff-native-limit","1","--handoff-timeout-ms","100"]),c=f.client();
+it("reports deadline failure without substituting native compaction", async () => {
+ const f=await fixture(undefined,undefined,["--handoff-timeout-ms","100"]),c=f.client();
  try {
   await c.start();await c.promptAndWait("Preserve protected.txt. Read protected.txt.",undefined,15000);await c.compact();
-  f.control.gate=()=>new Promise(r=>setTimeout(r,400));f.control.pressure=true;
+  f.control.gate=()=>new Promise(r=>setTimeout(r,400));
   await c.promptAndWait("Read protected.txt and continue authorized work.",undefined,20000);
+  await expectHandoffFailure(c);
   const es=(await c.getEntries()).entries;
   expect(handoffs(es)).toHaveLength(0);
-  expect(es.filter((e:any)=>e.type==="compaction")).toHaveLength(2);
+  expect(es.filter((e:any)=>e.type==="compaction")).toHaveLength(1);
   expect(JSON.stringify(es)).toContain("Synthesis deadline exceeded (100 ms)");
-  expect(fallbackNotices(es)).toBe(1);
+  expect(failureNotices(es)).toBe(1);
   expect(await readFile(join(f.cwd,"protected.txt"),"utf8")).toBe("keep this exact file");
  }finally{await c.stop();await f.cleanup();}
 },60000);
 
-it("performs repeated immediate Handoffs when configured with zero native successes", async () => {
- const f=await fixture(undefined,undefined,["--handoff-native-limit","0"]),c=f.client();
+it("accepts repeated caller requests without any prior native compaction or automatic continuation", async () => {
+ const f=await fixture(undefined,undefined,[]),c=f.client();
  try{
   await c.start();
   await c.promptAndWait("Preserve protected.txt. Read it when requested.",undefined,15000);
-  await c.compact();
+  await requestHandoff(c);
   let es=(await c.getEntries()).entries;
   expect(handoffs(es)).toHaveLength(1);
   expect(nativeCompactions(es)).toHaveLength(0);
-  expect(handoffs(es)[0].details.nativeLimit).toBe(0);
+  expect(handoffs(es)[0].details).not.toHaveProperty("nativeLimit");
+  expect(es.some((e:any)=>e.customType === "pi-handoff-continue")).toBe(false);
+  expect(JSON.stringify(f.requests.at(-1))).toContain("PI_HANDOFF_SYNTHESIS");
   expect((await c.getState()).sessionId).toBe(f.id);
 
   await c.promptAndWait("Continue the authorized inspection.",undefined,15000);
-  await c.compact();
+  await requestHandoff(c);
   es=(await c.getEntries()).entries;
   expect(handoffs(es)).toHaveLength(2);
   expect(nativeCompactions(es)).toHaveLength(0);
@@ -1473,7 +1502,7 @@ it("retains multiple recovered sources across tool calls until the user turn end
 
 it("rejects the preserved label-as-value regression and installs grounded exact values", async () => {
   const sample = JSON.parse(await readFile(resolve("test/fixtures/semantic-regressions.json"), "utf8")).exactValue;
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   let value = sample.rejected;
   f.control.synthesis = input => {
     const source = input.sources.find((s:any) => s.role === "user" && s.text.includes(sample.quote));
@@ -1484,10 +1513,10 @@ it("rejects the preserved label-as-value regression and installs grounded exact 
   try {
     await c.start(); await c.promptAndWait(sample.instruction, undefined, 15000); await c.compact();
     await c.promptAndWait("Keep the authorized task pending.", undefined, 15000);
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     value = sample.expected;
-    await c.compact();
+    await requestHandoff(c);
     const state = JSON.parse(handoffs((await c.getEntries()).entries)[0].summary).state;
     expect(state.exactValues[0]).toMatchObject({field:"identifier", label:"Résumé-ID", value:"ZX_729/β", quote:"Résumé-ID: ZX_729/β"});
     expect(state.exactValues[0].hash).toMatch(/^[a-f0-9]{64}$/);
@@ -1499,7 +1528,7 @@ it("rejects the preserved label-as-value regression and installs grounded exact 
 
 it("rejects pre-Handoff completion of a required post-Handoff search and preserves the pending step", async () => {
   const sample = JSON.parse(await readFile(resolve("test/fixtures/semantic-regressions.json"), "utf8")).procedure;
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   let completed = true;
   f.control.synthesis = input => {
     const owner = input.sources.find((s:any) => s.role === "user" && s.text.includes(sample.instruction));
@@ -1514,11 +1543,13 @@ it("rejects pre-Handoff completion of a required post-Handoff search and preserv
     await c.start(); await c.promptAndWait(sample.instruction, undefined, 15000); await c.compact();
     f.control.tools.push({name:"handoff_evidence",args:{action:"search",query:"ZX_729"}});
     await c.promptAndWait("Retain this earlier observation without treating it as post-Handoff work.", undefined, 15000);
-    await expectNativeFallback(c);
+    await expectHandoffFailure(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     completed = false;
-    f.control.pressure = true;
+
     await c.promptAndWait("Proceed with authorized post-Handoff work.", undefined, 20000);
+    await requestHandoff(c);
+    await c.promptAndWait("Continue the authorized task after the requested Handoff.", undefined, 30000);
     const state = JSON.parse(handoffs((await c.getEntries()).entries)[0].summary).state;
     expect(state.steps[0]).toMatchObject({phase:"after_handoff",status:"pending",completion:[]});
     expect(state.steps[0].authorization.hash).toMatch(/^[a-f0-9]{64}$/);
@@ -1528,7 +1559,7 @@ it("rejects pre-Handoff completion of a required post-Handoff search and preserv
 },60000);
 
 it("requires successful tool evidence for completed steps and retains ordered unfinished work", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   let proof: "assistant" | "failed" | "toolResult" = "assistant";
   let done = false;
   const instruction = "Read protected.txt, then write answer.json. Do not repeat a completed read.";
@@ -1550,10 +1581,10 @@ it("requires successful tool evidence for completed steps and retains ordered un
     await c.start(); await c.promptAndWait(instruction, undefined, 15000); await c.compact();
     f.control.tools.push({name:"read",args:{path:"absent-file"}},{name:"read",args:{path:"protected.txt"}});
     await c.promptAndWait("Collect observations for the authorized read.", undefined, 15000);
-    await expectNativeFallback(c);
-    proof = "failed"; await expectNativeFallback(c);
-    proof = "toolResult"; done = true; await expectNativeFallback(c);
-    done = false; await c.compact();
+    await expectHandoffFailure(c);
+    proof = "failed"; await expectHandoffFailure(c);
+    proof = "toolResult"; done = true; await expectHandoffFailure(c);
+    done = false; await requestHandoff(c);
     const state = JSON.parse(handoffs((await c.getEntries()).entries)[0].summary).state;
     expect(state.steps.map((s:any)=>s.status)).toEqual(["completed","pending"]);
     expect(state.steps[0].completion[0].hash).toMatch(/^[a-f0-9]{64}$/);
@@ -1562,7 +1593,7 @@ it("requires successful tool evidence for completed steps and retains ordered un
 },60000);
 
 it("holds an authorized answer write until post-Handoff search and verified original read", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   const instruction = "After the fourth context maintenance boundary, search handoff_evidence for GUARD_42, read its original user anchor, then write answer.json. Keep protected.txt intact.";
   let anchor = "";
   f.control.synthesis = input => {
@@ -1588,19 +1619,20 @@ it("holds an authorized answer write until post-Handoff search and verified orig
     const hash = createHash("sha256").update(JSON.stringify(owner.message)).digest("hex");
     anchor = `${(await c.getState()).sessionId}/${owner.id}/${hash}`;
     await c.compact();
-    f.control.pressure = true;
+    await c.promptAndWait("Keep the task pending for the requested Handoff.", undefined, 15000);
+    await requestHandoff(c);
     await c.promptAndWait("Continue the authorized task after Handoff.", undefined, 30000);
     const entries = (await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
     expect(await readFile(join(f.cwd,"answer.json"),"utf8")).toBe('{"answer":"GUARD_42"}');
     const results = entries.filter((e:any)=>e.type==="message" && e.message.role==="toolResult");
-    expect(results.filter((e:any)=>e.message.isError && JSON.stringify(e.message.content).includes("Handoff requires"))).toHaveLength(2);
+    expect(results.filter((e:any)=>e.message.isError && JSON.stringify(e.message.content).includes("Handoff requires"))).toHaveLength(1);
     expect(results.some((e:any)=>e.message.toolName==="handoff_evidence_read" && !e.message.isError)).toBe(true);
   } finally { await c.stop(); await f.cleanup(); }
 }, 60000);
 
 it("requires fresh searches and verified reads of both originals before the first answer write", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "3"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   const markers = ["GUARD_A_42", "GUARD_B_42"];
   const instruction = `After the upcoming Handoff, search handoff_evidence for ${markers[0]} and ${markers[1]}, read both original user anchors, then write answer.json.`;
   let anchorA = "", anchorB = "";
@@ -1646,23 +1678,27 @@ it("requires fresh searches and verified reads of both originals before the firs
     anchorA = anchorFor("SOURCE A"); anchorB = anchorFor("SOURCE B");
     await three(c);
     f.control.tools.push({name:"handoff_evidence_search",args:{query:markers[0]}});
-    f.control.pressure = true;
+
     await c.promptAndWait("Release and complete the authorized task.", undefined, 30000);
+    await requestHandoff(c);
+    await c.promptAndWait("Continue the authorized task after the requested Handoff.", undefined, 30000);
     const entries = (await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
     expect(await readFile(join(f.cwd,"answer.json"),"utf8")).toBe('{"status":"uncertain"}');
     const score = scoreConflictProcedure(entries,markers,["VALUE_A","VALUE_B"]);
-    expect(score.valid).toBe(true);
+    // A new caller prompt permits unrelated reads. An early read cannot satisfy
+    // the protected write: both originals still need fresh searches and verified reads.
+    expect(score).toMatchObject({boundaryPresent:true, recovered:[true,true], answerWrites:1});
     expect(score.blockedAnswerAttempts).toBe(2);
     expect(entries.filter((e:any)=>e.type==="message" && e.message.role==="toolResult" &&
-      e.message.isError && JSON.stringify(e.message.content).includes("Handoff requires"))).toHaveLength(3);
+      e.message.isError && JSON.stringify(e.message.content).includes("Handoff requires"))).toHaveLength(2);
     expect(entries.some((e:any)=>e.type==="message" && e.message.role==="toolResult" &&
       e.message.isError && JSON.stringify(e.message.content).includes("increase limit to 4096"))).toBe(true);
   } finally { await c.stop(); await f.cleanup(); }
 }, 60000);
 
 it("blocks a premature answer write after reopening an unfinished Handoff", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]);
+  const f = await fixture(undefined, undefined, []);
   const instruction = "After the upcoming Handoff, search handoff_evidence for RESTART_42, read its original user anchor, then write answer.json.";
   f.control.synthesis = input => {
     const owner = input.sources.find((s:any) => s.role === "user" && s.text === instruction);
@@ -1681,7 +1717,7 @@ it("blocks a premature answer write after reopening an unfinished Handoff", asyn
     await first.promptAndWait(instruction,undefined,15000);
     await first.compact();
     await first.promptAndWait("Keep the authorized task pending through the next boundary.",undefined,15000);
-    await first.compact();
+    await requestHandoff(first);
     expect(handoffs((await first.getEntries()).entries)).toHaveLength(1);
     await first.stop();
     const file = (await readdir(join(f.root,"sessions"))).find(name => name.endsWith(".jsonl"));
@@ -1723,7 +1759,7 @@ it("blocks a premature answer write after reopening an unfinished Handoff", asyn
         };
         await corrected.compact();
         await corrected.promptAndWait("Continue under the replacement instruction through the next Handoff.",undefined,15000);
-        await corrected.compact();
+        await requestHandoff(corrected);
         expect(handoffs((await corrected.getEntries()).entries)).toHaveLength(2);
       } finally {await corrected.stop();}
     } finally { await resumed.stop(); }
@@ -1731,7 +1767,7 @@ it("blocks a premature answer write after reopening an unfinished Handoff", asyn
 },60000);
 
 it("restores completed paged evidence after restart and follows the current user correction", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]);
+  const f = await fixture(undefined, undefined, []);
   const instruction = "After the upcoming Handoff, search handoff_evidence for PAGED_42, read its original user anchor, then write answer.json.";
   const original = `${instruction}\n${"padding ".repeat(180)}Claim: VALUE_RESTART`;
   f.control.synthesis = input => {
@@ -1751,7 +1787,7 @@ it("restores completed paged evidence after restart and follows the current user
     const owner = (await c.getEntries()).entries.find((e:any)=>e.type==="message" && e.message.role==="user");
     const anchor = `${f.id}/${owner.id}/${createHash("sha256").update(JSON.stringify(owner.message)).digest("hex")}`;
     await c.compact();
-    await c.promptAndWait("Keep this task pending.",undefined,15000); await c.compact();
+    await c.promptAndWait("Keep this task pending.",undefined,15000); await requestHandoff(c);
     await c.stop();
     const file = (await readdir(join(f.root,"sessions"))).find(name=>name.endsWith(".jsonl"))!;
     const session = join(f.root,"sessions",file);
@@ -1774,13 +1810,13 @@ it("restores completed paged evidence after restart and follows the current user
     ],exactValues:[],steps:[]});
     await c.compact();
     await c.promptAndWait("Keep the current correction for the next maintenance boundary.",undefined,15000);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(2);
   } finally {await c.stop(); await f.cleanup();}
 },60000);
 
 it.each([false,true])("validates one bounded exact-value repair without allowing value changes (malicious=%s)", async malicious => {
-  const f = await fixture(undefined,undefined,["--handoff-native-limit","1"]), c = f.client();
+  const f = await fixture(undefined,undefined,[]), c = f.client();
   const instruction = "Code: FIX_42. Read protected.txt and keep its content.";
   f.control.synthesis = input => {
     const owner = input.sources.find((s:any)=>s.role==="user" && s.text===instruction);
@@ -1794,10 +1830,10 @@ it.each([false,true])("validates one bounded exact-value repair without allowing
     await c.start(); await c.promptAndWait(instruction,undefined,15000); await c.compact();
     await c.promptAndWait("The task remains active.",undefined,15000);
     if (malicious) {
-      await expectNativeFallback(c);
+      await expectHandoffFailure(c);
       expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
     } else {
-      await c.compact();
+      await requestHandoff(c);
       const state = handoffs((await c.getEntries()).entries)[0].details.state;
       expect(state.exactValues[0]).toMatchObject({label:"Code",separator:": ",value:"FIX_42",quote:"Code: FIX_42"});
     }
@@ -1808,7 +1844,7 @@ it.each([false,true])("validates one bounded exact-value repair without allowing
 },60000);
 
 it("does not revive evidence ordering when the latest user has stopped the task", async () => {
-  const f = await fixture(undefined,undefined,["--handoff-native-limit","1"]), c = f.client();
+  const f = await fixture(undefined,undefined,[]), c = f.client();
   f.control.synthesis = input => ({status:"stopped",nextAction:"",claims:[
     {id:"stop",kind:"correction",text:"The user cancelled the task.",
       refs:[input.sources.find((s:any)=>s.role==="user" && s.text==="Cancel that task. Do not continue it.").id]}
@@ -1818,14 +1854,14 @@ it("does not revive evidence ordering when the latest user has stopped the task"
     await c.promptAndWait("After the upcoming Handoff, search handoff_evidence for STOP_42, read its original user anchor, then write answer.json.",undefined,15000);
     await c.compact();
     await c.promptAndWait("Cancel that task. Do not continue it.",undefined,15000);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)[0].details.state.status).toBe("stopped");
     await expect(readFile(join(f.cwd,"answer.json"),"utf8")).rejects.toMatchObject({code:"ENOENT"});
   } finally {await c.stop(); await f.cleanup();}
 },60000);
 
 it("repairs a premature completed search to pending without replaying a side effect", async () => {
-  const f = await fixture(undefined,undefined,["--handoff-native-limit","1"],true), c = f.client();
+  const f = await fixture(undefined,undefined,[],true), c = f.client();
   const instruction = "After the upcoming Handoff, search handoff_evidence for TIMING_42, read its original user anchor, then write answer.json.";
   f.control.synthesis = input => {
     const owner = input.sources.find((s:any)=>s.role==="user" && s.text===instruction);
@@ -1845,7 +1881,7 @@ it("repairs a premature completed search to pending without replaying a side eff
     await c.start(); await c.setThinkingLevel("high");
     f.control.tools.push({name:"handoff_evidence_search",args:{query:"TIMING_42"}});
     await c.promptAndWait(instruction,undefined,15000); await c.compact();
-    await c.promptAndWait("Keep the required upcoming search pending.",undefined,15000); await c.compact();
+    await c.promptAndWait("Keep the required upcoming search pending.",undefined,15000); await requestHandoff(c);
     const state = handoffs((await c.getEntries()).entries)[0].details.state;
     expect(state.nextAction).toBe("Search handoff_evidence for TIMING_42");
     expect(state.steps[0]).toMatchObject({status:"pending",phase:"after_handoff",completion:[]});
@@ -1856,7 +1892,7 @@ it("repairs a premature completed search to pending without replaying a side eff
 },60000);
 
 it("guards evidence order from structured steps for a non-English instruction", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   const instruction = "交接之后，先用 handoff_evidence 搜索 标记_甲，读取它的原始用户消息，然后写入 answer.json。";
   let anchor = "", target = "INVENTED_9";
   f.control.synthesis = input => {
@@ -1882,9 +1918,10 @@ it("guards evidence order from structured steps for a non-English instruction", 
     await c.compact();
     await c.promptAndWait("保持任务等待。", undefined, 15000);
     // A guarded search target must occur in the authorizing original message.
-    expect(await expectNativeFallback(c)).toContain("Step target must occur");
+    expect(await expectHandoffFailure(c)).toContain("Step target must occur");
     target = "标记_甲";
-    f.control.pressure = true;
+
+    await requestHandoff(c);
     await c.promptAndWait("继续。", undefined, 30000);
     const entries = (await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
@@ -1897,7 +1934,7 @@ it("guards evidence order from structured steps for a non-English instruction", 
 }, 60000);
 
 it("hands off in a large workspace by inlining mentioned files and listing the rest", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   try {
     for (let d = 0; d < 11; d++) {
       await mkdir(join(f.cwd, `pkg${d}`));
@@ -1909,8 +1946,9 @@ it("hands off in a large workspace by inlining mentioned files and listing the r
     await c.start();
     await c.promptAndWait("Preserve protected.txt. Read notes/keep-42.txt before editing.", undefined, 15000);
     await c.compact();
-    f.control.pressure = true;
+
     await c.promptAndWait("Continue the authorized inspection.", undefined, 20000);
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     const synthesis = f.requests.find(r => JSON.stringify(r.messages).includes("PI_HANDOFF_SYNTHESIS"));
     const input = JSON.parse(synthesis.messages.find((m:any) => m.role === "user").content);
@@ -1923,7 +1961,7 @@ it("hands off in a large workspace by inlining mentioned files and listing the r
 }, 60000);
 
 it("excerpts an oversized owner message instead of stopping and keeps its original recoverable", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   const pasted = `Keep protected.txt. HEAD_MARKER ${"log line ".repeat(12000)} MIDDLE_MARKER ${"log line ".repeat(12000)} TAIL_MARKER`;
   f.control.synthesis = input => {
     const owner = input.sources.find((s:any) => s.role === "user" && s.text.includes("HEAD_MARKER"));
@@ -1937,8 +1975,9 @@ it("excerpts an oversized owner message instead of stopping and keeps its origin
     await c.start();
     await c.promptAndWait(pasted, undefined, 15000);
     await c.compact();
-    f.control.pressure = true;
+
     await c.promptAndWait("Continue the authorized inspection.", undefined, 20000);
+    await requestHandoff(c);
     const entries = (await c.getEntries()).entries;
     expect(entries.filter((e:any) => e.customType === "pi-handoff-error").map((e:any) => e.content)).toEqual([]);
     expect(handoffs(entries)).toHaveLength(1);
@@ -1967,7 +2006,7 @@ it("confirms a committed Handoff on reopen past 8 MiB of history and a torn trai
     await c.start();
     await three(c);
     await c.promptAndWait("Continue inspection.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     await c.promptAndWait("Pending known context before restart.", undefined, 15000);
     const file = (await c.getState()).sessionFile!;
@@ -1990,7 +2029,7 @@ it("confirms a committed Handoff on reopen past 8 MiB of history and a torn trai
 it("recomputes the evidence order after in-session tree navigation", async () => {
   const f = await fixture(
     "export default pi=>{pi.registerCommand('rewind',{description:'Return to the latest Handoff',handler:async(_a,ctx)=>{const h=ctx.sessionManager.getBranch().filter(e=>e.type==='compaction'&&e.details?.plugin==='pi-handoff').at(-1);await ctx.navigateTree(h.id,{summarize:false});}});};",
-    undefined, ["--handoff-native-limit", "1"]);
+    undefined, []);
   const c = f.client();
   const instruction = "After the upcoming Handoff, search handoff_evidence for REWIND_42, read its original user anchor, then write answer.json.";
   f.control.synthesis = input => {
@@ -2009,7 +2048,7 @@ it("recomputes the evidence order after in-session tree navigation", async () =>
     const anchor = `${f.id}/${owner.id}/${createHash("sha256").update(JSON.stringify(owner.message)).digest("hex")}`;
     await c.compact();
     await c.promptAndWait("Keep the task pending.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     f.control.tools.push(
       {name:"handoff_evidence_search",args:{query:"REWIND_42"}},
@@ -2032,14 +2071,14 @@ it("recomputes the evidence order after in-session tree navigation", async () =>
 }, 60000);
 
 it("searches original evidence exactly and keeps previews on character boundaries", async () => {
-  const f = await fixture(undefined, undefined, ["--handoff-native-limit", "1"]), c = f.client();
+  const f = await fixture(undefined, undefined, []), c = f.client();
   const original = "😀" + "x".repeat(79) + "CASE_Marker_7 is the exact identifier.";
   try {
     await c.start();
     await c.promptAndWait(original, undefined, 15000);
     await c.compact();
     await c.promptAndWait("Keep going.", undefined, 15000);
-    await c.compact();
+    await requestHandoff(c);
     expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
     f.control.tools.push(
       {name:"handoff_evidence_search",args:{query:"case_marker_7"}},
@@ -2061,7 +2100,7 @@ it("searches original evidence exactly and keeps previews on character boundarie
 
  it("accepts settled synchronous Coffee Git tools for explicit manual Handoff",async()=>{
   const extra=`import { Type } from ${JSON.stringify(resolve("node_modules/typebox/build/index.mjs"))};export default pi=>pi.registerTool({name:'git',label:'Git',description:'Synchronous Git fixture',parameters:Type.Object({}),execute:async()=>({content:[{type:'text',text:'clean'}],details:{}})});`;
-  const f=await fixture(extra,undefined,[],false,false),c=f.client();
+  const f=await fixture(extra,undefined,[],false),c=f.client();
   try {await c.start();f.control.tools.push({name:"git",args:{}});await c.promptAndWait("Read protected.txt",undefined,15000);
     await c.compact("context-handoff:manual:v1");expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
   }finally{await c.stop();await f.cleanup();}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0-experimental.3 — unreleased
+
+- Give Host full control of plugin enablement and Handoff timing; remove internal native-compaction counting and both scheduling flags.
+- Preserve the public request marker, same-session installation, original-evidence recovery and generation budgets.
+- Remove automatic continuation and native fallback; explicit failures reject, and Host owns retry/resumption decisions.
+- Migrate Pi RPC acceptance to explicit calls; keep historical cadence evaluators from silently running invalid comparisons.
+- Canonical source remains `pi-coffee/packages/context-handoff`; upgrading a consumer or deploying Host is separate.
+
 ## 0.2.0-experimental.2 — 2026-09-29
 
 - Move canonical source to `awangs1986/pi-coffee/packages/context-handoff` and the identical Gitea mirror. Preserve independent package identity, runtime behavior and prior history.
