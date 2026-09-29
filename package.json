@@ -1,6 +1,6 @@
 {
   "name": "context-handoff",
-  "version": "0.1.0",
+  "version": "0.2.0-experimental.1",
   "private": true,
   "description": "Context-handoff: Pi plugin for same-conversation context handoff",
   "type": "module",
@@ -11,13 +11,19 @@
     ".": {
       "types": "./dist/src/plugin/extension.d.ts",
       "import": "./dist/src/plugin/extension.js"
-    }
+    },
+    "./protocol": {
+      "types": "./dist/src/plugin/protocol.d.ts",
+      "import": "./dist/src/plugin/protocol.js"
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "check": "npm run build && npm test",
-    "test:plugin": "vitest run test/pi-plugin.test.ts"
+    "test:plugin": "vitest run test/pi-plugin.test.ts",
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.87.1",
@@ -40,7 +46,9 @@
     "README.md",
     "SPEC.md",
     "docs/plugin-acceptance.md",
-    "docs/plugin-design.md"
+    "docs/plugin-design.md",
+    "CHANGELOG.md",
+    "docs/releases.md"
   ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "0.87.1"

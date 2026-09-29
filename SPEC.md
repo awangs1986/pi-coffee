@@ -1,5 +1,34 @@
 # Context-handoff
 
+## Revision 6 — Manual experimental Handoff (2026-09-29)
+
+Owner-approved; supersedes automatic cadence and fallback requirements below for
+the default product workflow. Tracking: [Issue #2](https://github.com/awangs1986/pi-context-handoff/issues/2).
+
+- Default trigger policy is `manual`. Threshold/overflow events and ordinary native
+  `/compact` remain Pi-owned, regardless of the number of prior compactions.
+- Only an explicit user-confirmed Handoff uses the public
+  `context-handoff:manual:v1` RPC customInstructions marker. `/handoff` provides
+  the equivalent native confirmation; `/handoff version` reports the package version.
+- Preserve the same native session, visible Conversation, workspace, attachments
+  and complete history. Install attributed Task State using the existing plugin,
+  not the historical Coffee P7 session-rollover implementation.
+- Manual Handoff does not restart idle, finished or cancelled work. The next user
+  message continues in the same conversation with the new active context.
+- A failed explicit Handoff cancels that operation and retains the prior active
+  context; do not silently substitute native compaction and report Handoff success.
+- The Web control is named 交接压缩 and requires an experimental notice stating
+  that drift remains possible, and that use after multiple native compactions may
+  help refocus the current project. This is suggested usage, not an efficacy claim.
+- `--handoff-trigger cadence` retains the historical policy solely for explicit
+  research/reproduction. It is not the Web policy or the installed default.
+- Package version, source commit and native compaction schema versions are separate.
+  This release is `0.2.0-experimental.1`; compaction entries record pluginVersion.
+
+The remaining revision 5 text records the historical cadence design and its
+unchanged evidence/continuation mechanisms. Revision 6 takes precedence on triggers,
+manual failure behavior, user confirmation and version management.
+
 Revision 5 — 2026-09-26. Status: implemented on the implementation branch; see docs/plugin-acceptance.md for bounded engineering evidence and remaining semantic limits.
 Revision 5 adds an explicit zero-native cadence for the D arm of the ABCD evaluation; revision 4 owner decisions remain in force.
 Revision 4 adds three owner decisions (visible native fallback, budget degradation instead of stopping, structured step actions); see [Revision 4 owner decisions](#revision-4-owner-decisions-2026-09-26). Where they conflict with earlier text, revision 4 governs.

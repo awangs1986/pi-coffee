@@ -1,10 +1,12 @@
 # Context-handoff
 
-A Pi plugin that defaults to three successful native compactions, then replaces the
-next compaction with an attributed Handoff in the same visible conversation.
-Authorized active work continues automatically. Completed or cancelled work stays
-stopped. Earlier messages and evidence remain available through original-history
-search and bounded reads.
+Version **0.2.0-experimental.1** · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
+
+An experimental Pi plugin for explicit, same-conversation context Handoff.
+Automatic threshold/overflow compaction and ordinary `/compact` use native Pi.
+Use `/handoff` and confirm the experimental notice, or the Coffee Web control
+交接压缩. `/handoff version` reports the installed version. Original history and
+workspace remain intact; this does not establish freedom from semantic drift.
 
 ## Install
 
@@ -16,7 +18,7 @@ pi install /absolute/path/to/Context-handoff
 ```
 
 Pi loads the package's TypeScript extension directly. It is a plugin, with no Skill
-or Coffee Host prerequisite. Installing enables it in sessions that load the package.
+or Coffee Host prerequisite. Installing exposes manual Handoff in sessions that load the package; it does not enable automatic Handoff.
 This repository task does not activate it in the owner's production installation.
 
 For a standalone artifact, build and pack, extract the tarball into a permanent
@@ -30,8 +32,8 @@ npm pack
 
 ## Behavior and limits
 
-- The fourth **would-compact** event triggers Handoff; nothing switches immediately
-  after the third success. Manual successes count too.
+- Default `manual` policy only intercepts explicitly marked Handoff requests.
+  Automatic compaction remains native Pi, even after many prior compactions.
 - Original user constraints/corrections are retained as source inputs. A small model state cites source IDs; the program binds hashes, timestamps, authority labels and supersession links. Original history and recorded project observations remain recoverable.
 - Exact-value records separate labels from values and retain quoted originals. Ordered steps preserve pending/completed/uncertain status, required timing and completion evidence. These checks do not prove complete semantic coverage.
 - `handoff_evidence_search` and `handoff_evidence_read` separate original search
@@ -40,9 +42,8 @@ npm pack
 - Source-bound evidence ordering is reconstructed from committed branch history.
   Latest user replacements can release old ordering through a quoted, persisted
   `handoff_reconcile` receipt; unrelated new tasks remain usable.
-- If Handoff preparation fails, the failure is shown and that boundary uses one
-  native compaction; the next boundary retries Handoff. Cancellation, invalid
-  flags, unsettled work and newly arriving input cancel the boundary instead.
+- Failed explicit Handoff is visible and cancelled without a native fallback.
+  Prior active context remains; completed actions are not replayed.
 - Large workspaces and long pasted messages degrade (mentioned files inline,
   long owner messages excerpted with recoverable anchors) rather than stopping.
 - Evidence-order checks use structured step fields (`action`/`target`), not the
@@ -54,7 +55,7 @@ npm pack
 
 ## Project documents
 
-- [Specification](SPEC.md): authoritative revision 5.
+- [Specification](SPEC.md): authoritative revision 6.
 - [Implementation and budgets](docs/plugin-design.md).
 - [Acceptance and TDD evidence](docs/plugin-acceptance.md).
 - [Domain vocabulary](CONTEXT.md).
@@ -80,10 +81,11 @@ and [provenance](provenance.json) remain available.
 ## Configuration
 
 ```sh
-pi --handoff-native-limit 3 --handoff-output-tokens 16384 --handoff-timeout-ms 120000
+pi --handoff-trigger manual --handoff-output-tokens 16384 --handoff-timeout-ms 120000
 ```
 
-Cadence counts committed successes on the active branch; three is a default policy,
+The following cadence settings only apply with explicit `--handoff-trigger cadence`
+for historical research, never in the default manual policy. Cadence counts committed successes on the active branch; three is a default policy,
 not an experimentally established optimum. Set `--handoff-native-limit 0` to use
 Handoff at the first and every later compaction boundary; the default remains 3.
 Numeric flags are validated. Generation
@@ -91,8 +93,8 @@ inherits Pi's current thinking strength, including `high`. Without budget flags,
 reasoning uses up to 16,384 output tokens / 120 seconds and thinking-off uses
 4,096 / 60 seconds. Model/context limits can reduce the output cap. A higher cap
 allows reasoning room; it does not enlarge the concise installed task state.
-Failed generation reports the specific reason and uses one native compaction for
-that boundary. There is no full-generation retry. A parsed but invalid state may receive one
+Failed explicit manual generation reports the specific reason and cancels. Only
+the historical cadence policy uses one native fallback. There is no full-generation retry. A parsed but invalid state may receive one
 restricted field patch within the same deadline, followed by complete validation.
 See [repair and ordering limits](docs/plugin-design.md#bounded-state-repair-and-durable-evidence-ordering).
 

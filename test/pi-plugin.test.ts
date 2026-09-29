@@ -18,7 +18,7 @@ import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "vitest";
 import { scoreConflictProcedure } from "../scripts/score-conflict-procedure.mjs";
 
-async function fixture(extra?: string, packagePath?: string, flags: string[] = [], reasoning = false) {
+async function fixture(extra?: string, packagePath?: string, flags: string[] = [], reasoning = false, legacyCadence = true) {
   const root = await mkdtemp(join(tmpdir(), "pi-handoff-"));
   const cwd = join(root, "workspace"),
     agent = join(root, "agent");
@@ -200,6 +200,7 @@ async function fixture(extra?: string, packagePath?: string, flags: string[] = [
   };
   const args = [
     "--offline",
+    ...(legacyCadence ? ["--handoff-trigger", "cadence"] : []),
     ...(packagePath
       ? []
       : ["--no-extensions", "--extension", resolve("src/plugin/extension.ts")]),
@@ -245,6 +246,40 @@ const handoffs = (entries: any[]) =>
   );
 const nativeCompactions = (entries: any[]) =>
   entries.filter((e) => e.type === "compaction" && e.details?.plugin !== "pi-handoff");
+
+it('defaults to native automatic compaction and only hands off an explicitly marked manual request in the same session',async()=>{
+  const f=await fixture(undefined,undefined,[],false,false),c=f.client();
+  try {
+    await c.start();await three(c);
+    f.control.pressure=true;
+    await c.promptAndWait('Inspect protected.txt and preserve the project.',undefined,20000);
+    expect(handoffs((await c.getEntries()).entries)).toHaveLength(0);
+    expect(nativeCompactions((await c.getEntries()).entries)).toHaveLength(4);
+    await c.promptAndWait('Prepare to refocus on protected.txt.',undefined,15000);
+    const before=await c.getState();
+    await c.compact('context-handoff:manual:v1');
+    const entries=(await c.getEntries()).entries;
+    expect(handoffs(entries)).toHaveLength(1);
+    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.1',trigger:'manual'});
+    expect((await c.getState()).sessionId).toBe(before.sessionId);
+    expect((await c.getState()).sessionFile).toBe(before.sessionFile);
+    expect(entries.filter((e:any)=>e.type==='message' && e.message.role==='user')).toHaveLength(5);
+    expect(await readFile(join(f.cwd,'protected.txt'),'utf8')).toBe('keep this exact file');
+  } finally {await c.stop();await f.cleanup();}
+},60000);
+
+it('keeps the old context when an explicit manual Handoff fails instead of reporting native compaction as success',async()=>{
+  const f=await fixture(undefined,undefined,[],false,false),c=f.client();
+  try {
+    await c.start();await c.promptAndWait('Preserve protected.txt and inspect it.',undefined,15000);
+    const before=await c.getState();f.control.synthesis=()=>({});
+    await expect(c.compact('context-handoff:manual:v1')).rejects.toThrow();
+    const entries=(await c.getEntries()).entries;
+    expect(handoffs(entries)).toHaveLength(0);expect(nativeCompactions(entries)).toHaveLength(0);
+    expect((await c.getState()).sessionId).toBe(before.sessionId);
+    expect(entries.some((e:any)=>e.type==='message' && e.message.role==='user')).toBe(true);
+  }finally{await c.stop();await f.cleanup();}
+},30000);
 const fallbackNotices = (entries: any[]) =>
   entries.filter((e) => e.customType === "pi-handoff-error" &&
     String(e.content).includes("Used one native compaction")).length;
@@ -2023,3 +2058,11 @@ it("searches original evidence exactly and keeps previews on character boundarie
     expect(user(results[1])[0].preview.startsWith("😀x")).toBe(true);
   } finally { await c.stop(); await f.cleanup(); }
 }, 60000);
+
+ it("accepts settled synchronous Coffee Git tools for explicit manual Handoff",async()=>{
+  const extra=`import { Type } from ${JSON.stringify(resolve("node_modules/typebox/build/index.mjs"))};export default pi=>pi.registerTool({name:'git',label:'Git',description:'Synchronous Git fixture',parameters:Type.Object({}),execute:async()=>({content:[{type:'text',text:'clean'}],details:{}})});`;
+  const f=await fixture(extra,undefined,[],false,false),c=f.client();
+  try {await c.start();f.control.tools.push({name:"git",args:{}});await c.promptAndWait("Read protected.txt",undefined,15000);
+    await c.compact("context-handoff:manual:v1");expect(handoffs((await c.getEntries()).entries)).toHaveLength(1);
+  }finally{await c.stop();await f.cleanup();}
+},30000);

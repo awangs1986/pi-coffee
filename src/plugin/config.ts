@@ -5,6 +5,7 @@ export class ConfigError extends Error {}
 
 export function registerPolicy(pi: ExtensionAPI) {
   for (const [name, description] of Object.entries({
+    "handoff-trigger": "manual (default): explicit Handoff only; cadence: historical evaluation policy",
     "handoff-native-limit": "Native successes before Handoff owns the next boundary (default 3)",
     "handoff-output-tokens": "Synthesis output budget, including reasoning (default 16384 with reasoning, 4096 off; bounded by model)",
     "handoff-timeout-ms": "Synthesis deadline (default 120000 with reasoning, 60000 off)",
@@ -16,6 +17,11 @@ export function registerPolicy(pi: ExtensionAPI) {
     return n;
   };
   return {
+    trigger: () => {
+      const value = pi.getFlag("handoff-trigger") ?? "manual";
+      if (value !== "manual" && value !== "cadence") throw new ConfigError("handoff-trigger must be manual or cadence");
+      return value;
+    },
     nativeLimit: () => integer("handoff-native-limit", 3, 0, 100),
     generation: (model: { maxTokens: number; contextWindow: number; reasoning: boolean }) => {
       const thinking = pi.getThinkingLevel();

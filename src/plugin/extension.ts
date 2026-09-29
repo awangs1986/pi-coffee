@@ -1,4 +1,5 @@
 import { registerPolicy, ConfigError } from "./config.js";
+import { HANDOFF_REQUEST, HANDOFF_VERSION } from "./protocol.js";
 import {
   load,
   save,
@@ -37,6 +38,16 @@ export default function handoff(pi: ExtensionAPI) {
   registerEvidence(pi);
   const retiredOrderSources = registerOrderGuard(pi);
   const policy = registerPolicy(pi);
+  pi.registerCommand("handoff", {
+    description: `Experimental manual Handoff ${HANDOFF_VERSION}; /handoff version reports the installed version`,
+    handler: async (args, ctx) => {
+      if (args.trim() === "version") { ctx.ui.notify(`Context-handoff ${HANDOFF_VERSION}`, "info"); return; }
+      if (args.trim()) { ctx.ui.notify("Usage: /handoff [version]", "error"); return; }
+      if (!ctx.isIdle()) { ctx.ui.notify("Wait for active work to settle before Handoff.", "warning"); return; }
+      if (!await ctx.ui.confirm("交接压缩（实验性功能）", "交接压缩不保证避免上下文漂移，适合在多次系统自动压缩后重新聚焦当前项目。自动压缩仍使用 Pi 原生机制。是否继续？")) return;
+      ctx.compact({ customInstructions: HANDOFF_REQUEST });
+    },
+  });
   let inputEpoch = 0;
   let pendingContinuation: { epoch: number; nextAction: string } | undefined;
   let recoveryBlocked = false;
@@ -169,6 +180,9 @@ export default function handoff(pi: ExtensionAPI) {
       "write",
       "edit",
       "bash",
+      // Coffee Git and discovery finish before returning; delegates still require settlement.
+      "git",
+      "search_tools",
       "handoff_evidence",
       "handoff_evidence_search",
       "handoff_evidence_read",
@@ -201,6 +215,9 @@ export default function handoff(pi: ExtensionAPI) {
     }
   });
   pi.on("session_before_compact", async (event, ctx) => {
+    const explicit = event.reason === "manual" && event.customInstructions === HANDOFF_REQUEST;
+    try { if (!explicit && policy.trigger() === "manual") return; }
+    catch (error) { report(error); return { cancel: true }; }
     if (recoveryBlocked) {
       report("Repair Handoff state before compacting");
       return { cancel: true };
@@ -212,7 +229,7 @@ export default function handoff(pi: ExtensionAPI) {
         else if (!e.fromHook) count++;
       }
     try {
-      if (count < policy.nativeLimit()) return;
+      if (!explicit && count < policy.nativeLimit()) return;
       assertSettled(ctx.sessionManager.getBranch());
       const epoch = inputEpoch,
         leaf = ctx.sessionManager.getLeafId(),
@@ -367,6 +384,8 @@ export default function handoff(pi: ExtensionAPI) {
           tokensBefore: event.preparation.tokensBefore,
           details: {
             plugin: "pi-handoff",
+            pluginVersion: HANDOFF_VERSION,
+            trigger: explicit ? "manual" : "cadence",
             version: 1,
             state,
             generation: { ...generation, usage: response.usage },
@@ -382,7 +401,7 @@ export default function handoff(pi: ExtensionAPI) {
         },
       };
     } catch (error) {
-      if (event.signal.aborted || recoveryBlocked || error instanceof Deferral || error instanceof ConfigError) {
+      if (explicit || event.signal.aborted || recoveryBlocked || error instanceof Deferral || error instanceof ConfigError) {
         report(error);
         return { cancel: true };
       }
