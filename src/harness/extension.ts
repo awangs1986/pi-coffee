@@ -1,5 +1,6 @@
 import { createLspManifest } from "./optional-tools.js";
 import { chatPayload } from "./chat-payload.js";
+import { HARNESS_BLOCK_PATTERN, refreshWorkPayload } from "./work-payload.js";
 import { registerHarnessMode } from "./runtime-mode.js";
 import type { ExtensionAPI, ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -45,7 +46,6 @@ const VERIFY_ENTRY = "pi-coffee-verify-state";
 const CAPABILITY_ENTRY = "pi-coffee-capability-state";
 const BLOCK_START = "<pi_coffee_harness>";
 const BLOCK_END = "</pi_coffee_harness>";
-const BLOCK_PATTERN = /(?:\n\n)?<pi_coffee_harness>[\s\S]*?<\/pi_coffee_harness>/g;
 
 interface HarnessSessionState {
   version: 2;
@@ -380,7 +380,13 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
       pi.setActiveTools([...resolveToolTable(mode, pi.getAllTools().map(tool => tool.name)).active]);
       return chatPayload(event.payload);
     }
-    return undefined;
+    try {
+      return refreshWorkPayload(event.payload, workPromptBlock());
+    } catch (error) {
+      ctx.abort();
+      ctx.ui.notify(`Work prompt unavailable: ${errorMessage(error)}`, "error");
+      return;
+    }
   });
 
   pi.on("before_agent_start", (event, ctx) => {
@@ -394,6 +400,20 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
       pi.setActiveTools([...table.active]);
       return { systemPrompt: "" };
     }
+    try {
+      const block = workPromptBlock();
+      const base = event.systemPrompt.replace(HARNESS_BLOCK_PATTERN, "").trimEnd();
+      return { systemPrompt: base.length === 0 ? block : `${base}\n\n${block}` };
+    } catch (error) {
+      // Pi creates its run controller after this hook. Revalidate at the
+      // provider boundary too, so a failed render cannot send an empty Work prompt.
+      ctx.abort();
+      ctx.ui.notify(`Work prompt unavailable: ${errorMessage(error)}`, "error");
+      return { systemPrompt: "" };
+    }
+  });
+
+  function workPromptBlock(): string {
     const active = pi.getActiveTools();
     const runtime = [
       `Active harness mode: ${mode}.`,
@@ -406,18 +426,9 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
         "Shared/default branch merge, force-push, remote deletion, and publication remain scoped to explicit user intent.",
       ] : []),
     ].join("\n");
-    let prompt: string;
-    try {
-      prompt = renderHarnessPrompt("work", active);
-    } catch (error) {
-      ctx.abort();
-      ctx.ui.notify(`Work prompt unavailable: ${errorMessage(error)}`, "error");
-      return { systemPrompt: "" };
-    }
-    const block = `${BLOCK_START}\n${prompt}\n\n## Runtime harness state\n\n${runtime}\n${BLOCK_END}`;
-    const base = event.systemPrompt.replace(BLOCK_PATTERN, "").trimEnd();
-    return { systemPrompt: base.length === 0 ? block : `${base}\n\n${block}` };
-  });
+    const prompt = renderHarnessPrompt("work", active);
+    return `${BLOCK_START}\n${prompt}\n\n## Runtime harness state\n\n${runtime}\n${BLOCK_END}`;
+  }
 }
 
 function createSearchToolsTool(

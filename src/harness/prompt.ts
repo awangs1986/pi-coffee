@@ -23,12 +23,6 @@ export function renderHarnessPrompt(profile: HarnessPromptProfile = "work", acti
   }
   const rendered = pieces.join("\n\n");
 
-  if (rendered.length === 0) {
-    throw new Error(`Harness prompt '${profile}' is empty`);
-  }
-  if (/\{\{[^}]+\}\}/.test(rendered)) {
-    throw new Error(`Harness prompt '${profile}' contains an unresolved marker`);
-  }
   const bytes = Buffer.byteLength(rendered, "utf8");
   if (bytes > MAX_WORK_PROMPT_BYTES) {
     throw new Error(`Harness prompt '${profile}' exceeds ${MAX_WORK_PROMPT_BYTES} UTF-8 bytes (${bytes})`);
@@ -39,7 +33,12 @@ export function renderHarnessPrompt(profile: HarnessPromptProfile = "work", acti
 function readPrompt(fileName: string): string {
   const sourcePath = fileURLToPath(new URL(`./prompts/${fileName}`, import.meta.url));
   const source = readFileSync(sourcePath, "utf8");
-  return stripAuthorComments(source).replace(/\r\n/g, "\n").trim();
+  const rendered = stripAuthorComments(source).replace(/\r\n/g, "\n").trim();
+  if (rendered.length === 0) throw new Error(`Harness prompt '${fileName}' is empty`);
+  if (/\{\{[^}]+\}\}/.test(rendered)) {
+    throw new Error(`Harness prompt '${fileName}' contains an unresolved marker`);
+  }
+  return rendered;
 }
 
 /** Remove source-control metadata before prompt text reaches the model. */
