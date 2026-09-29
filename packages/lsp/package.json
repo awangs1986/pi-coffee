@@ -1,6 +1,6 @@
 {
   "name": "pi-coffee-lsp",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Pi package: language-server tool, automatic diagnostics after edits, read-only coffee-lsp CLI and Skill (adapted from oh-my-pi)",
   "type": "module",
   "keywords": [
