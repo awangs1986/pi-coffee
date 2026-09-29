@@ -76,10 +76,10 @@ it("installs a standalone tarball through Pi and restores modes with native opti
     // A separate native package registers tools later than Harness, with no private imports.
     const optional = join(root, "optional"); await mkdir(optional);
     await writeFile(join(optional, "package.json"), JSON.stringify({ name: "fixture-optional", version: "1.0.0", type: "module", pi: { extensions: ["./index.js"] } }));
-    await writeFile(join(optional, "index.js"), `export default function(pi){for(const name of ['lsp','web_search'])pi.registerTool({name,label:name,description:name,parameters:{type:'object',properties:{}},async execute(){return {content:[{type:'text',text:'fixture'}],details:{}}}});pi.on('before_agent_start',()=>{const q={};pi.events.emit('pi-coffee:harness-mode:query:v1',q);if(q.mode==='chat')pi.setActiveTools([...new Set([...pi.getActiveTools(),'lsp'])])})}`);
+    await writeFile(join(optional, "index.js"), `export default function(pi){for(const name of ['lsp','web_search','handoff_evidence_read'])pi.registerTool({name,label:name,description:name,parameters:{type:'object',properties:{}},async execute(){return {content:[{type:'text',text:'fixture'}],details:{}}}});pi.on('before_agent_start',()=>{const q={};pi.events.emit('pi-coffee:harness-mode:query:v1',q);if(q.mode==='chat')pi.setActiveTools([...new Set([...pi.getActiveTools(),'lsp'])])})}`);
     execFileSync(process.execPath, [cli, "install", optional], { cwd: root, env, stdio: "pipe" });
     c = await start(); await c.promptAndWait("chat optional", undefined, 15000);
-    expect(names()).toEqual([...chat, "web_search"].sort());
+    expect(names()).toEqual([...chat, "web_search", "handoff_evidence_read"].sort());
     expect(requests.at(-1).messages.some((m: any) => ["system", "developer"].includes(m.role))).toBe(false);
     await c.prompt("/work");
     await c.promptAndWait("fixture discover", undefined, 15000);
