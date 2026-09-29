@@ -1,6 +1,6 @@
 # Independent harness releases
 
-Current version: **0.1.3**. Immutable tag: **harness/v0.1.3** in
+Current version: **0.1.4**. Immutable tag: **harness/v0.1.4** in
 [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee).
 
 `package.json` owns this plugin's version; its lockfile must agree. Versions are

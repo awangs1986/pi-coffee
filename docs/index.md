@@ -11,3 +11,5 @@
 - Web/Host implementation, consumed pins and deployed release: [Server index](https://github.com/awangs1986/pi-coffee-server/blob/main/docs/index.md).
 
 Current consolidation tracking: [GitHub Pi #1](https://github.com/awangs1986/pi-coffee/issues/1).
+
+Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffee/issues/3), validating Pi 0.99.1.

@@ -7,7 +7,8 @@ it("packs Harness independently without bundled optional engines or private pack
   const manifest = JSON.parse(readFileSync(`${cwd}/package.json`, "utf8"));
   expect(manifest.name).toBe("pi-coffee-harness");
   expect(manifest.pi.extensions).toEqual(["./dist/harness/extension.js"]);
-  expect(Object.keys(manifest.dependencies)).toEqual(["typebox"]);
+  expect(Object.keys(manifest.dependencies)).toEqual([]);
+  expect(manifest.peerDependencies.typebox).toBe("*");
   const [pack] = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--ignore-scripts", "--json"], { cwd, encoding: "utf8" }));
   const files: string[] = pack.files.map((file: { path: string }) => file.path);
   expect(files).toContain("dist/harness/prompts/software-development.md");

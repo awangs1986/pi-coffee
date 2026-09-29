@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 — 2026-09-29
+
+- Validate native Pi 0.99.1 with the complete plugin and installed-package checks.
+- Update the pinned development runtime and supported installation guidance.
+- Declare host-provided typebox as a peer to avoid duplicate runtime modules.
+
 ## 0.1.3 — 2026-09-29
 
 - Move canonical source to `awangs1986/pi-coffee/packages/harness` and the identical Gitea mirror. Preserve independent package identity, runtime behavior and prior history.
