@@ -1,0 +1,62 @@
+{
+  "name": "pi-coffee-harness",
+  "version": "0.1.2",
+  "description": "Native Pi Chat/Work harness, development prompt, Git and optional tool discovery",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "harness"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/harness/extension.js"
+    ]
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/harness/public.d.ts",
+      "import": "./dist/harness/public.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "typebox": "1.3.7"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.87.1 <0.88.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "provenance.json",
+    "CHANGELOG.md",
+    "docs/releases.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/awangs1986/pi-coffee-harness.git"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "test:package": "vitest run --config vitest.package.config.ts",
+    "check": "npm run build && npm test && npm run test:package",
+    "prepare": "npm run build",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.87.1",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

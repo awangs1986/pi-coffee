@@ -1,0 +1,12 @@
+{
+  "sourceRepository": "https://github.com/awangs1986/pi-coffee",
+  "sourceCommit": "a1c4e4acc88ffd774a09598f1cbd67337ab9522e",
+  "runtimeCommit": "83612519ea0a110e4ad9920774ee15b12dfabefa",
+  "sourcePaths": [
+    "src/harness",
+    "src/capabilities",
+    "src/extensions/web-access/capability.ts",
+    "packages/pi-coffee-harness"
+  ],
+  "extraction": "Harness runtime source copied unchanged. Repository build, tests and documentation adapted for independent maintenance. No Host, optional plugin executors or credentials included."
+}
