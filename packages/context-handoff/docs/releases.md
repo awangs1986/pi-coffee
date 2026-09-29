@@ -1,6 +1,7 @@
 # Independent context-handoff releases
 
-Current version: **0.2.0-experimental.2**. Immutable tag: **context-handoff/v0.2.0-experimental.2** in
+Working version: **0.2.0-experimental.3** (unreleased). Intended immutable tag after
+release acceptance: **context-handoff/v0.2.0-experimental.3** in
 [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee).
 
 `package.json` owns this plugin's version; its lockfile must agree. Versions are
@@ -22,3 +23,10 @@ ownership must survive native RPC timeout/cancellation. Automatic compaction rem
 native Pi. Version 0.1.0 used automatic cadence: restoring it requires an explicit
 policy decision; disabling Handoff preserves the native Pi fallback without that
 policy change. Unknown asynchronous tools still require documented settlement.
+
+## Migration from experimental.2
+
+Remove `--handoff-trigger` and `--handoff-native-limit` from launch arguments. Host
+uses the unchanged `context-handoff/protocol` API and verifies the installed package
+version in the committed result. Move any invocation schedule to Host. No automatic
+continuation or native fallback is provided by the plugin. See [Host integration](host-integration.md).

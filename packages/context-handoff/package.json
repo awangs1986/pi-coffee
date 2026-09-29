@@ -1,6 +1,6 @@
 {
   "name": "context-handoff",
-  "version": "0.2.0-experimental.2",
+  "version": "0.2.0-experimental.3",
   "private": true,
   "description": "Context-handoff: Pi plugin for same-conversation context handoff",
   "type": "module",
@@ -47,6 +47,7 @@
     "SPEC.md",
     "docs/plugin-acceptance.md",
     "docs/plugin-design.md",
+    "docs/host-integration.md",
     "CHANGELOG.md",
     "docs/releases.md"
   ],

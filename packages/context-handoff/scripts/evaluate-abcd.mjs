@@ -1,3 +1,4 @@
+import './legacy-cadence-evaluation.mjs';
 // One isolated, real-Pi arm for the ABCD 250k evaluation.
 // Synthetic transcripts, provider captures, generated handoffs and credentials
 // stay outside Git. The API key is held only by this parent-side proxy.
