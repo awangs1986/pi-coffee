@@ -277,9 +277,9 @@ describe("Chat/Work session and capability boundaries", () => {
     const pi = setup(); await pi.emit("session_start", {});
     const examples = [...renderHarnessPrompt("work").matchAll(/search_tools\((\{[^\n]*?\})\)/g)].map(m => JSON.parse(m[1]));
     for (const input of examples) expect(Check(pi.tools.get("search_tools")!.parameters, input)).toBe(true);
-    expect((await pi.runTool("search_tools", examples[0])).details.hits.some((h: any) => h.id === "web")).toBe(true);
+    expect((await pi.runTool("search_tools", {action:"search",query:"web"})).details.hits.some((h: any) => h.id === "web")).toBe(true);
     expect(pi.getActiveTools()).not.toContain("web_search");
-    expect((await pi.runTool("search_tools", examples[1])).details.ok).toBe(true);
+    expect((await pi.runTool("search_tools", {action:"activate",capability_id:"web"})).details.ok).toBe(true);
     expect(pi.getActiveTools()).toContain("web_search");
     await pi.emit("model_select", {});
     expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);

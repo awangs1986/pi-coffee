@@ -1,6 +1,6 @@
 {
   "name": "pi-coffee-harness",
-  "version": "0.1.4",
+  "version": "0.2.0-rc.1",
   "description": "Native Pi Chat/Work harness, development prompt, Git and optional tool discovery",
   "type": "module",
   "keywords": [
@@ -13,7 +13,9 @@
   },
   "pi": {
     "extensions": [
-      "./dist/harness/extension.js"
+      "./dist/harness/extension.js",
+      "./dist/harness/integration.js",
+      "./dist/context/usage-extension.js"
     ]
   },
   "exports": {
@@ -23,7 +25,9 @@
     },
     "./package.json": "./package.json"
   },
-  "dependencies": {},
+  "dependencies": {
+    "js-tiktoken": "1.0.21"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.99.1 <0.100.0",
     "typebox": "*"
