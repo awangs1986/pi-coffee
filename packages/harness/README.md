@@ -81,3 +81,12 @@ Harness runtime sources were unchanged at extraction; subsequent prompt changes
 are recorded in the acceptance report. This Harness package contains no
 Host, Web gateway, Codex/Claude adapters, LSP daemon or compression implementation.
 This source consolidation does not change production installations.
+
+## Host context presets
+
+With `PI_COFFEE_CONTEXT_CONTROL=1`, `/coffee-context-window 272k|maximum`
+selects a native model context window while idle. The default is the smaller of
+272,000 tokens and the model registry capacity. Maximum restores that capacity.
+Pi owns automatic compaction and its reserve; this setting is not a billing cap.
+The choice persists in a native custom entry once the session is saved.
+Standalone installations without the opt-in retain their native configuration.

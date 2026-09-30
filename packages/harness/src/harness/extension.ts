@@ -1,3 +1,4 @@
+import { registerContextWindow } from './context-window.js';
 import { createLspManifest } from "./optional-tools.js";
 import { PACKAGE_VERSION } from "../version.js";
 import { chatPayload } from "./chat-payload.js";
@@ -90,6 +91,7 @@ export function createHarnessExtension(options: HarnessExtensionOptions = {}): (
 }
 
 function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOptions): void {
+  registerContextWindow(pi);
   let mode: HarnessMode = process.env.PI_COFFEE_INITIAL_MODE==="chat" ? "chat" : "work";
   registerHarnessMode(pi, () => mode);
   let turn = 0;
