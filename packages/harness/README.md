@@ -1,8 +1,8 @@
-> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.1.4`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.2.0-rc.1`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # pi-coffee-harness
 
-Version **0.1.4** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.2.0-rc.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
@@ -21,7 +21,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/harness
 ```
 
-For installation from the built `harness/v0.1.4` release artifact, follow the
+For installation from the built `harness/v0.2.0-rc.1` release artifact, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
@@ -37,10 +37,11 @@ Keep exactly one registered copy; remove the previous registration before switch
 
 Optional plugins are installed independently. Their absence never blocks the core
 modes. Installed Web and LSP tools are discovered through Pi's public registry;
-Work activates them through search_tools. Native subagents retain their upstream
-loader, while installed Handoff recovery tools remain usable in Work and Chat. Execution,
-credentials, output limits, language-server lifecycle and compression policy belong
-to those plugins.
+Work activates LSP through search_tools. Original Web 0.34 uses web_enable;
+native subagents retain their upstream loader, while installed Handoff recovery tools remain usable in Work and Chat. Execution,
+credentials and language-server lifecycle belong to those plugins. Harness bounds
+large web/delegation text results and bridges public settlement events; compression
+policy remains native Pi plus the separately installed experimental Handoff.
 
 The Work addition has a stable software-development body plus guidance for active
 `subagents_enable`, `recall_folded`, and `lsp` tools. Its rendered size therefore
@@ -81,3 +82,26 @@ Harness runtime sources were unchanged at extraction; subsequent prompt changes
 are recorded in the acceptance report. This Harness package contains no
 Host, Web gateway, Codex/Claude adapters, LSP daemon or compression implementation.
 This source consolidation does not change production installations.
+
+## Pi 0.99 integration contract
+
+This candidate supports Pi 0.99.1, upstream pi-web-access 0.34.0 and
+pi-subagents 0.73.1. See [the integration spec](../../docs/spec/pi-099-native-integration.md).
+The original upstream schemas and executors are unchanged. Work exposes native
+loaders; Chat retains its existing search-only web boundary. LSP discovery stays
+in search_tools because Pi tool_search operates on deferred/codemode tools and
+does not implement Coffee readiness and trust policy. Codemode is not enabled.
+
+Large web/delegation text results are limited to 8,000 characters including a
+pointer to original evidence in the durable session's artifacts directory.
+Failed or empty results create no additional Coffee research artifact. Native
+upstream session/cache records are not erased. Evidence shares the session's
+retention lifetime; archiving keeps it. Bounded native responseId retrieval is
+preferred when available. These excerpts are not model-generated summaries.
+
+Only synchronous web workflows are supported: workflow=none, includeContent=false,
+then explicit content retrieval. The upstream background web workflow has no
+verified public settlement API and is rejected before execution. Subagent status
+comes from the upstream public event bus; unavailable status prevents cleanup
+or Handoff from assuming that children have finished. Old Coffee 3/5 scheduling
+limits and private child-launch overrides are retired.

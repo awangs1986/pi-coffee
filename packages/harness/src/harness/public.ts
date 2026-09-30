@@ -6,3 +6,5 @@ export { registerCapabilityManifest } from "../capabilities/registry.js";
 export type { CapabilityRegistration } from "../capabilities/registry.js";
 export type { CapabilityManifest, CapabilityReadiness } from "../capabilities/catalog.js";
 export type { HarnessMode } from "./mode.js";
+
+export type { ContextBreakdown, ContextCategoryId } from "../context/usage-contract.js";

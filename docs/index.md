@@ -13,3 +13,5 @@
 Current consolidation tracking: [GitHub Pi #1](https://github.com/awangs1986/pi-coffee/issues/1).
 
 Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffee/issues/3), validating Pi 0.99.1.
+
+- [Pi 0.99 native integration](spec/pi-099-native-integration.md): candidate package and lifecycle contract.
