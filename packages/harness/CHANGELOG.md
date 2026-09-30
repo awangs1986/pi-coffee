@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 — 2026-09-30
+
+- Add opt-in Host context presets: 272k (bounded by model capacity) and native model maximum.
+- Persist the preset in native custom session entries and retain Pi native automatic compaction.
+- Enable only with PI_COFFEE_CONTEXT_CONTROL=1; standalone Pi behavior is unchanged. No session migration is required.
+
 ## 0.1.4 — 2026-09-29
 
 - Validate native Pi 0.99.1 with the complete plugin and installed-package checks.
