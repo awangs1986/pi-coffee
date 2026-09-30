@@ -12,6 +12,7 @@ export function createWebAccessManifest(
   pi: ExtensionAPI,
   conformedCapabilities: ReadonlySet<string>,
 ): CapabilityManifest | undefined {
+  if (pi.getAllTools().some(t=>t.name==="web_enable")) return undefined;
   const tools = WEB_ACCESS_TOOL_NAMES
     .map((name) => pi.getAllTools().find((tool) => tool.name === name))
     .filter((tool): tool is ToolInfo => tool !== undefined);
@@ -34,6 +35,7 @@ export function createWebAccessManifest(
 
 /** Visibility metadata only: the official extension owns schema and execution. */
 export function createWebSearchManifest(pi: ExtensionAPI): CapabilityManifest | undefined {
+ if(pi.getAllTools().some(t=>t.name==='web_enable'))return undefined;
  const tool=pi.getAllTools().find(tool=>tool.name==='web_search');
  if(!tool)return undefined;
  return {id:'web',kind:'pi-extension',origin:'suite',title:'Official Web search',

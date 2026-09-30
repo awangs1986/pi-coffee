@@ -130,3 +130,20 @@ it("installs a standalone tarball through Pi and restores modes with native opti
     await rm(root, { recursive: true, force: true });
   }
 }, 90000);
+
+it("reports background work through public upstream RPC without changing native schemas", async () => {
+  const root=await mkdtemp(join(tmpdir(),"harness-jobs-"));
+  const fixture=join(root,"upstream.mjs");
+  await writeFile(fixture,`export default pi=>{let active=2;pi.registerCommand('fixture-idle',{handler:()=>{active=0;}});pi.events.on('subagents:rpc:v1:request',r=>pi.events.emit('subagents:rpc:v1:reply:'+r.requestId,{version:1,requestId:r.requestId,success:true,data:{fleet:{version:1,totalActive:active}}}));}`);
+  const c=new RpcClient({cliPath:resolve('node_modules/@earendil-works/pi-coding-agent/dist/cli.js'),cwd:root,env:{PI_CODING_AGENT_DIR:root,PI_OFFLINE:'1'},args:['--offline','-e',resolve('.'),'-e',fixture]});
+  try{
+    await c.start();
+    const commands=await c.getCommands();expect(commands.some(c=>c.name==='coffee-workspace-jobs')).toBe(true);
+    await c.prompt('/coffee-workspace-jobs 00000000-0000-4000-8000-000000000001');
+    const get=async()=> (await c.getEntries()).entries.filter((e:any)=>e.type==='custom' && e.customType==='coffee-workspace-jobs').at(-1) as any;
+    expect((await get())?.data).toMatchObject({known:true,active:2});
+    await c.prompt('/fixture-idle');
+    await c.prompt('/coffee-workspace-jobs 00000000-0000-4000-8000-000000000002');
+    expect((await get())?.data).toMatchObject({known:true,active:0});
+  }finally{await c.stop();await rm(root,{recursive:true,force:true});}
+},20000);

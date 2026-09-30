@@ -6,6 +6,14 @@
 - Persist the preset in native custom session entries and retain Pi native automatic compaction.
 - Enable only with PI_COFFEE_CONTEXT_CONTROL=1; standalone Pi behavior is unchanged. No session migration is required.
 
+
+## 0.2.0-rc.1 — 2026-09-30
+
+- Use native upstream web/subagent loaders and public fleet status.
+- Bound large results with durable evidence pointers; reject unobservable background web workflows.
+- Preserve numerical context attribution in this maintained package after aggregate removal.
+- Update Work guidance; preserve Chat, LSP readiness and manual Handoff boundaries.
+
 ## 0.1.4 — 2026-09-29
 
 - Validate native Pi 0.99.1 with the complete plugin and installed-package checks.
