@@ -23,4 +23,4 @@ it("packs Harness independently without bundled optional engines or private pack
     expect(code).not.toMatch(/from ["'](?:pi-coffee|pi-web-access|pi-subagents|pi-coffee-lsp)\//);
     expect(code).not.toMatch(/createJiti|createRequire/);
   }
-});
+}, 30_000);

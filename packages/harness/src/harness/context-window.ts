@@ -8,7 +8,7 @@ export function registerContextWindow(pi:ExtensionAPI):void {
  async function apply(ctx:ExtensionContext){
   if(applying||!ctx.model)return;
   const original=ctx.modelRegistry.find(ctx.model.provider,ctx.model.id)??ctx.model;
-  const limit=preset==='272k'?Math.min(272000,original.contextWindow):original.contextWindow;
+  const limit=Math.min(preset==='272k'?272000:500000,original.contextWindow);
   if(ctx.model.contextWindow===limit)return;
   applying=true;
   try{if(!await pi.setModel({...ctx.model,contextWindow:limit}))throw new Error('Cannot apply context window without native model authentication');}

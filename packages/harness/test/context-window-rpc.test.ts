@@ -9,8 +9,10 @@ it('applies the Host context preset through native Pi model state and restores i
  const args=['--offline','--no-skills','--no-extensions','-e',resolve('src/harness/extension.ts'),'--session',seeded.getSessionFile()!];
  const make=()=>new RpcClient({cwd:root,cliPath:resolve('node_modules/@earendil-works/pi-coding-agent/dist/cli.js'),provider:'fixture',model:'large',env:{PI_CODING_AGENT_DIR:agent,PI_COFFEE_CONTEXT_CONTROL:'1',PI_OFFLINE:'1'},args});
  let c=make();try{await c.start();expect((await c.getState()).model?.contextWindow).toBe(272000);
- await c.prompt('/coffee-context-window maximum');expect((await c.getState()).model?.contextWindow).toBe(1000000);
- await c.stop();c=make();await c.start();expect((await c.getState()).model?.contextWindow).toBe(1000000);
+ await c.prompt('/coffee-context-window maximum');expect((await c.getState()).model?.contextWindow).toBe(500000);
+ await c.stop();c=make();await c.start();expect((await c.getState()).model?.contextWindow).toBe(500000);
+ await c.setModel('fixture','small');expect((await c.getState()).model?.contextWindow).toBe(128000);
+ await c.setModel('fixture','large');expect((await c.getState()).model?.contextWindow).toBe(500000);
  await c.prompt('/coffee-context-window 272k');await c.setModel('fixture','small');expect((await c.getState()).model?.contextWindow).toBe(128000);
  await c.setModel('fixture','large');expect((await c.getState()).model?.contextWindow).toBe(272000);
  }finally{await c.stop();await rm(root,{recursive:true,force:true});}
