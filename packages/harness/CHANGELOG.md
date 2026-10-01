@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-01
+
+- Cap the Host higher context preset at 500,000 tokens instead of restoring the model maximum. Preserve the 272K default, native model capacity clamp and automatic compaction. Existing maximum selections adopt 500K on restore.
+
 ## 0.2.0 — 2026-09-30
 
 - Add opt-in Host context presets: 272k (bounded by model capacity) and native model maximum.

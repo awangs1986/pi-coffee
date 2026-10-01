@@ -1,8 +1,8 @@
-> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.2.0-rc.1`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.2.1`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # pi-coffee-harness
 
-Version **0.2.0-rc.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.2.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
@@ -21,7 +21,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/harness
 ```
 
-For installation from the built `harness/v0.2.0-rc.1` release artifact, follow the
+For installation from the built `harness/v0.2.1` release artifact, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
@@ -110,7 +110,9 @@ limits and private child-launch overrides are retired.
 
 With `PI_COFFEE_CONTEXT_CONTROL=1`, `/coffee-context-window 272k|maximum`
 selects a native model context window while idle. The default is the smaller of
-272,000 tokens and the model registry capacity. Maximum restores that capacity.
+272,000 tokens and the model registry capacity. The higher preset is fixed at
+500,000 tokens, also clamped to native model capacity. The `maximum` command and
+persisted key remain compatible aliases for this 500K preset.
 Pi owns automatic compaction and its reserve; this setting is not a billing cap.
 The choice persists in a native custom entry once the session is saved.
 Standalone installations without the opt-in retain their native configuration.
