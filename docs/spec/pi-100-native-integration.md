@@ -101,9 +101,12 @@ override repairs native shrinkwrapped dependencies. Track the upstream update.
 
 ## Terminal-only legacy registrations
 
-The local terminal also has pi-antigravity 0.8.0 and pi-lens 4.2.1. Antigravity
+The pre-upgrade terminal had pi-antigravity 0.8.0 and pi-lens 4.2.1. Antigravity
 0.9.0 admits Pi 1.0 and is checked in isolation before replacement. Lens 4.3.0
 still requires Pi TUI 0.84/0.85; a normal Pi 1.0 resolution rejects it with
-ERESOLVE. Do not bypass that contract, or load it alongside Coffee LSP by
-accident. Preserve its prior installation for rollback; selection/retirement is
-a terminal configuration decision, not an additional maintained Coffee plugin.
+ERESOLVE. Coffee LSP is the selected LSP provider. Remove the old Lens package
+and registration with `pi remove npm:pi-lens`; do not retain a second provider
+or bypass Lens's peer contract. The owner confirmed retirement on 2026-10-02,
+and a native Pi RPC check after removal confirmed Coffee LSP 0.4.5 loads once
+without extension errors. Preserve configuration/CLI backups and session data;
+restoring an old configuration must not silently reintroduce Lens.
