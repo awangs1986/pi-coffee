@@ -119,7 +119,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   });
 
   function applyMode(nextMode: HarnessMode, persist = true): ReturnType<typeof resolveToolTable> {
-    const table = resolveToolTable(nextMode, pi.getAllTools().map((tool) => tool.name));
+    const table = resolveToolTable(nextMode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools());
     if (table.ready) {
       pi.setActiveTools([...table.active]);
       mode = nextMode;
@@ -134,7 +134,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   }
 
   function buildCatalog(): CapabilityCatalog {
-    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name));
+    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools());
     epoch = new ExecutionEpoch({ harnessMode: mode }, table.active);
     const next = new CapabilityCatalog({
       epoch,
@@ -369,7 +369,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
 
   pi.on("model_select", () => {
     if (epoch === undefined || !validState) return;
-    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name));
+    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools());
     if (!table.ready) return;
     pi.setActiveTools([...table.active]);
     epoch.rebuild({ harnessMode: mode }, table.active);
@@ -378,14 +378,14 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   });
 
   pi.on("before_provider_request", (event, ctx) => {
-    if (!validState || !resolveToolTable(mode, pi.getAllTools().map(tool => tool.name)).ready) {
+    if (!validState || !resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools()).ready) {
       // before_agent_start precedes Pi's run controller; abort again here at
       // the actual request seam so an invalid restoration cannot send a turn.
       ctx.abort();
       return;
     }
     if (mode === "chat") {
-      pi.setActiveTools([...resolveToolTable(mode, pi.getAllTools().map(tool => tool.name)).active]);
+      pi.setActiveTools([...resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools()).active]);
       return chatPayload(event.payload);
     }
     try {
@@ -398,7 +398,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   });
 
   pi.on("before_agent_start", (event, ctx) => {
-    const table = resolveToolTable(mode, pi.getAllTools().map(tool => tool.name));
+    const table = resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools());
     if (!validState || !table.ready) {
       ctx.abort();
       ctx.ui.notify(`Mode ${mode} is unavailable: missing ${table.missing.join(", ")}.`, "error");

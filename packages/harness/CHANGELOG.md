@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-10-02
+
+- Validate Pi 1.0.0 and retain installed-package compatibility with 0.99.1.
+- Preserve upstream subagent auto/dynamic/eager selection across restoration and model selection; eager-only installations remain callable in Work.
+- Include delegation guidance for either native loader or executor. Chat isolation, context presets and bounded evidence remain unchanged.
+
 ## 0.2.1 — 2026-10-01
 
 - Cap the Host higher context preset at 500,000 tokens instead of restoring the model maximum. Preserve the 272K default, native model capacity clamp and automatic compaction. Existing maximum selections adopt 500K on restore.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0-experimental.4 — 2026-10-02
+
+- Declare reviewed Pi 1.0 compatibility and update development runtime/typebox pins; retain installed-package coverage on 0.99.1.
+- Preserve explicit Host-owned Handoff, native automatic compaction, evidence recovery and visible failure behavior. No new semantic-fidelity claim.
+
 ## 0.2.0-experimental.3 — 2026-09-29
 
 - Validate Pi 0.99.1 and declare host-provided typebox as a peer dependency.

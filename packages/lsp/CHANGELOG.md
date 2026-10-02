@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.5 — 2026-10-02
+
+- Validate the independent CLI/Skill, native extension and lifecycle contracts against Pi 1.0.0; retain installed-package coverage on 0.99.1.
+- Update the development runtime/typebox pins without changing semantic tools or bundled language-server versions. Preserve Node >=22.19 support.
+
 ## 0.4.4 — 2026-09-29
 
 - Report native tool, automatic diagnostics and background warm-up settlement through the optional Handoff event contract. Completed LSP calls no longer block manual Handoff; outstanding queries still defer it. No Handoff dependency or native compaction change.

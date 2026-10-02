@@ -19,7 +19,7 @@ test('packing rejects a missing public protocol even when the Pi source entry ex
  }
 });
 
-test('release artifacts install together outside the monorepo and report independent versions', {timeout:180000}, async()=>{
+for (const piVersion of ['0.99.1', '1.0.0']) test(`release artifacts install together on Pi ${piVersion} outside the monorepo`, {timeout:240000}, async()=>{
  const root=await mkdtemp(join(tmpdir(),'coffee-monorepo-consumer-'));
  try {
   execFileSync(process.execPath,['scripts/pack-plugins.mjs',join(root,'artifacts')],{stdio:'pipe'});
@@ -27,7 +27,7 @@ test('release artifacts install together outside the monorepo and report indepen
   assert.equal(release.plugins.length,3);
   for(const item of release.plugins){assert.equal(item.integrity,'sha512-'+createHash('sha512').update(await readFile(join(root,'artifacts',item.file))).digest('base64'));}
   await writeFile(join(root,'package.json'),JSON.stringify({name:'synthetic-plugin-consumer',private:true,type:'module'}));
-  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund','@earendil-works/pi-coding-agent@0.99.1','typebox@1.3.27',...release.plugins.map(p=>join(root,'artifacts',p.file))],{cwd:root,stdio:'pipe'});
+  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund',`@earendil-works/pi-coding-agent@${piVersion}`,'typebox@1.3.34','pi-web-access@0.35.0','pi-subagents@https://codeload.github.com/nicobailon/pi-subagents/tar.gz/10694a673cb077b4d3ec6a6cfe68acb6c28b83a5',...release.plugins.map(p=>join(root,'artifacts',p.file))],{cwd:root,stdio:'pipe'});
   await mkdir(join(root,'work'));await mkdir(join(root,'agent'));
   await writeFile(join(root,'probe.mjs'), `
 import assert from 'node:assert/strict';
@@ -63,5 +63,8 @@ assert.ok(!events.some(e=>e.type==='extension_error'));console.log('THREE_PLUGIN
 `);
   const output=execFileSync(process.execPath,['probe.mjs'],{cwd:root,encoding:'utf8',timeout:45000});
   assert.match(output,/THREE_PLUGIN_INSTALL_AND_VERSION_OK/);
+  await writeFile(join(root,'native-tools.mjs'),await readFile(new URL('./fixtures/native-tools.mjs',import.meta.url),'utf8'));
+  const tools=execFileSync(process.execPath,['native-tools.mjs'],{cwd:root,encoding:'utf8',timeout:120000});
+  assert.match(tools,/NATIVE_UPSTREAM_ACTIVATION_OK/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
