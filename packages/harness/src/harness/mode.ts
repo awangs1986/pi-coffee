@@ -11,7 +11,7 @@ export function toolsForMode(mode: HarnessMode): readonly string[] {
 export function promptProfileForMode(mode: HarnessMode): "none" | "work" {
   return mode === "chat" ? "none" : "work";
 }
-export function resolveToolTable(mode: HarnessMode, available: Iterable<string>): {
+export function resolveToolTable(mode: HarnessMode, available: Iterable<string>, selected: Iterable<string> = []): {
   desired: readonly string[]; active: string[]; missing: string[]; ready: boolean;
 } {
   const registered = new Set(available);
@@ -19,8 +19,12 @@ export function resolveToolTable(mode: HarnessMode, available: Iterable<string>)
   const active: string[] = desired.filter(name => registered.has(name));
   if (mode === "work" && registered.has("recall_folded")) active.push("recall_folded");
   if (mode === "work") {
-    // The official loader owns activation of the delegation schema; no Coffee proxy.
-    for (const name of ["subagents_enable", "bg_wait", "subagent_supervisor", "web_enable"]) {
+    // Upstream owns eager/auto/dynamic selection. Retain its selected executor;
+    // an eager installation has no loader, so hiding the executor strands it.
+    const nativeSelection = new Set(selected);
+    if (registered.has("subagent") && (!registered.has("subagents_enable") || nativeSelection.has("subagent"))) active.push("subagent");
+    if (registered.has("subagents_enable") && (!nativeSelection.has("subagent") || nativeSelection.has("subagents_enable"))) active.push("subagents_enable");
+    for (const name of ["bg_wait", "subagent_supervisor", "web_enable"]) {
       if (registered.has(name)) active.push(name);
     }
   }

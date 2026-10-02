@@ -7,9 +7,9 @@ export type HarnessPromptProfile = "chat" | "work";
 export const MAX_WORK_PROMPT_BYTES = 12711;
 
 const OPTIONAL_GUIDANCE = [
-  { tool: "subagents_enable", file: "subagents.md" },
-  { tool: "recall_folded", file: "recall-folded.md" },
-  { tool: "lsp", file: "lsp.md" },
+  { tools: ["subagents_enable", "subagent"], file: "subagents.md" },
+  { tools: ["recall_folded"], file: "recall-folded.md" },
+  { tools: ["lsp"], file: "lsp.md" },
 ] as const;
 
 /** Packaged Work body; Chat never loads a system prompt. */
@@ -19,7 +19,7 @@ export function renderHarnessPrompt(profile: HarnessPromptProfile = "work", acti
   const active = new Set(activeTools);
   const pieces = [readPrompt("software-development.md")];
   for (const guidance of OPTIONAL_GUIDANCE) {
-    if (active.has(guidance.tool)) pieces.push(readPrompt(guidance.file));
+    if (guidance.tools.some(tool => active.has(tool))) pieces.push(readPrompt(guidance.file));
   }
   const rendered = pieces.join("\n\n");
 

@@ -17,3 +17,5 @@ Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffe
 - [Pi 0.99 native integration](spec/pi-099-native-integration.md): candidate package and lifecycle contract.
 
 - [Pi #5](https://github.com/awangs1986/pi-coffee/issues/5): Harness 0.2.1 fixed 500K Host context preset.
+
+- [Pi #6](https://github.com/awangs1986/pi-coffee/issues/6): [Pi 1.0 integration and upgrade contract](spec/pi-100-native-integration.md).

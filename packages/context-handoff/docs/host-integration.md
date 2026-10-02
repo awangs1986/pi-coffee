@@ -1,7 +1,7 @@
 # Host-owned Handoff
 
 SPEC revision 7. Canonical source: `pi-coffee/packages/context-handoff`.
-Independent package: `context-handoff`; working version `0.2.0-experimental.3`.
+Independent package: `context-handoff`; current version `0.2.0-experimental.4`.
 Host/Web/native adapters live in pi-coffee-server and consume an immutable artifact.
 
 ## Responsibilities

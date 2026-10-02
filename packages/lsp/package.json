@@ -1,6 +1,6 @@
 {
   "name": "pi-coffee-lsp",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Pi package: language-server tool, automatic diagnostics after edits, read-only coffee-lsp CLI and Skill (adapted from oh-my-pi)",
   "type": "module",
   "keywords": [
@@ -54,9 +54,9 @@
     }
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.99.1",
+    "@earendil-works/pi-coding-agent": "1.0.0",
     "@types/node": "22.19.19",
-    "typebox": "1.3.27",
+    "typebox": "1.3.34",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   },
