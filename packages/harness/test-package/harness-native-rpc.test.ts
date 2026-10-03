@@ -64,6 +64,9 @@ it("installs a standalone tarball through Pi and restores modes with native opti
     expect(commands).not.toContain("websearch");
     await c.promptAndWait("fixture git", undefined, 15000);
     expect(names()).toEqual(work);
+    const gitSchema=requests.at(-1).tools.find((tool:any)=>tool.function.name==='git').function.parameters;
+    expect(Object.keys(gitSchema.properties)).toEqual(['action']);
+    expect(JSON.stringify(gitSchema)).not.toMatch(/worktree|checkpoint|undo|transfer|adopt/);
     expect(JSON.stringify(requests.at(-1))).toContain("Software development");
     expect(results.find(e => e.toolName === "git")?.isError).toBe(false);
     expect(JSON.stringify(results)).toContain("marker.txt");

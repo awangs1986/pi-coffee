@@ -9,3 +9,5 @@
 - P0–P9 candidate: Harness 0.2.0-rc.1 integration; LSP 0.4.4 and Handoff 0.2.0-experimental.3 validated unchanged. Gitea review precedes owner merge and P10 rollout. See docs/spec/pi-099-native-integration.md.
 
 - [GitHub Pi #6](https://github.com/awangs1986/pi-coffee/issues/6): Pi 1.0.0, web-access 0.35.0 and subagents 0.74.0 compatibility. See docs/spec/pi-100-native-integration.md; native model evaluations and Server deployment remain separate.
+
+- [Pi #7](https://github.com/awangs1986/pi-coffee/issues/7): stage Harness 0.3.0 read-only Git schema, selectively reworked from historical Gitea PR #68. Old custom search/automatic handoff branches remain superseded; source review, artifact publication and Server adoption are separate.
