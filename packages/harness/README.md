@@ -1,8 +1,8 @@
-> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.2.2`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.3.0`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # pi-coffee-harness
 
-Version **0.2.2** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Candidate **0.3.0** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
@@ -21,7 +21,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/harness
 ```
 
-For installation from the built `harness/v0.2.2` release artifact, follow the
+After the candidate `harness/v0.3.0` artifact is published, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
@@ -55,6 +55,21 @@ system block is refreshed; other system instructions and user/tool content stay 
 Chat filters optional model tools and system instructions at the outgoing request
 boundary. This is mode selection, not a shell sandbox: Bash and file operations
 retain the VM user's rights. Explicit user slash commands are not intercepted.
+
+## Git tool contract and upgrade from 0.2.x
+
+The model-facing `git` tool accepts only `action: "status" | "diff"`. Status and
+staged/unstaged diff execute in the current task directory with bounded output and
+existing cancellation/deadlines. Git mutations, commits and pushes remain explicit
+Bash workflows; a local commit alone does not publish to the remote repository.
+The Web/Host owns independent task clones and repository synchronization.
+
+Version 0.3.0 removes the old `worktree`, `checkpoint`, `undo`, `transfer` and
+`adopt` actions and their arguments. Existing transcripts remain readable; a stale
+call fails without running Git. Consumers that called these actions must use their
+own explicit Git workflow. This narrows tool discovery, not VM shell permissions.
+Chat tools, LSP, native compaction and Handoff are unchanged. Publication and Server
+adoption are separate; this candidate is not a deployed plugin upgrade.
 
 ## Public API
 

@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import type { ExtensionContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -26,61 +25,26 @@ export interface GitToolOptions {
   maxOutputBytes?: number;
 }
 
-export type GitAction = "status" | "diff" | "checkpoint" | "undo" | "worktree" | "transfer" | "adopt";
+export type GitAction = "status" | "diff";
 
-/**
- * V5-compatible `git` tool surface backed by the User VM's native git.
- *
- * V5's implementation is a managed-snapshot engine coupled to Guard and
- * permission grants.  PI Coffee deliberately has none of those mechanisms:
- * VM snapshots and publishing remain owner-controlled.  Read-only status and
- * diff, plus an explicit native worktree add/list path, are implemented here;
- * snapshot/transfer/adoption actions return a truthful not-supported result.
- */
+/** Read-only inspection of the task's native Git clone. Mutations use explicit Bash workflows. */
 export function createNativeGitTool(options: GitToolOptions): ToolDefinition {
   const maxOutputBytes = options.maxOutputBytes ?? 32_000;
 
   return {
     name: "git",
     label: "Git",
-    description:
-      "Inspect the User VM's native Git workspace (status and diff) and manage native worktrees. " +
-      "Checkpoint, undo, transfer, and adopt are unsupported legacy actions; use native Git and explicit user-authorized workflows.",
+    description: "Inspect Git status and staged/unstaged diffs in the current task directory. Use Bash for explicit Git mutations and publishing.",
     promptSnippet: "Inspect Git status or diff when the task needs repository state.",
     parameters: Type.Object({
-      action: Type.Union([
-        Type.Literal("status"),
-        Type.Literal("diff"),
-        Type.Literal("checkpoint"),
-        Type.Literal("undo"),
-        Type.Literal("worktree"),
-        Type.Literal("transfer"),
-        Type.Literal("adopt"),
-      ]),
-      op: Type.Optional(Type.String({ description: "worktree operation: list | register | register-workspace | lease | release" })),
-      path: Type.Optional(Type.String({ description: "native worktree path" })),
-      worktree_id: Type.Optional(Type.String()),
-      transfer_id: Type.Optional(Type.String()),
-      dry_run: Type.Optional(Type.Boolean()),
+      action: Type.Union([Type.Literal("status"), Type.Literal("diff")]),
     }),
     executionMode: "sequential",
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const cwd = workspaceOf(ctx);
-      const input = params as unknown as {
-        action: GitAction;
-        op?: string;
-        path?: string;
-      };
-      const action = input.action;
+      const action = String((params as unknown as {action: unknown}).action);
       if (action === "status") return status(options.run, cwd, signal, maxOutputBytes);
       if (action === "diff") return diff(options.run, cwd, signal, maxOutputBytes);
-      if (action === "worktree") {
-        return worktree(options.run, cwd, signal, {
-          op: input.op,
-          path: input.path,
-          maxOutputBytes,
-        });
-      }
       return unsupported(action);
     },
   };
@@ -130,33 +94,6 @@ async function diff(
   };
 }
 
-async function worktree(
-  run: NativeCommandRunner,
-  cwd: string,
-  signal: AbortSignal | undefined,
-  input: { op?: string; path?: string; maxOutputBytes: number },
-): Promise<ToolResult> {
-  const op = (input.op ?? "list").toLowerCase();
-  if (op === "list") {
-    const result = await safeRun(run, "git", ["worktree", "list", "--porcelain"], { cwd, signal, timeout: 15_000 });
-    return commandResult("worktree list", result, input.maxOutputBytes, "native-git");
-  }
-  if (op === "register") {
-    const rawPath = input.path?.trim();
-    if (!rawPath) return unsupported("worktree register (path is required)");
-    const target = resolve(cwd, rawPath);
-    const result = await safeRun(run, "git", ["worktree", "add", "--detach", target, "HEAD"], { cwd, signal, timeout: 60_000 });
-    return commandResult(`worktree register ${target}`, result, input.maxOutputBytes, "native-git");
-  }
-  if (op === "register-workspace") {
-    return unsupported("worktree register-workspace (no PI Coffee registry)");
-  }
-  if (op === "lease" || op === "release") {
-    return unsupported(`worktree ${op} (native Git has no lease service)`);
-  }
-  return unsupported(`worktree ${op}`);
-}
-
 async function safeRun(
   run: NativeCommandRunner,
   command: string,
@@ -193,9 +130,10 @@ function commandResult(action: string, result: NativeCommandResult, maxOutputByt
 
 function unsupported(action: string): ToolResult {
   return {
+    isError: true,
     content: [{
       type: "text",
-      text: `not-supported: ${action}. This adapter only provides native status, diff, and basic worktree operations.`,
+      text: `not-supported: ${action}. This tool only provides read-only status and diff. Use Bash for explicit Git mutations and publishing.`,
     }],
     details: { backend: "native-git", status: "not-supported", action },
   };
@@ -208,6 +146,7 @@ function cap(value: string, maxBytes: number): string {
 }
 
 interface ToolResult {
+  isError?: boolean;
   content: [{ type: "text"; text: string }];
   details: Record<string, unknown>;
 }
