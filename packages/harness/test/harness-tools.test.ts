@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createNativeGitTool, type NativeCommandResult, type NativeCommandRunner } from "../src/harness/native-git.js";
 import { WORK_TOOLS, CHAT_TOOLS, resolveToolTable } from "../src/harness/mode.js";
@@ -51,24 +50,16 @@ describe("PI Coffee V5 tool adapters", () => {
     expect(calls.map((call) => call.args[0])).toEqual(["status", "diff", "diff"]);
   });
 
-  it("uses a resolved path for native worktree registration", async () => {
-    let invocation: { command: string; args: string[] } | undefined;
-    const run: NativeCommandRunner = async (command, args) => {
-      invocation = { command, args };
-      return result("Preparing worktree\n");
-    };
-    const tool = createNativeGitTool({ run });
-    await tool.execute(
-      "worktree",
-      { action: "worktree", op: "register", path: "../task-wt" } as never,
-      undefined,
-      undefined,
-      context("/workspace"),
-    );
-    expect(invocation).toEqual({
-      command: "git",
-      args: ["worktree", "add", "--detach", resolve("/workspace", "../task-wt"), "HEAD"],
-    });
+  it("exposes only status/diff and rejects retired actions without running Git", async () => {
+    const calls: string[][] = [];
+    const tool = createNativeGitTool({run: async (_command, args) => {calls.push(args);return result();}});
+    expect(Object.keys((tool.parameters as any).properties)).toEqual(["action"]);
+    expect(JSON.stringify(tool.parameters)).not.toMatch(/worktree|checkpoint|undo|transfer|adopt/);
+    for (const action of ["worktree", "checkpoint", "undo", "transfer", "adopt", "unknown"]) {
+      const response = await tool.execute(action, {action,op:"register",path:"../task-wt"} as never, undefined, undefined, context("/workspace"));
+      expect(response).toMatchObject({isError:true,details:{status:"not-supported"}});
+    }
+    expect(calls).toEqual([]);
   });
 
   it("runs quick verification in the User VM and records a bounded state", async () => {

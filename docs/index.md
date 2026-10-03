@@ -19,3 +19,5 @@ Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffe
 - [Pi #5](https://github.com/awangs1986/pi-coffee/issues/5): Harness 0.2.1 fixed 500K Host context preset.
 
 - [Pi #6](https://github.com/awangs1986/pi-coffee/issues/6): [Pi 1.0 integration and upgrade contract](spec/pi-100-native-integration.md).
+
+- [Historical PR salvage](reviews/legacy-pr-salvage-20261003.md): ancestry/coverage decisions and Harness 0.3.0 candidate; [Pi #7](https://github.com/awangs1986/pi-coffee/issues/7).
