@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — candidate
+
+- Narrow the active Git tool to read-only status/diff and remove retired snapshot/transfer/adoption/worktree actions. Reworked from historical Gitea PR #68 against the current independent plugin.
+- Migration: mutations and publishing use explicit Bash workflows; old action calls fail without executing Git. Native transcripts and task clones require no migration.
+- Keep Chat, official Web/subagents, LSP and Handoff behavior unchanged. No Server pin or running service is updated.
+
 ## 0.2.2 — 2026-10-02
 
 - Validate Pi 1.0.0 and retain installed-package compatibility with 0.99.1.
