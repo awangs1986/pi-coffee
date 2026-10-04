@@ -1,16 +1,16 @@
-> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.3.0`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.3.1`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # pi-coffee-harness
 
-Candidate **0.3.0** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.3.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
-and optional-tool discovery. Validated for this release with Pi 0.99.1 and 1.0.0 on Node 22.23.2.
+and optional-tool discovery. Validated for this release with Pi 0.99.1 and 1.0.2 on Node 22.23.2.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.0. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 
@@ -21,7 +21,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/harness
 ```
 
-After the candidate `harness/v0.3.0` artifact is published, follow the
+After the `harness/v0.3.1` artifact is published, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
@@ -64,7 +64,7 @@ existing cancellation/deadlines. Git mutations, commits and pushes remain explic
 Bash workflows; a local commit alone does not publish to the remote repository.
 The Web/Host owns independent task clones and repository synchronization.
 
-Version 0.3.0 removes the old `worktree`, `checkpoint`, `undo`, `transfer` and
+Version 0.3.1 removes the old `worktree`, `checkpoint`, `undo`, `transfer` and
 `adopt` actions and their arguments. Existing transcripts remain readable; a stale
 call fails without running Git. Consumers that called these actions must use their
 own explicit Git workflow. This narrows tool discovery, not VM shell permissions.
@@ -100,8 +100,8 @@ This source consolidation does not change production installations.
 
 ## Native Pi integration contract
 
-This candidate supports Pi 0.99.1 or 1.0.0, upstream pi-web-access 0.35.0 and
-pi-subagents source 0.74.0 at official commit `10694a6`. See [the integration spec](../../docs/spec/pi-100-native-integration.md).
+This release supports Pi 0.99.1 or 1.0.x, upstream pi-web-access 0.35.0 and
+official npm pi-subagents 0.75.0. See [the integration spec](../../docs/spec/pi-100-native-integration.md).
 The original upstream schemas and executors are unchanged. Work preserves native
 subagent activation (auto, dynamic or eager) and exposes the native web loader; Chat retains its existing search-only web boundary. LSP discovery stays
 in search_tools because Pi tool_search operates on deferred/codemode tools and
