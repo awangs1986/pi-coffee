@@ -1,6 +1,7 @@
 import { registerContextWindow } from './context-window.js';
 import { createLspManifest } from "./optional-tools.js";
 import { PACKAGE_VERSION } from "../version.js";
+import { registeredChatTools } from "./chat-tools.js";
 import { chatPayload } from "./chat-payload.js";
 import { HARNESS_BLOCK_PATTERN, refreshWorkPayload } from "./work-payload.js";
 import { registerHarnessMode } from "./runtime-mode.js";
@@ -113,13 +114,13 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
 
   // Mode policy lives in Harness. Native subagent schemas and execution stay upstream.
   pi.on("tool_call", event => {
-    if (mode === "chat" && !([...CHAT_TOOLS, ...HANDOFF_TOOLS] as readonly string[]).includes(event.toolName)) {
+    if (mode === "chat" && !([...CHAT_TOOLS, ...HANDOFF_TOOLS, ...registeredChatTools(pi).filter(name => pi.getActiveTools().includes(name))] as readonly string[]).includes(event.toolName)) {
       return { block: true, reason: "This tool is unavailable to the model in Chat; select Work." };
     }
   });
 
   function applyMode(nextMode: HarnessMode, persist = true): ReturnType<typeof resolveToolTable> {
-    const table = resolveToolTable(nextMode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools());
+    const table = resolveToolTable(nextMode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools(), registeredChatTools(pi));
     if (table.ready) {
       pi.setActiveTools([...table.active]);
       mode = nextMode;
@@ -134,7 +135,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   }
 
   function buildCatalog(): CapabilityCatalog {
-    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools());
+    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools(), registeredChatTools(pi));
     epoch = new ExecutionEpoch({ harnessMode: mode }, table.active);
     const next = new CapabilityCatalog({
       epoch,
@@ -369,7 +370,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
 
   pi.on("model_select", () => {
     if (epoch === undefined || !validState) return;
-    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools());
+    const table = resolveToolTable(mode, pi.getAllTools().map((tool) => tool.name), pi.getActiveTools(), registeredChatTools(pi));
     if (!table.ready) return;
     pi.setActiveTools([...table.active]);
     epoch.rebuild({ harnessMode: mode }, table.active);
@@ -378,15 +379,15 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   });
 
   pi.on("before_provider_request", (event, ctx) => {
-    if (!validState || !resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools()).ready) {
+    if (!validState || !resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools(), registeredChatTools(pi)).ready) {
       // before_agent_start precedes Pi's run controller; abort again here at
       // the actual request seam so an invalid restoration cannot send a turn.
       ctx.abort();
       return;
     }
     if (mode === "chat") {
-      pi.setActiveTools([...resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools()).active]);
-      return chatPayload(event.payload);
+      pi.setActiveTools([...resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools(), registeredChatTools(pi)).active]);
+      return chatPayload(event.payload, registeredChatTools(pi).filter(name => pi.getActiveTools().includes(name)));
     }
     try {
       return refreshWorkPayload(event.payload, workPromptBlock());
@@ -398,7 +399,7 @@ function installHarnessExtension(pi: ExtensionAPI, options: HarnessExtensionOpti
   });
 
   pi.on("before_agent_start", (event, ctx) => {
-    const table = resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools());
+    const table = resolveToolTable(mode, pi.getAllTools().map(tool => tool.name), pi.getActiveTools(), registeredChatTools(pi));
     if (!validState || !table.ready) {
       ctx.abort();
       ctx.ui.notify(`Mode ${mode} is unavailable: missing ${table.missing.join(", ")}.`, "error");

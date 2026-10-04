@@ -11,12 +11,16 @@ export function toolsForMode(mode: HarnessMode): readonly string[] {
 export function promptProfileForMode(mode: HarnessMode): "none" | "work" {
   return mode === "chat" ? "none" : "work";
 }
-export function resolveToolTable(mode: HarnessMode, available: Iterable<string>, selected: Iterable<string> = []): {
+export function resolveToolTable(mode: HarnessMode, available: Iterable<string>, selected: Iterable<string> = [], optionalChatTools: Iterable<string> = []): {
   desired: readonly string[]; active: string[]; missing: string[]; ready: boolean;
 } {
   const registered = new Set(available);
   const desired = toolsForMode(mode);
   const active: string[] = desired.filter(name => registered.has(name));
+  if (mode === "chat") {
+    const selectedTools = new Set(selected);
+    for (const name of optionalChatTools) if (registered.has(name) && selectedTools.has(name) && !active.includes(name)) active.push(name);
+  }
   if (mode === "work" && registered.has("recall_folded")) active.push("recall_folded");
   if (mode === "work") {
     // Upstream owns eager/auto/dynamic selection. Retain its selected executor;
