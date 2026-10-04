@@ -1,8 +1,8 @@
-> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.3.1`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/harness](https://github.com/awangs1986/pi-coffee/tree/main/packages/harness). Version `0.3.2`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # pi-coffee-harness
 
-Version **0.3.1** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
+Version **0.3.2** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/releases.md).
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
@@ -21,7 +21,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/harness
 ```
 
-After the `harness/v0.3.1` artifact is published, follow the
+After the `harness/v0.3.2` artifact is published, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
@@ -77,6 +77,16 @@ Independent extensions may import `currentHarnessMode` and
 `registerCapabilityManifest` from `pi-coffee-harness`, with the exported capability
 types. Registration uses Pi's shared event bus across extension instances. No
 private plugin imports or Host integration are required.
+
+`registerChatTools(pi, names)` lets a trusted installed extension declare its own
+tools compatible with Chat. It neither activates tools nor grants user consent.
+Harness preserves only registered tools that the owning extension has already
+activated with Pi `setActiveTools`; it keeps their schemas through Chat filtering
+and allows their executor to check authorization. The extension must default to
+inactive, enforce its own consent/state on every call, and revoke activation when
+disabled. Registration uses the shared session event bus and works in either
+load order. Unregistered optional tools remain unavailable in Chat. This is an
+installed-code integration seam, not a security boundary against shell access.
 
 ## Development and provenance
 

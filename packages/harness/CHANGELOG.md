@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Add public `registerChatTools(pi, names)` for independent installed extensions to declare Chat-compatible tools. Registration preserves only already-active tools; it grants no activation, user consent or execution permission.
+- Keep registered active tools through Chat mode and outgoing provider filtering; registered executors retain their own authorization checks. Unregistered Chat tools remain blocked.
+
 ## 0.3.1 — 2026-10-04
 
 - Validate Pi 1.0.2 and official npm subagents 0.75.0 while preserving native activation, Chat isolation, bounded evidence and read-only Git. Public APIs and context policy are unchanged.

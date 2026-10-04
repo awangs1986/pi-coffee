@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+import { registerChatTools } from "../src/harness/chat-tools.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,6 +20,7 @@ function createWebExtension(_options: unknown) {return (pi: ExtensionAPI)=>pi.re
 type Handler = (event: unknown, context: unknown) => unknown;
 
 class FakePi {
+  readonly events = new EventEmitter();
   readonly handlers = new Map<string, Handler[]>();
   readonly commands = new Map<string, { handler: (args: string, context: unknown) => Promise<void> }>();
   readonly tools = new Map<string, ToolDefinition>();
@@ -284,4 +287,24 @@ describe("Chat/Work session and capability boundaries", () => {
     await pi.emit("model_select", {});
     expect(pi.getActiveTools()).toEqual([...WORK_TOOLS, "recall_folded"]);
   });
+});
+
+
+it("Chat optional registration preserves activation and guards execution without opening unrelated tools", async () => {
+  const pi = new FakePi("/workspace");
+  createHarnessExtension({ settings: new MemoryCapabilitySettingsStore() })(pi.asExtensionApi());
+  pi.registerTool({ name: "mishu", label: "MISHU", description: "test", parameters: {} as never, execute: async () => ({ content: [], details: {} }) });
+  registerChatTools({ events: pi.events } as unknown as ExtensionAPI, ["mishu"]);
+  await pi.emit("session_start", {});
+  await pi.runCommand("chat", "");
+  expect(await pi.emit("tool_call", { toolName: "mishu" })).toMatchObject({ block: true });
+  pi.setActiveTools([...pi.getActiveTools(), "mishu"]);
+  await pi.emit("before_agent_start", { systemPrompt: "BASE" });
+  expect(pi.getActiveTools()).toContain("mishu");
+  expect(await pi.emit("tool_call", { toolName: "mishu" })).toBeUndefined();
+  expect(await pi.emit("tool_call", { toolName: "unregistered" })).toMatchObject({ block: true });
+  const result = await pi.emit("before_provider_request", { payload: { messages: [], tools: [{ type: "function", function: { name: "mishu" } }, { type: "function", function: { name: "unregistered" } }] } });
+  expect(result).toEqual({ messages: [], tools: [{ type: "function", function: { name: "mishu" } }] });
+  pi.setActiveTools(pi.getActiveTools().filter(name => name !== "mishu"));
+  expect(await pi.emit("tool_call", { toolName: "mishu" })).toMatchObject({ block: true });
 });
