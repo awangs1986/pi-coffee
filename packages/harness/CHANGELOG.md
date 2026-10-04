@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-04
+
+- Validate Pi 1.0.2 and official npm subagents 0.75.0 while preserving native activation, Chat isolation, bounded evidence and read-only Git. Public APIs and context policy are unchanged.
+
 ## 0.3.0 — candidate
 
 - Narrow the active Git tool to read-only status/diff and remove retired snapshot/transfer/adoption/worktree actions. Reworked from historical Gitea PR #68 against the current independent plugin.

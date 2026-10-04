@@ -20,4 +20,6 @@ Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffe
 
 - [Pi #6](https://github.com/awangs1986/pi-coffee/issues/6): [Pi 1.0 integration and upgrade contract](spec/pi-100-native-integration.md).
 
+- [Pi #9](https://github.com/awangs1986/pi-coffee/issues/9): [Pi 1.0.2 and official plugin upgrade contract](spec/pi-102-native-integration.md).
+
 - [Historical PR salvage](reviews/legacy-pr-salvage-20261003.md): ancestry/coverage decisions and Harness 0.3.0 candidate; [Pi #7](https://github.com/awangs1986/pi-coffee/issues/7).
