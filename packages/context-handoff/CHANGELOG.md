@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0-experimental.5 — 2026-10-04
+
+- Validate Pi 1.0.2 with the installed official plugin composition. Preserve explicit same-session invocation, native automatic compaction and public evidence/settlement contracts; no autonomous cadence or semantic-fidelity claim.
+
 ## 0.2.0-experimental.4 — 2026-10-02
 
 - Declare reviewed Pi 1.0 compatibility and update development runtime/typebox pins; retain installed-package coverage on 0.99.1.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6 — 2026-10-04
+
+- Validate Pi 1.0.2; upgrade bundled TypeScript language server to 5.3.0 and Pyright to 1.1.414. Preserve Node >=22.19 and existing semantic/CLI/lifecycle contracts. TLS 6.0.1 needs Node >=22.22.2 and is outside the current minimum.
+
 ## 0.4.5 — 2026-10-02
 
 - Validate the independent CLI/Skill, native extension and lifecycle contracts against Pi 1.0.0; retain installed-package coverage on 0.99.1.
