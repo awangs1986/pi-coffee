@@ -19,7 +19,7 @@ test('packing rejects a missing public protocol even when the Pi source entry ex
  }
 });
 
-for (const piVersion of ['0.99.1', '1.0.0', '1.0.2']) test(`release artifacts install together on Pi ${piVersion} outside the monorepo`, {timeout:240000}, async()=>{
+for (const piVersion of ['0.99.1', '1.0.0', '1.0.2', '1.0.4']) test(`release artifacts install together on Pi ${piVersion} outside the monorepo`, {timeout:240000}, async()=>{
  const root=await mkdtemp(join(tmpdir(),'coffee-monorepo-consumer-'));
  try {
   execFileSync(process.execPath,['scripts/pack-plugins.mjs',join(root,'artifacts')],{stdio:'pipe'});
@@ -27,7 +27,7 @@ for (const piVersion of ['0.99.1', '1.0.0', '1.0.2']) test(`release artifacts in
   assert.equal(release.plugins.length,3);
   for(const item of release.plugins){assert.equal(item.integrity,'sha512-'+createHash('sha512').update(await readFile(join(root,'artifacts',item.file))).digest('base64'));}
   await writeFile(join(root,'package.json'),JSON.stringify({name:'synthetic-plugin-consumer',private:true,type:'module'}));
-  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund',`@earendil-works/pi-coding-agent@${piVersion}`,'typebox@1.3.34','pi-web-access@0.35.0','pi-subagents@0.75.0',...release.plugins.map(p=>join(root,'artifacts',p.file))],{cwd:root,stdio:'pipe'});
+  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund',`@earendil-works/pi-coding-agent@${piVersion}`,'typebox@1.3.36',piVersion==='1.0.4'?'pi-web-access@0.37.0':'pi-web-access@0.35.0',piVersion==='1.0.4'?'pi-subagents@0.76.1':'pi-subagents@0.75.0',...release.plugins.map(p=>join(root,'artifacts',p.file))],{cwd:root,stdio:'pipe'});
   await mkdir(join(root,'work'));await mkdir(join(root,'agent'));
   await writeFile(join(root,'probe.mjs'), `
 import assert from 'node:assert/strict';

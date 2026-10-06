@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 — 2026-10-06
+
+- Validate native Pi 1.0.4, upstream pi-subagents 0.76.1 and pi-web-access 0.37.0 with the installed-package matrix. Preserve Chat/Work, registered opt-in Chat tools, read-only Git, bounded evidence and original upstream schemas.
+- Refresh the shared typebox schema and patched source-map dependency; no additional tools, automatic compaction policy or production activation.
+
 ## 0.3.2
 
 - Add public `registerChatTools(pi, names)` for independent installed extensions to declare Chat-compatible tools. Registration preserves only already-active tools; it grants no activation, user consent or execution permission.
