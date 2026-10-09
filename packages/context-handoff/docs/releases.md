@@ -1,7 +1,9 @@
 # Independent context-handoff releases
 
-Current version: **0.2.0-experimental.5**. Immutable tag: **context-handoff/v0.2.0-experimental.5** in
+Candidate version: **0.2.0-experimental.6**. Planned immutable tag: **context-handoff/v0.2.0-experimental.6** in
 [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee).
+
+The candidate artifact/tag has not been published by this source change.
 
 `package.json` owns this plugin's version; its lockfile must agree. Versions are
 independent of other plugins, native Pi and Server. Follow the shared

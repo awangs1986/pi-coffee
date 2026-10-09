@@ -3,7 +3,7 @@
 Implements [SPEC revision 7](../SPEC.md). Source and independent package releases
 live in `pi-coffee/packages/context-handoff`; Host owns enablement and timing.
 The Coffee import remains historical and is not linked by the package entry.
-Supported runtime: Pi 0.87.1, Node >=22.19.0, Linux, persistent local session
+Supported runtime: Pi 0.99.1 and 1.0.x/1.1.x (validated with 1.1.0), Node >=22.19.0, Linux, persistent local session
 storage outside the workspace.
 
 ## Public integration

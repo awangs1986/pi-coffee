@@ -1,7 +1,9 @@
 # Independent lsp releases
 
-Current version: **0.4.6**. Immutable tag: **lsp/v0.4.6** in
+Candidate version: **0.4.7**. Planned immutable tag: **lsp/v0.4.7** in
 [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee).
+
+The candidate artifact/tag has not been published by this source change.
 
 `package.json` owns this plugin's version; its lockfile must agree. Versions are
 independent of other plugins, native Pi and Server. Follow the shared

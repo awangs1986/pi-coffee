@@ -1,8 +1,8 @@
-> Canonical source: [pi-coffee/packages/context-handoff](https://github.com/awangs1986/pi-coffee/tree/main/packages/context-handoff). Version `0.2.0-experimental.5`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
+> Canonical source: [pi-coffee/packages/context-handoff](https://github.com/awangs1986/pi-coffee/tree/main/packages/context-handoff). Version `0.2.0-experimental.6`. Start with the [repository map](https://github.com/awangs1986/pi-coffee/blob/main/REPOSITORIES.md) and [release/install guide](https://github.com/awangs1986/pi-coffee/blob/main/docs/releases/README.md). The standalone repository is historical.
 
 # Context-handoff
 
-Version **0.2.0-experimental.5** · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
+Version **0.2.0-experimental.6** · [Changelog](CHANGELOG.md) · [Releases](docs/releases.md).
 
 An experimental Pi plugin for explicit, same-conversation context Handoff.
 Automatic threshold/overflow compaction and ordinary `/compact` use native Pi.
@@ -12,7 +12,7 @@ workspace remain intact; this does not establish freedom from semantic drift.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x/1.1.x. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 
@@ -23,7 +23,7 @@ npm run check
 pi install /absolute/path/to/pi-coffee/packages/context-handoff
 ```
 
-For the built artifact tagged `context-handoff/v0.2.0-experimental.5`, follow the
+For the built artifact tagged `context-handoff/v0.2.0-experimental.6`, follow the
 [shared install and release guide](../../docs/releases/README.md). Install the
 verified tarball with npm into a permanent plugin directory, then use `pi install`
 on that installed package directory. Public npm-registry publication is separate.
