@@ -12,7 +12,7 @@ workspace remain intact; this does not establish freedom from semantic drift.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x/1.1.x. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 

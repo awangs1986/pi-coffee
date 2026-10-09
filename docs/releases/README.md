@@ -41,7 +41,7 @@ Harness/context behavior. Existing Server adapters explicitly compose selected e
 
 ## Publish
 
-1. Update only changed package versions/lockfiles and changelogs. The Pi 1.0.4 candidate versions
+1. Update only changed package versions/lockfiles and changelogs. The Pi 1.1 candidate versions
    are Harness 0.3.3, LSP 0.4.7 and Handoff 0.2.0-experimental.6; publication is separate.
 2. In a fresh clone run `npm ci`, `npm run bootstrap`, `npm run check`. Each package
    runs its own native/CLI tests; the root also tests all three installed together.

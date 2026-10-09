@@ -6,11 +6,11 @@ Version **0.3.3** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/re
 Query the installed version with `/harness version` in Pi.
 
 Standalone native Pi package for Chat/Work, the software-development prompt, Git,
-and optional-tool discovery. Validated for this release with Pi 0.99.1 and 1.0.4 on Node 22.23.2.
+and optional-tool discovery. Validated for this release with Pi 0.99.1 and 1.1.0 on Node 22.23.2.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x/1.1.x. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 
@@ -110,8 +110,8 @@ This source consolidation does not change production installations.
 
 ## Native Pi integration contract
 
-This release supports Pi 0.99.1 or 1.0.x, upstream pi-web-access 0.37.0 and
-official npm pi-subagents 0.76.1. See [the integration spec](../../docs/spec/pi-104-native-integration.md).
+This release supports Pi 0.99.1 or 1.0.x/1.1.x, upstream pi-web-access 0.37.0 and
+official npm pi-subagents 0.76.1. See [the integration spec](../../docs/spec/pi-110-native-integration.md).
 The original upstream schemas and executors are unchanged. Work preserves native
 subagent activation (auto, dynamic or eager) and exposes the native web loader; Chat retains its existing search-only web boundary. LSP discovery stays
 in search_tools because Pi tool_search operates on deferred/codemode tools and

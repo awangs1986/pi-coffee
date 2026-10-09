@@ -25,3 +25,5 @@ Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffe
 - [Historical PR salvage](reviews/legacy-pr-salvage-20261003.md): ancestry/coverage decisions and Harness 0.3.0 candidate; [Pi #7](https://github.com/awangs1986/pi-coffee/issues/7).
 
 - [Pi #11](https://github.com/awangs1986/pi-coffee/issues/11): [Pi 1.0.4 native integration and compatibility selection](spec/pi-104-native-integration.md).
+
+- [Pi #11](https://github.com/awangs1986/pi-coffee/issues/11): [Pi 1.1 native integration](spec/pi-110-native-integration.md); replaces the pending 1.0.4 selection.

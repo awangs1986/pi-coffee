@@ -6,7 +6,7 @@ Version **0.4.7** · [Changelog](CHANGELOG.md) · [Upgrade and rollback](docs/re
 Query the installed version with `/lsp version` in Pi, or `coffee-lsp --version` in a terminal.
 
 Language-server intelligence for [Pi](https://github.com/earendil-works/pi-mono)
-1.0.4 (also installed-package tested on 0.99.1), shipped as a standard Pi package (extension + Skill + CLI):
+1.1.0 (also installed-package tested on 0.99.1), shipped as a standard Pi package (extension + Skill + CLI):
 
 - **`lsp` tool** — diagnostics, symbols, definition, references, implementation and
   hover, rendered as compact text for the model.
@@ -22,7 +22,7 @@ subagent, context-management or OMP Agent/TUI framework is included.
 
 ## Install
 
-Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x. From a pinned checkout of
+Requires Node >=22.19.0 and Pi 0.99.1 or 1.0.x/1.1.x. From a pinned checkout of
 [pi-coffee](https://github.com/awangs1986/pi-coffee), build this package and register
 its directory with Pi:
 

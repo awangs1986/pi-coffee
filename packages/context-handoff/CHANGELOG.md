@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.2.0-experimental.6 — 2026-10-06
+## 0.2.0-experimental.6 — candidate 2026-10-09
 
-- Validate explicit same-session Handoff and public evidence/settlement contracts on Pi 1.0.4, including the installed upstream plugin composition.
+- Validate explicit same-session Handoff and public evidence/settlement contracts on Pi 1.1.0, including the installed upstream plugin composition.
 - Update shared schema and patched source-map dependencies. Native automatic compaction, Host-owned invocation, failure visibility and experimental semantic-fidelity limits remain unchanged.
 
 ## 0.2.0-experimental.5 — 2026-10-04
