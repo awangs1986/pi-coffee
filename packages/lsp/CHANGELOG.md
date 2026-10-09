@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.4.7 — 2026-10-06
+## 0.4.7 — candidate 2026-10-09
 
-- Validate native Pi 1.0.4 and shared typebox 1.3.36 through the semantic CLI, native automatic diagnostics, installed tarball and lifecycle checks.
+- Validate native Pi 1.1.0 and shared typebox 1.3.36 through the semantic CLI, native automatic diagnostics, installed tarball and lifecycle checks.
 - Retain Pyright 1.1.414 and TypeScript language server 5.3.0, the newest official releases compatible with Node >=22.19. TypeScript language server 6.0.1 requires Node >=22.22.2. No Lens installation or semantic API change.
 
 ## 0.4.6 — 2026-10-04

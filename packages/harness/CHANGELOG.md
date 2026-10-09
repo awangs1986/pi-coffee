@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.3.3 — 2026-10-06
+## 0.3.3 — candidate 2026-10-09
 
-- Validate native Pi 1.0.4, upstream pi-subagents 0.76.1 and pi-web-access 0.37.0 with the installed-package matrix. Preserve Chat/Work, registered opt-in Chat tools, read-only Git, bounded evidence and original upstream schemas.
+- Extend the tested peer contract through the Pi 1.1 minor; future 1.2 remains unreviewed.
+- Validate native Pi 1.1.0, upstream pi-subagents 0.76.1 and pi-web-access 0.37.0 with the installed-package matrix. Preserve Chat/Work, registered opt-in Chat tools, read-only Git, bounded evidence and original upstream schemas.
 - Refresh the shared typebox schema and patched source-map dependency; no additional tools, automatic compaction policy or production activation.
 
 ## 0.3.2
