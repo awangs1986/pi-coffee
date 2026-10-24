@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.8 — 2026-10-24
+
+- Validate native Pi 1.4.0 CLI/RPC and packed-package integration.
+- Update the deterministic test runtime and patch the reviewed Undici dependency.
+
 ## 0.4.7 — candidate 2026-10-09
 
 - Validate native Pi 1.1.0 and shared typebox 1.3.36 through the semantic CLI, native automatic diagnostics, installed tarball and lifecycle checks.

@@ -27,3 +27,5 @@ Current runtime upgrade tracking: [Pi #3](https://github.com/awangs1986/pi-coffe
 - [Pi #11](https://github.com/awangs1986/pi-coffee/issues/11): [Pi 1.0.4 native integration and compatibility selection](spec/pi-104-native-integration.md).
 
 - [Pi #11](https://github.com/awangs1986/pi-coffee/issues/11): [Pi 1.1 native integration](spec/pi-110-native-integration.md); replaces the pending 1.0.4 selection.
+
+- [Pi 1.4 upgrade candidate](spec/pi-140-native-integration.md): native compatibility, upstream packages and xAI OAuth.

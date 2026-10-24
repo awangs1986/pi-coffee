@@ -10,9 +10,9 @@ import {
   existsSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, relative, isAbsolute } from "node:path";
+import { dirname, relative, isAbsolute, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { digest } from "./task-state.js";
 export interface Journal {
   version: 1;
@@ -24,8 +24,11 @@ export interface Journal {
 function path(ctx: ExtensionContext) {
   const file = ctx.sessionManager.getSessionFile();
   if (!file) throw new Error("Persistent Pi session required");
-  const rel = relative(ctx.cwd, file);
-  if (!rel.startsWith("..") && !isAbsolute(rel))
+  const within = (directory: string) => {
+    const rel = relative(resolve(directory), resolve(file));
+    return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  };
+  if (within(ctx.cwd) && !within(getAgentDir()))
     throw new Error("Session storage must be outside the workspace");
   return `${file}.handoff.json`;
 }

@@ -18,11 +18,11 @@ import { RpcClient } from "@earendil-works/pi-coding-agent";
 import { expect, it } from "vitest";
 import { scoreConflictProcedure } from "../scripts/score-conflict-procedure.mjs";
 
-async function fixture(extra?: string, packagePath?: string, flags: string[] = [], reasoning = false) {
+async function fixture(extra?: string, packagePath?: string, flags: string[] = [], reasoning = false, homeWorkspace = false) {
   const root = await mkdtemp(join(tmpdir(), "pi-handoff-"));
-  const cwd = join(root, "workspace"),
+  const cwd = homeWorkspace ? root : join(root, "workspace"),
     agent = join(root, "agent");
-  await mkdir(cwd);
+  await mkdir(cwd, { recursive: true });
   await mkdir(agent);
   const extension = join(root, "fixture-extension.mjs");
   if (extra) await writeFile(extension, extra);
@@ -219,7 +219,7 @@ async function fixture(extra?: string, packagePath?: string, flags: string[] = [
           ...args,
           ...(file
             ? ["--session", file]
-            : ["--session-dir", join(root, "sessions"), "--session-id", id]),
+            : ["--session-dir", join(homeWorkspace ? agent : root, "sessions"), "--session-id", id]),
         ],
       }),
     cleanup: async () => {
@@ -258,6 +258,19 @@ it("exposes generation budgets but no plugin-owned scheduling flags", () => {
   expect(help).not.toContain("--handoff-native-limit");
 });
 
+it("accepts ordinary input with native session storage under the configured agent directory in a home workspace", async () => {
+  const f = await fixture(undefined, undefined, [], false, true), c = f.client();
+  const errors: unknown[] = [];
+  c.onEvent(e => { if (e.type === "extension_error" || (e.type === "message_end" && JSON.stringify(e).includes("pi-handoff-error"))) errors.push(e); });
+  try {
+    await c.start();
+    await c.promptAndWait("Continue the ordinary task.", undefined, 15000);
+    expect(f.requests.length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+    expect((await c.getState()).sessionFile).toContain(join(f.root, "agent", "sessions"));
+  } finally { await c.stop(); await f.cleanup(); }
+}, 20000);
+
 it('defaults to native automatic compaction and only hands off an explicitly marked manual request in the same session',async()=>{
   const f=await fixture(undefined,undefined,[],false),c=f.client();
   try {
@@ -271,7 +284,7 @@ it('defaults to native automatic compaction and only hands off an explicitly mar
     await c.compact('context-handoff:manual:v1');
     const entries=(await c.getEntries()).entries;
     expect(handoffs(entries)).toHaveLength(1);
-    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.6',trigger:'manual'});
+    expect(handoffs(entries)[0].details).toMatchObject({pluginVersion:'0.2.0-experimental.7',trigger:'manual'});
     expect((await c.getState()).sessionId).toBe(before.sessionId);
     expect((await c.getState()).sessionFile).toBe(before.sessionFile);
     expect(entries.filter((e:any)=>e.type==='message' && e.message.role==='user')).toHaveLength(5);

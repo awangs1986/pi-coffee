@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-experimental.7 — 2026-10-24
+
+- Validate native Pi 1.4.0 CLI/RPC and packed-package integration.
+- Update the deterministic test runtime and patch the reviewed Undici dependency.
+- Accept Pi session storage inside its configured agent directory when launched from a home workspace; retain corrupt-journal protection.
+
 ## 0.2.0-experimental.6 — candidate 2026-10-09
 
 - Validate explicit same-session Handoff and public evidence/settlement contracts on Pi 1.1.0, including the installed upstream plugin composition.

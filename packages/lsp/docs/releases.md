@@ -1,6 +1,6 @@
 # Independent lsp releases
 
-Candidate version: **0.4.7**. Planned immutable tag: **lsp/v0.4.7** in
+Candidate version: **0.4.8**. Planned immutable tag: **lsp/v0.4.8** in
 [awangs1986/pi-coffee](https://github.com/awangs1986/pi-coffee).
 
 The candidate artifact/tag has not been published by this source change.

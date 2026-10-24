@@ -1,14 +1,14 @@
 // Copied into an isolated consumer so every import comes from installed tarballs.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {createRequire} from 'node:module';
+import {createRequire,findPackageJSON} from 'node:module';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
 import {RpcClient} from '@earendil-works/pi-coding-agent';
 
 const require=createRequire(import.meta.url),root=process.cwd();
 const extensions=name=>{
- const directory=dirname(name==='pi-subagents'?require.resolve(name):require.resolve(name+'/package.json'));
+ const directory=dirname(name==='pi-subagents'?findPackageJSON(name,import.meta.url):require.resolve(name+'/package.json'));
  return require(join(directory,'package.json')).pi.extensions.map(entry=>join(directory,entry));
 };
 const upstream=[...extensions('pi-subagents'),...extensions('pi-web-access')];

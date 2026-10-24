@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4 — 2026-10-24
+
+- Validate native Pi 1.4.0 CLI/RPC and packed-package integration.
+- Update the deterministic test runtime and patch the reviewed Undici dependency.
+
 ## 0.3.3 — candidate 2026-10-09
 
 - Extend the tested peer contract through the Pi 1.1 minor; future 1.2 remains unreviewed.
