@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0-experimental.8 — local Pi 1.6 candidate
+
+- Validate the existing explicit Handoff contract on Pi 1.6.0.
+
 ## 0.2.0-experimental.7 — 2026-10-24
 
 - Validate native Pi 1.4.0 CLI/RPC and packed-package integration.
